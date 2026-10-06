@@ -1,0 +1,16 @@
+{
+    "name": "RPG4.Backpack.Items",
+    "rootNamespace": "RPG4.Backpack.Items",
+    "references": [
+        "RPG4.Backpack.Core"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

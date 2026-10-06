@@ -1,0 +1,66 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4c34e53e651b4930ac2714e72c40d43d, type: 3}
+  m_Name: "\u5C0F\u578B\u7EA2\u836F"
+  m_EditorClassIdentifier: 
+  itemType:
+    name: GameItems.Consumables.Potions.Red.Small
+  fragments:
+  - rid: 2973595732163166213
+  - rid: 2973595732163166214
+  - rid: 2973595732163166215
+  - rid: 2973595732163166113
+  references:
+    version: 2
+    RefIds:
+    - rid: 2973595732163166113
+      type: {class: ImageFragment, ns: RPG4.Backpack.Items, asm: RPG4.Backpack.Items}
+      data:
+        fragmentTag:
+          name: FragmentTags.Default.IconFragment
+        icon: {fileID: 21300000, guid: caa516cdb721dd143bbc8000ca78d50a, type: 3}
+        iconDimensions: {x: 44, y: 44}
+    - rid: 2973595732163166213
+      type: {class: GridFragment, ns: RPG4.Backpack.Items, asm: RPG4.Backpack.Items}
+      data:
+        fragmentTag:
+          name: FragmentTags.Default.GridFragment
+        width: 1
+        height: 1
+        padding: 0
+    - rid: 2973595732163166214
+      type: {class: ConsumableFragment, ns: RPG4.Backpack.Items, asm: RPG4.Backpack.Items}
+      data:
+        fragmentTag:
+          name: FragmentTags.Consumable.ConsumableFragment
+        modifiers:
+        - rid: 2973595732163166216
+    - rid: 2973595732163166215
+      type: {class: StackableFragment, ns: RPG4.Backpack.Items, asm: RPG4.Backpack.Items}
+      data:
+        fragmentTag:
+          name: FragmentTags.Default.StackableFragment
+        maxStackSize: 10
+    - rid: 2973595732163166216
+      type: {class: ConsumeModifier, ns: RPG4.Backpack.Items, asm: RPG4.Backpack.Items}
+      data:
+        fragmentTag:
+          name: FragmentTags.Consume.Heal
+        label: Heal
+        value: 10
+        min: 10
+        max: 20
+        randomizeOnManifest: 1
+        collapseLabel: 0
+        collapseValue: 0
+        minFractionalDigits: 1
+        maxFractionalDigits: 1

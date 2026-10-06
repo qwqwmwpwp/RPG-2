@@ -1,0 +1,26 @@
+{
+    "name": "RPG4.Backpack.UI",
+    "rootNamespace": "RPG4.Backpack.UI",
+    "references": [
+        "RPG4.Backpack.Core",
+        "RPG4.Backpack.Items",
+        "RPG4.Backpack.Inventory",
+        "RPG4.Backpack.Equipment",
+        "RPG4.Backpack.Network",
+        "RPG4.Backpack.Runtime",
+        "RPG4.Input",
+        "Mirror",
+        "UnityEngine.UI",
+        "Unity.TextMeshPro",
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9f4d2a7c1e5b43d8a2c6f0b9d7e34581, type: 3}
+  m_Name: LogSettings
+  m_EditorClassIdentifier: 
+  isEnabled: 1
+  minimumLevel: 2
+  enabledModules: -1
+  useTimestamp: 1
+  includeStackTrace: 0

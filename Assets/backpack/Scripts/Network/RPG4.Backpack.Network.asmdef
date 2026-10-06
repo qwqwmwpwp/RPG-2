@@ -1,0 +1,19 @@
+{
+    "name": "RPG4.Backpack.Network",
+    "rootNamespace": "RPG4.Backpack.Network",
+    "references": [
+        "RPG4.Backpack.Core",
+        "RPG4.Backpack.Items",
+        "RPG4.Backpack.Inventory",
+        "Mirror"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
