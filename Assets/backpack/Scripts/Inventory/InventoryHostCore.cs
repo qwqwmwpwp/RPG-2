@@ -17,7 +17,7 @@ namespace RPG4.Backpack.Inventory
         private readonly LogModule logModule; // 日志模块位（单机 = Inventory，联机 = Network）。
         private readonly string ownerName; // 日志里的宿主名（组件名或兜底名）。
 
-        private ItemIdGenerator ownGenerator; // 未注入提供者时自建的标识生成器（单机自任权威，每包一份）。
+        private static readonly ItemIdGenerator SharedGenerator = new ItemIdGenerator(); // 未注入提供者时共用的标识生成器，避免单机玩家与箱子分别从 1 发号而在转移后重号。
 
         private EventSubscription setStackCountSubscription; // 意图订阅句柄：设置堆叠数。
         private EventSubscription removeItemSubscription; // 意图订阅句柄：移除物品。
@@ -52,7 +52,7 @@ namespace RPG4.Backpack.Inventory
 
         public ItemManifestCatalog Catalog { get; set; } // 新增 / 拆分按类型取模板的目录；留空时拆分被拒。
 
-        public Func<ItemIdGenerator> IdGeneratorProvider { get; set; } // 标识生成器提供者（联机注入服务端生成器）；留空时自建并缓存。
+        public Func<ItemIdGenerator> IdGeneratorProvider { get; set; } // 标识生成器提供者（联机注入服务端生成器）；留空时使用共享默认生成器。
 
         public Func<bool> IsAuthority { get; set; } // 自己是否为主端；留空恒为 true。
 
@@ -127,7 +127,9 @@ namespace RPG4.Backpack.Inventory
                 return false;
             }
 
-            if (CommitConfirm != null && !CommitConfirm(issued, out error))
+            // 全部并入已有堆叠时新标识没有成为库存条目，确认整体同步即可。
+            ItemId requiredItem = Container.Contains(item) ? issued : ItemId.None;
+            if (CommitConfirm != null && !CommitConfirm(requiredItem, out error))
             {
                 Container.TryRemoveItem(item, out _);
                 CommitConfirm(ItemId.None, out _);
@@ -311,13 +313,11 @@ namespace RPG4.Backpack.Inventory
             return true;
         }
 
-        /// <summary>取标识生成器：优先用注入的提供者（联机 = 服务端生成器），留空时自建一份并缓存（单机自任权威）。</summary>
+        /// <summary>取标识生成器：优先用注入的提供者（联机 = 服务端生成器），留空时共用默认生成器（单机自任权威）。</summary>
         private ItemIdGenerator ResolveGenerator()
         {
             if (IdGeneratorProvider != null) return IdGeneratorProvider();
-
-            if (ownGenerator == null) ownGenerator = new ItemIdGenerator();
-            return ownGenerator;
+            return SharedGenerator;
         }
 
         /// <summary>按「源快照 + 新标识 + 拆分数量」恢复一份新实例（数值原样继承、不重新随机）。</summary>

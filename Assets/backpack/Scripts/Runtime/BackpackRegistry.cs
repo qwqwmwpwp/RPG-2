@@ -1,22 +1,19 @@
-using System.Collections.Generic;
 using UnityEngine;
 using RPG4.Backpack.Core;
 
 namespace RPG4.Backpack.Runtime
 {
-    /// <summary>单机背包索引：登记场上全部 <see cref="BackpackInventory"/> 实例，提供「本地玩家背包」全局入口与「按物体取包」查询；组件在 OnEnable / OnDisable 自动登记与注销，重复的本地玩家包保留先注册者并记警告，静态状态按 EventBus 同款口径做 Domain Reload 复位。</summary>
+    /// <summary>背包索引：本机角色组件负责登记默认背包，基础背包仅供按物体查询；重复登记保留先注册者，静态状态在进入运行模式时复位。</summary>
     public static class BackpackRegistry
     {
-        private static readonly List<BackpackInventory> registered = new List<BackpackInventory>(); // 已登记背包（仅启用中的组件）。
-
-        /// <summary>本地玩家背包（登记为 isLocalPlayerInventory 的首个实例）；没有则为 null。</summary>
+        /// <summary>首个登记的本机角色背包；没有则为 null。</summary>
         public static BackpackInventory Primary { get; private set; }
 
         /// <summary>取本地玩家背包；没有则返回 false。</summary>
         public static bool TryGetPrimary(out BackpackInventory backpack)
         {
             backpack = Primary;
-            return backpack != null;
+            return backpack != null && backpack.isActiveAndEnabled;
         }
 
         /// <summary>按拥有者物体查找它自己的背包：先取同物体组件，再取子物体组件（含未激活），两处都没有则返回 false。</summary>
@@ -43,14 +40,13 @@ namespace RPG4.Backpack.Runtime
             Primary = backpack;
         }
 
-        /// <summary>组件启用时登记；本地玩家包以「先注册者胜」定为 Primary，随后出现重复者只记警告。</summary>
-        internal static void Register(BackpackInventory backpack)
+        /// <summary>角色启用时登记本机玩家背包；远端角色与 NPC 不登记，重复者只记警告。</summary>
+        internal static void Register(CharacterBackpack character)
         {
-            if (backpack == null) return;
-            if (registered.Contains(backpack)) return;
+            if (character == null || !character.isActiveAndEnabled || !character.IsLocalPlayer) return;
 
-            registered.Add(backpack);
-            if (!backpack.IsLocalPlayerInventory) return;
+            BackpackInventory backpack = character.Inventory;
+            if (backpack == null) return;
 
             if (Primary == null || ReferenceEquals(Primary, backpack))
             {
@@ -63,20 +59,18 @@ namespace RPG4.Backpack.Runtime
                 $"已存在本地玩家背包（{Primary.name}），忽略 {backpack.name} 的 Primary 登记；如需替换请调用 BackpackRegistry.SetPrimary。");
         }
 
-        /// <summary>组件禁用 / 销毁时注销；被注销者若为 Primary 则一并清空。</summary>
-        internal static void Unregister(BackpackInventory backpack)
+        /// <summary>角色禁用或失去本机归属时，清除由该角色登记的默认背包。</summary>
+        internal static void Unregister(CharacterBackpack character)
         {
-            if (backpack == null) return;
+            if (character == null) return;
 
-            registered.Remove(backpack);
-            if (ReferenceEquals(Primary, backpack)) Primary = null;
+            if (ReferenceEquals(Primary, character.Inventory)) Primary = null;
         }
 
         /// <summary>关闭 Domain Reload 时静态字段不会重置，此处显式复位，避免上一局的登记残留。</summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics()
         {
-            registered.Clear();
             Primary = null;
         }
     }

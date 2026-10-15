@@ -31,6 +31,15 @@ namespace RPG4.Backpack.UI
         private object eventSource; // 事件管线键：订阅 Inv.Changed 与发布 Cmd.* 意图共用。
         private EventSubscription dataSubscription; // 数据变更（Inv.Changed）订阅句柄。
 
+        // 双栏模式使用同一个携带会话；来源固定，目标栏由指针决定。
+        private bool containerMode;
+        private BackpackContainerUI firstView;
+        private BackpackContainerUI secondView;
+        private BackpackContainerUI carryView;
+        private InventoryContainer carryContainer;
+        private BackpackContainerUI previewView;
+        private BackpackContainerUI hoveredView;
+
         private TileParams tile = TileParams.Empty; // 本帧指针网格参数。
         private SpaceQueryResult<RuntimeItem> space = SpaceQueryResult<RuntimeItem>.Empty; // 本帧落点的空间查询结果。
         private GridCoord carriedDimensions = GridCoord.One; // 携带物占位尺寸（空格时为 1×1）。
@@ -70,7 +79,7 @@ namespace RPG4.Backpack.UI
         /// <summary>绑定数据来源视图并订阅 Inv.Changed；由主控在绑定本地玩家库存后调用。</summary>
         public void Bind(IBackpackView source)
         {
-            if (ReferenceEquals(inventory, source)) return;
+            if (!containerMode && ReferenceEquals(inventory, source)) return;
             Unbind();
             inventory = source;
             eventSource = source?.EventSource;
@@ -90,7 +99,25 @@ namespace RPG4.Backpack.UI
             inventory = null;
             eventSource = null;
             ResetSession();
+            containerMode = false;
+            firstView = null;
+            secondView = null;
         }
+
+        /// <summary>绑定双栏整件转移模式；切换鼠标所在栏不会重新绑定或清除携带来源。</summary>
+        public void BindContainers(BackpackContainerUI left, BackpackContainerUI right)
+        {
+            if (containerMode && ReferenceEquals(firstView, left) && ReferenceEquals(secondView, right)) return;
+            Unbind();
+            containerMode = true;
+            firstView = left;
+            secondView = right;
+        }
+
+        /// <summary>窗口关闭或失去输入焦点时取消尚未提交的操作。</summary>
+        public void CancelInteraction() => ResetSession();
+
+        private void OnDisable() => ResetSession();
 
         /// <summary>销毁时解绑。</summary>
         public void OnDestroy() => Unbind();
@@ -117,6 +144,12 @@ namespace RPG4.Backpack.UI
         /// <summary>每帧入口：先处理认领与显示覆盖的到期兜底，再依次预计算坐标、悬停反馈、携带预览、描述面板与输入分派；会话不可交互或指针被面板拦截时提前返回。</summary>
         private void Update()
         {
+            if (containerMode)
+            {
+                UpdateContainerSession();
+                return;
+            }
+
             UpdatePendingExpiry();
             ResolveInputActions();
             bool interactive = IsInteractive();
@@ -149,6 +182,181 @@ namespace RPG4.Backpack.UI
             UpdateHoverHighlight();
             UpdateCarriedPreview(screenPoint);
             HandleInput(screenPoint);
+        }
+
+        /// <summary>双栏第一阶段：只处理整件拿起、空位放下与取消，不提交拆分、合并或互换。</summary>
+        private void UpdateContainerSession()
+        {
+            ResolveInputActions();
+            if (!IsContainerViewReady(firstView) || !IsContainerViewReady(secondView))
+            {
+                ResetSession();
+                return;
+            }
+
+            if (carried != null && (carryView == null
+                || !ReferenceEquals(carryView.Container, carryContainer)
+                || !carryContainer.Contains(carried) || carried.StackCount != carriedCount))
+            {
+                ResetSession();
+            }
+
+            // 取消优先于同帧点击，避免关闭/取消意图仍提交库存转移。
+            if ((cancelAction != null && cancelAction.WasPressedThisFrame()) || pendingSecondaryClicks > 0)
+            {
+                ResetSession();
+                return;
+            }
+
+            if (!TryGetPointer(out Vector2 screenPoint))
+            {
+                ResetSession();
+                return;
+            }
+
+            BackpackContainerUI target = ResolveContainerView(screenPoint, out TileParams targetTile);
+            ClearContainerHover();
+            if (target != null && target.TryGetCellOwner(targetTile.TileIndex, out ItemId owner, out _))
+            {
+                hoveredView = target;
+                hoveredItemId = owner;
+                target.SetItemHovered(owner, true);
+            }
+
+            int index = target != null
+                ? target.GetUpperLeftIndex(targetTile.TileIndex, carriedGrabOffset)
+                : SpaceQueryResult<RuntimeItem>.NoIndex;
+            SpaceQueryResult<RuntimeItem> region = target != null && index >= 0
+                ? target.QuerySpace(index, carried != null ? carriedDimensions : GridCoord.One)
+                : SpaceQueryResult<RuntimeItem>.Empty;
+            bool canPlace = carried != null && target != null && index >= 0
+                && (region.HasSpace || (ReferenceEquals(target, carryView) && ReferenceEquals(region.ValidItem, carried)))
+                && (ReferenceEquals(target.Container, carryContainer) || HasEmptyRegion(target.Container, carriedDimensions));
+
+            if (carried != null)
+            {
+                if (target != null && index >= 0)
+                    target.ApplyRegionHighlight(index, carriedDimensions, canPlace ? BackpackHoverState.Available : BackpackHoverState.Blocked);
+                ShowContainerPreview(target ?? carryView, screenPoint, canPlace ? index : SpaceQueryResult<RuntimeItem>.NoIndex);
+            }
+
+            if (pendingPrimaryClicks <= 0) return;
+            pendingPrimaryClicks--; // 一帧只执行一次点击；放下前使用当前帧重新计算的区域。
+            if (target == null) return;
+            if (carried == null)
+            {
+                BeginContainerCarry(target, targetTile.TileIndex);
+                return;
+            }
+
+            if (!canPlace) return;
+            GridCoord position = GridUtils.GetPositionFromIndex(index, target.Columns);
+            RuntimeItem item = carried;
+            if (!ReferenceEquals(target.Container, carryContainer)
+                && !carryContainer.TryTransferItemToEmptySpace(item, target.Container, out string error))
+            {
+                target.ApplyRegionHighlight(index, carriedDimensions, BackpackHoverState.Blocked);
+                BackpackLog.Debug(LogModule.Interaction, "跨背包转移被拒绝：" + error);
+                return;
+            }
+
+            target.SetManualPosition(item.ItemId, new Vector2Int(position.X, position.Y));
+            ResetSession();
+            target.Redraw();
+        }
+
+        private static bool IsContainerViewReady(BackpackContainerUI view) =>
+            view != null && view.isActiveAndEnabled && IsInventoryAlive(view.Inventory) && view.Container != null && view.IsReady;
+
+        private static bool IsInventoryAlive(IBackpackView source) =>
+            source != null && !(source is UnityEngine.Object owner && owner == null);
+
+        // 本地显示位置可以与库存位置不同；高亮还须确认真容器能容纳完整矩形。
+        private static bool HasEmptyRegion(InventoryContainer container, GridCoord dimensions)
+        {
+            for (int i = 0; i < container.CellCount; i++)
+                if (container.QuerySpace(i, dimensions).HasSpace) return true;
+            return false;
+        }
+
+        private BackpackContainerUI ResolveContainerView(Vector2 point, out TileParams resolved)
+        {
+            if (secondView.TryResolveTile(point, GetUICamera(secondView), out resolved)) return secondView;
+            if (firstView.TryResolveTile(point, GetUICamera(firstView), out resolved)) return firstView;
+            resolved = TileParams.Empty;
+            return null;
+        }
+
+        private static Camera GetUICamera(BackpackContainerUI view)
+        {
+            Canvas canvas = view != null ? view.GetComponentInParent<Canvas>() : null;
+            return canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+        }
+
+        private void BeginContainerCarry(BackpackContainerUI source, int clickedIndex)
+        {
+            if (!source.TryGetCellOwner(clickedIndex, out ItemId id, out _)
+                || !source.TryGetItem(id, out RuntimeItem item)
+                || !source.Container.Contains(item)
+                || !source.TryGetPlacement(id, out GridDisplayPlacement placement)) return;
+
+            carryView = source;
+            carryContainer = source.Container;
+            carried = item;
+            carriedCount = item.StackCount;
+            carriedDimensions = InventoryContainer.GetItemDimensions(item);
+            GridCoord clicked = GridUtils.GetPositionFromIndex(clickedIndex, source.Columns);
+            carriedGrabOffset = new Vector2Int(clicked.X - placement.Position.x, clicked.Y - placement.Position.y);
+            source.SetHiddenItem(id);
+            source.Redraw();
+        }
+
+        private void ShowContainerPreview(BackpackContainerUI view, Vector2 screenPoint, int index)
+        {
+            if (!ReferenceEquals(previewView, view))
+            {
+                if (previewView != null) previewView.HideCarriedPreview();
+                previewView = view;
+            }
+
+            if (view == null || !view.TryShowCarriedPreview(carried, carriedCount)) return;
+            if (index >= 0)
+            {
+                GridCoord position = GridUtils.GetPositionFromIndex(index, view.Columns);
+                view.SetCarriedPreviewCellPosition(new Vector2(position.X, position.Y));
+            }
+            else view.TrySetCarriedPreviewScreenPosition(screenPoint, GetUICamera(view), carriedGrabOffset);
+        }
+
+        private void ClearContainerHover()
+        {
+            if (hoveredView != null) hoveredView.SetItemHovered(hoveredItemId, false);
+            hoveredView = null;
+            hoveredItemId = ItemId.None;
+            if (firstView != null) firstView.ClearHoverHighlight();
+            if (secondView != null) secondView.ClearHoverHighlight();
+        }
+
+        private void ResetContainerSession()
+        {
+            ClearContainerHover();
+            if (previewView != null) previewView.HideCarriedPreview();
+            if (carryView != null)
+            {
+                carryView.ClearHiddenItem();
+                if (IsInventoryAlive(carryView.Inventory)) carryView.Redraw();
+                else carryView.UnbindInventory();
+            }
+
+            carried = null;
+            carriedCount = 0;
+            carriedDimensions = GridCoord.One;
+            carriedGrabOffset = Vector2Int.zero;
+            carryView = null;
+            carryContainer = null;
+            previewView = null;
+            pendingPrimaryClicks = 0;
+            pendingSecondaryClicks = 0;
         }
 
         // 每帧预计算
@@ -802,12 +1010,18 @@ namespace RPG4.Backpack.UI
         /// <summary>数据源、网格是否就绪，且背包窗口处于打开状态。</summary>
         private bool IsInteractive()
         {
-            return inventory != null && grid != null && grid.isActiveAndEnabled && grid.IsOpen;
+            return !ChestBackpackUI.BlocksPlayerBackpackInput && inventory != null && grid != null && grid.isActiveAndEnabled && grid.IsOpen;
         }
 
         /// <summary>退出交互会话：一次性复位全部指针、携带与高亮状态，并丢弃排队中的点击。</summary>
         private void ResetSession()
         {
+            if (containerMode)
+            {
+                ResetContainerSession();
+                return;
+            }
+
             bool hadState = sessionValid;
             sessionValid = false;
             pendingPrimaryClicks = 0;

@@ -5,23 +5,26 @@ using RPG4.Backpack.Items;
 
 namespace RPG4.Backpack.Inventory
 {
-    /// <summary>库存真相源：单一矩形网格容器，唯一权威地持有「物品集合 + 上左位置 + 格子占用」，两份状态只在提交阶段同源写入、不存在中间态；堆叠数不缓存（唯一来源 RuntimeItem.StackCount）；纯 C# 数据层，不引用 UI / MonoBehaviour / 网络；按主线程单线程访问、不加锁，查询复用轮次戳缓冲做到零 GC；变更成功后经 F6 事件总线广播（source 为容器实例）。</summary>
+    /// <summary>库存真相源：统一承担物品集合、格子映射与读写查询，唯一权威地持有「物品集合 + 上左位置 + 格子占用」，两份状态只在提交阶段同源写入、不存在中间态；物品下标按 ItemId 排序并按需缓存，不另建权威数据；堆叠数不缓存（唯一来源 RuntimeItem.StackCount）；纯 C# 数据层，不引用 UI / MonoBehaviour / 网络；按主线程单线程访问、不加锁，查询复用轮次戳缓冲做到零 GC；变更成功后经 F6 事件总线广播（source 为容器实例）。</summary>
     public sealed class InventoryContainer
     {
         public const int NoIndex = InventoryPlacement.NoIndex; // 无效索引常量。
 
         public const int MaxSlotCount = 65536; // 槽位总数上限（256 × 256），用于拒绝非正尺寸、整数溢出与不可接受的分配规模。
 
+        public const int MaxCellCount = MaxSlotCount; // 格子总数上限，与槽位口径一致。
+
         private static readonly Comparison<RuntimeItem> ItemIdComparison = static (left, right) => left.ItemId.CompareTo(right.ItemId); // 确定性排序比较器，静态缓存避免每次调用分配委托。
 
         private readonly InventoryPlacement[] cells; // 逐格放置记录，空置为 Invalid。
         private readonly Dictionary<RuntimeItem, InventoryPlacement> placements; // 物品 → 放置记录，供 O(1) 定位与枚举。
         private readonly IReadOnlyCollection<RuntimeItem> itemsView; // placements 键的只读视图，避免每次枚举重新分配。
+        private readonly List<RuntimeItem> indexedItems = new List<RuntimeItem>(); // 按 ItemId 排序的查询缓存，下标口径与 FillItemsByItemId 一致。
         private readonly int[] claimed; // 查询标记缓冲：值等于 claimStamp 才算「本轮已检查」。
-        private readonly SlotAvailabilityResult<RuntimeItem> scratchAvailability = new SlotAvailabilityResult<RuntimeItem>(); // 内部复用的容量查询结果，供 TryAddItem 规划阶段使用。
-        private readonly List<StackStep> stackSteps = new List<StackStep>(); // 内部复用的堆叠合并步骤缓冲。
+        private readonly List<StackStep> stackSteps = new List<StackStep>(); // 接收规划复用的合并缓冲，成功规划后复制到独立计划以隔离事件重入。
 
         private int claimStamp; // 查询轮次戳，每轮自增；初值 0 与缓冲初值相同，故必须先 BeginClaimPass。
+        private bool itemIndicesDirty = true; // 提交变更后失效，首次下标查询时重建。
 
         /// <summary>创建指定行列数的容器；行列非正或 rows × columns 超过 MaxSlotCount 时抛 ArgumentOutOfRangeException（用长整型探测溢出）。</summary>
         public InventoryContainer(int rows, int columns)
@@ -55,31 +58,91 @@ namespace RPG4.Backpack.Inventory
 
         public int Columns { get; } // 列数。
 
+        public int Width => Columns; // 背包宽度（列数）。
+
+        public int Height => Rows; // 背包高度（行数）。
+
         public int SlotCount => cells.Length; // 槽位总数（行 × 列）。
 
+        public int CellCount => SlotCount; // 格子总数（宽 × 高）。
+
+        /// <summary>已占用的格子数：按权威放置记录的冻结尺寸求和，不维护第二份计数状态。</summary>
+        public int OccupiedCellCount
+        {
+            get
+            {
+                int count = 0;
+                foreach (InventoryPlacement placement in placements.Values)
+                {
+                    count += placement.CellCount;
+                }
+
+                return count;
+            }
+        }
+
+        public int EmptyCellCount => CellCount - OccupiedCellCount; // 空格数。
+
         public int ItemCount => placements.Count; // 当前容器内的物品数量。
+
+        public int Count => ItemCount; // 物品集合数量。
 
         public IReadOnlyCollection<RuntimeItem> Items => itemsView; // 当前容器内的物品集合（枚举顺序不保证，勿依赖）。
 
         public int Revision { get; private set; } // 状态版本号：每次成功提交变更（放置 / 移除 / 合并 / 收编）后 +1、失败路径不变，供网络投影做廉价的「是否有外部变更」判断（比较相等而非大小，溢出回绕不影响语义）。
 
-        /// <summary>按 RuntimeItem.ItemId 升序把物品写入 destination（先清空），供网络初始快照、日志与测试取确定性顺序；首次代价 O(n log n)，标识唯一故顺序确定，destination 由调用方持有以复用、避免每帧分配。</summary>
+        /// <summary>按 RuntimeItem.ItemId 升序把物品写入 destination（先清空），顺序与物品下标查询一致；变更后首次读取重建排序缓存，destination 由调用方持有以复用。</summary>
         public void FillItemsByItemId(List<RuntimeItem> destination)
         {
             if (destination == null) throw new ArgumentNullException(nameof(destination));
 
+            EnsureItemIndices();
             destination.Clear();
-            destination.AddRange(placements.Keys);
-            destination.Sort(ItemIdComparison);
+            destination.AddRange(indexedItems);
         }
 
         // 只读查询
 
+        /// <summary>按物品下标取实例；下标基于当前容器按 ItemId 升序的集合，提交变更后应重新查询；越界返回 false 且 item 为 null。</summary>
+        public bool TryGetItem(int itemIndex, out RuntimeItem item)
+        {
+            EnsureItemIndices();
+            if (itemIndex < 0 || itemIndex >= indexedItems.Count)
+            {
+                item = null;
+                return false;
+            }
+
+            item = indexedItems[itemIndex];
+            return true;
+        }
+
+        /// <summary>物品实例在当前 ItemId 升序集合中的下标（按引用判等）；空引用或不在容器中返回 NoIndex；持久标识请使用 ItemId。</summary>
+        public int IndexOf(RuntimeItem item)
+        {
+            if (!Contains(item)) return NoIndex;
+
+            EnsureItemIndices();
+            for (int i = 0; i < indexedItems.Count; i++)
+            {
+                if (ReferenceEquals(indexedItems[i], item)) return i;
+            }
+
+            return NoIndex;
+        }
+
         /// <summary>线性索引是否落在此容器内。</summary>
         public bool IsIndexValid(int index) => index >= 0 && index < cells.Length;
 
+        public bool IsCellIndexValid(int cellIndex) => IsIndexValid(cellIndex); // 格子下标边界查询。
+
         /// <summary>该格是否被物品占用。索引非法时返回 false。</summary>
         public bool IsIndexOccupied(int index) => IsIndexValid(index) && cells[index].IsValid;
+
+        public bool IsCellOccupied(int cellIndex) => IsIndexOccupied(cellIndex); // 格子占用查询。
+
+        /// <summary>该格物品在当前 ItemId 升序集合中的下标；空格或格子下标非法返回 NoIndex。</summary>
+        public int GetItemIndexAt(int cellIndex) => IndexOf(GetItemAt(cellIndex));
 
         /// <summary>该格所属物品的上左格索引；空置或索引非法时返回 NoIndex。</summary>
         public int GetUpperLeftIndexAt(int index) =>
@@ -87,6 +150,14 @@ namespace RPG4.Backpack.Inventory
 
         /// <summary>该格上的物品；空置或索引非法时返回 null。</summary>
         public RuntimeItem GetItemAt(int index) => IsIndexValid(index) ? cells[index].Item : null;
+
+        /// <summary>该网格坐标上的物品；空格或坐标越界返回 null。</summary>
+        public RuntimeItem GetItemAt(GridCoord coord)
+        {
+            if (coord.X < 0 || coord.X >= Columns || coord.Y < 0 || coord.Y >= Rows) return null;
+
+            return GetItemAt(GridUtils.GetIndexFromPosition(coord, Columns));
+        }
 
         /// <summary>物品是否在容器内。</summary>
         public bool Contains(RuntimeItem item) => item != null && placements.ContainsKey(item);
@@ -101,6 +172,94 @@ namespace RPG4.Backpack.Inventory
             }
 
             return placements.TryGetValue(item, out placement);
+        }
+
+        /// <summary>物品占格的上左格线性索引；物品不在容器中时返回 false 且 upperLeftIndex 为 NoIndex。</summary>
+        public bool TryGetUpperLeftIndex(RuntimeItem item, out int upperLeftIndex)
+        {
+            upperLeftIndex = NoIndex;
+            if (!TryGetPlacement(item, out InventoryPlacement placement)) return false;
+
+            upperLeftIndex = placement.UpperLeftIndex;
+            return true;
+        }
+
+        /// <summary>按放置记录冻结的尺寸，把物品全部占格下标升序写入 buffer（先清空）；物品不在容器中时返回 false。</summary>
+        public bool TryGetCellIndices(RuntimeItem item, List<int> buffer)
+        {
+            if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+
+            buffer.Clear();
+            if (!TryGetPlacement(item, out InventoryPlacement placement)) return false;
+
+            RegionCursor cursor = new RegionCursor(Columns, placement.UpperLeftIndex, placement.Dimensions);
+            while (cursor.MoveNext(out int index))
+            {
+                buffer.Add(index);
+            }
+
+            return true;
+        }
+
+        /// <summary>只读映射一致性查询：每条放置记录按冻结尺寸完整占据矩形，全部格子与对应记录一致且无额外占格；不修改状态或广播事件。</summary>
+        public bool TryValidateMapping(out string error)
+        {
+            foreach (KeyValuePair<RuntimeItem, InventoryPlacement> pair in placements)
+            {
+                InventoryPlacement placement = pair.Value;
+                if (!placement.IsValid || !ReferenceEquals(pair.Key, placement.Item))
+                {
+                    error = "物品集合与放置记录不一致。";
+                    return false;
+                }
+
+                GridCoord dimensions = placement.Dimensions;
+                if (dimensions.X < 1 || dimensions.Y < 1
+                    || !GridUtils.IsInGridBounds(placement.UpperLeftIndex, dimensions, Columns, Rows))
+                {
+                    error = $"物品 {pair.Key.ItemId} 的上左格 {placement.UpperLeftIndex} 与尺寸 {dimensions} 超出容器范围。";
+                    return false;
+                }
+
+                RegionCursor cursor = new RegionCursor(Columns, placement.UpperLeftIndex, dimensions);
+                while (cursor.MoveNext(out int index))
+                {
+                    if (cells[index].Equals(placement)) continue;
+
+                    error = $"物品 {pair.Key.ItemId} 的占格不构成完整矩形：第 {index} 格与放置记录不一致。";
+                    return false;
+                }
+            }
+
+            for (int index = 0; index < cells.Length; index++)
+            {
+                InventoryPlacement cell = cells[index];
+                if (!cell.IsValid)
+                {
+                    if (cell.Equals(InventoryPlacement.Invalid)) continue;
+
+                    error = $"第 {index} 格的空格标记不一致。";
+                    return false;
+                }
+
+                if (!placements.TryGetValue(cell.Item, out InventoryPlacement placement) || !cell.Equals(placement))
+                {
+                    error = $"第 {index} 格没有对应的物品放置记录。";
+                    return false;
+                }
+
+                GridCoord coord = GridUtils.GetPositionFromIndex(index, Columns);
+                GridCoord origin = GridUtils.GetPositionFromIndex(placement.UpperLeftIndex, Columns);
+                if (coord.X < origin.X || coord.X >= origin.X + placement.Dimensions.X
+                    || coord.Y < origin.Y || coord.Y >= origin.Y + placement.Dimensions.Y)
+                {
+                    error = $"第 {index} 格位于物品 {cell.Item.ItemId} 的记录占格范围之外。";
+                    return false;
+                }
+            }
+
+            error = null;
+            return true;
         }
 
         /// <summary>按标识查找容器内物品（线性扫描，物品数通常很少，仅低频操作调用）；标识无效或不在容器返回 false。</summary>
@@ -327,7 +486,7 @@ namespace RPG4.Backpack.Inventory
             if (target == null || incoming == null) return Reject(out error, nameof(TryStackItem), "物品为空。");
             if (ReferenceEquals(target, incoming)) return Reject(out error, nameof(TryStackItem), "目标与来源是同一个物品实例。");
             if (!placements.ContainsKey(target)) return Reject(out error, nameof(TryStackItem), "目标物品不在容器中。");
-            if (placements.ContainsKey(incoming)) return Reject(out error, nameof(TryStackItem), "来源物品已在容器中，需先取出。");
+            if (!CanInsert(incoming, nameof(TryStackItem), out error)) return false;
             if (!target.IsStackable || !incoming.IsStackable) return Reject(out error, nameof(TryStackItem), "双方必须都可堆叠才能合并。");
             if (!target.ItemType.MatchesTagExact(incoming.ItemType)) return Reject(out error, nameof(TryStackItem), "物品类型不一致（需整串精确匹配）。");
 
@@ -373,38 +532,91 @@ namespace RPG4.Backpack.Inventory
             return true;
         }
 
-        /// <summary>一次性收编：先按行优先把物品并入容器内已有的同类型堆叠，剩余部分再放入首个合法空白区域；容器不持有物品拷贝工厂，无法把一部分放进容器、另一部分留在手上，因此要求整批数量都能被吸收，否则整体失败且不改变任何状态（需要部分接收时改用 QueryAvailability 的 Remainder 与 TryStackItem 的 movedCount）。</summary>
+        /// <summary>兼容原有添加入口，接收规则统一委托 TryReceiveItem；仍为整批成功或失败，remainder 保留旧契约恒为 0。</summary>
         public bool TryAddItem(RuntimeItem item, out int remainder, out string error)
         {
             remainder = 0;
-            if (!CanInsert(item, nameof(TryAddItem), out error)) return false;
+            return TryReceiveItem(item, out error);
+        }
 
-            GridCoord dimensions = GetItemDimensions(item);
+        /// <summary>整批接收外部物品，可供拾取使用：先按行优先合并已有同类型堆叠，再将剩余量放入首个合法空白区域；空间不足时容器与物品完全不变。调用方须持有尚未入包且尚未被消费的实例，包内物品请用 TryTransferItem；成功后交出实例并移除对应拾取物，即使全部并入既有堆叠、此实例没有成为容器条目也不能再次接收（StackCount 不清零）。</summary>
+        public bool TryReceiveItem(RuntimeItem item, out string error)
+        {
+            if (!TryPlanReceiveItem(item, nameof(TryReceiveItem), out ReceivePlan plan, out error)) return false;
 
-            // 只读规划
-            FillAvailability(item, -1, scratchAvailability);
-            if (!scratchAvailability.HasRoom)
+            CommitReceiveItem(item, plan);
+            BumpRevision();
+            NotifyReceivedItem(item, plan);
+            return true;
+        }
+
+        /// <summary>将容器内物品整件或整堆转移到 destination，目标使用与拾取相同的接收规则；先完整规划再提交双方归属、占格与数量，失败双方零变更。保留未被完全合并的原实例与标识，不拆分、不重新随机化；双方版本与查询缓存均更新后才广播通知。</summary>
+        public bool TryTransferItem(RuntimeItem item, InventoryContainer destination, out string error)
+            => TryTransferItemCore(item, destination, true, nameof(TryTransferItem), out error);
+
+        /// <summary>将来源物品整件或整堆转入目标首个合法空白矩形，不合并任何已有堆叠；保留原实例、标识与数量。UI 展示落点不作为权威容器坐标，失败双方零变更，成功在双方版本与缓存更新后广播通知。</summary>
+        public bool TryTransferItemToEmptySpace(RuntimeItem item, InventoryContainer destination, out string error)
+            => TryTransferItemCore(item, destination, false, nameof(TryTransferItemToEmptySpace), out error);
+
+        private bool TryTransferItemCore(RuntimeItem item, InventoryContainer destination, bool mergeStacks, string operation, out string error)
+        {
+            if (destination == null) return Reject(out error, operation, "目标容器为空。");
+            if (ReferenceEquals(this, destination)) return Reject(out error, operation, "来源与目标是同一个容器。");
+            if (item == null) return Reject(out error, operation, "物品为空。");
+            if (!placements.TryGetValue(item, out InventoryPlacement placement))
             {
-                return Reject(out error, nameof(TryAddItem), "容器没有可用空间。");
+                return Reject(out error, operation, "物品不在来源容器中。");
             }
 
-            IReadOnlyList<SlotAvailability> slots = scratchAvailability.SlotAvailabilities;
+            if (!destination.TryPlanReceiveItem(item, operation, out ReceivePlan plan, out error, mergeStacks)) return false;
+
+            // 双方静默提交：此段无回调，不能通过两个公开增删操作拼接转移。
+            ClearCells(placement);
+            placements.Remove(item);
+            destination.CommitReceiveItem(item, plan);
+            AdvanceRevision();
+            destination.AdvanceRevision();
+
+            NotifyChanged();
+            destination.NotifyChanged();
+            NotifyItemRemoved(item);
+            destination.NotifyReceivedItem(item, plan);
+            return true;
+        }
+
+        // 内部实现
+
+        /// <summary>只读规划接收：默认完整优先扫描已有堆叠，再寻找剩余量的空白矩形；空位转移关闭合堆，直接为整件寻找空白矩形。不能用会在早期空格处提前结束的容量查询代替。</summary>
+        private bool TryPlanReceiveItem(RuntimeItem item, string operation, out ReceivePlan plan, out string error, bool mergeStacks = true)
+        {
+            plan = default;
+            if (!CanInsert(item, operation, out error)) return false;
+
+            GridCoord dimensions = GetItemDimensions(item);
+            if (dimensions.X < 1 || dimensions.Y < 1)
+            {
+                return Reject(out error, operation, $"物品占格尺寸 {dimensions} 非法。");
+            }
+
             stackSteps.Clear();
             int remaining = item.StackCount;
 
-            for (int i = 0; i < slots.Count && remaining > 0; i++)
+            if (mergeStacks && item.IsStackable)
             {
-                SlotAvailability slot = slots[i];
-                if (!slot.HasItemAtIndex) continue;
+                for (int index = 0; index < cells.Length && remaining > 0; index++)
+                {
+                    InventoryPlacement placement = cells[index];
+                    if (!placement.IsValid || placement.UpperLeftIndex != index) continue;
 
-                RuntimeItem occupant = GetItemAt(slot.Index);
-                if (occupant == null) continue;
+                    RuntimeItem occupant = placement.Item;
+                    if (!occupant.IsStackable || !occupant.ItemType.MatchesTagExact(item.ItemType)) continue;
 
-                int move = Math.Min(remaining, slot.AmountToFill);
-                if (move <= 0) continue;
+                    int move = Math.Min(remaining, occupant.MaxStackSize - occupant.StackCount);
+                    if (move <= 0) continue;
 
-                stackSteps.Add(new StackStep(occupant, move));
-                remaining -= move;
+                    stackSteps.Add(new StackStep(occupant, move));
+                    remaining -= move;
+                }
             }
 
             int placeIndex = NoIndex;
@@ -412,62 +624,76 @@ namespace RPG4.Backpack.Inventory
             {
                 if (remaining > item.MaxStackSize)
                 {
-                    return Reject(out error, nameof(TryAddItem), $"剩余量 {remaining} 超过单堆上限 {item.MaxStackSize}，需先拆分。");
+                    return Reject(out error, operation, $"剩余量 {remaining} 超过单堆上限 {item.MaxStackSize}，需先拆分。");
                 }
 
-                for (int i = 0; i < slots.Count; i++)
+                for (int index = 0; index < cells.Length; index++)
                 {
-                    SlotAvailability slot = slots[i];
-                    if (slot.HasItemAtIndex || IsIndexOccupied(slot.Index)) continue;
+                    if (!GridUtils.IsInGridBounds(index, dimensions, Columns, Rows)
+                        || !IsRegionEmpty(index, dimensions)) continue;
 
-                    placeIndex = slot.Index;
+                    placeIndex = index;
                     break;
                 }
 
                 if (placeIndex == NoIndex)
                 {
-                    return Reject(out error, nameof(TryAddItem), "没有可用的空白区域。");
+                    return Reject(out error, operation, "容器空间不足，无法接收整批物品。");
                 }
             }
 
-            if (stackSteps.Count == 0 && placeIndex == NoIndex)
-            {
-                return Reject(out error, nameof(TryAddItem), "容器没有可用空间。");
-            }
-
-            // 提交
-            for (int i = 0; i < stackSteps.Count; i++)
-            {
-                StackStep step = stackSteps[i];
-                step.Target.SetStackCount(step.Target.StackCount + step.Amount);
-            }
-
-            if (placeIndex != NoIndex)
-            {
-                item.SetStackCount(remaining);
-                CommitPlacement(item, placeIndex, dimensions);
-            }
-
-            BumpRevision();
+            plan = new ReceivePlan(dimensions, remaining, placeIndex, stackSteps.ToArray());
             error = null;
-
-            if (placeIndex != NoIndex) NotifyItemAdded(item);
-
-            for (int i = 0; i < stackSteps.Count; i++)
-            {
-                NotifyStackChanged(stackSteps[i].Target);
-            }
-
             return true;
         }
 
-        // 内部实现
+        /// <summary>应用已校验的接收计划，不推进版本或通知；转移用此入口确保双方状态先全部落盘。</summary>
+        private void CommitReceiveItem(RuntimeItem item, ReceivePlan plan)
+        {
+            for (int i = 0; i < plan.StackSteps.Length; i++)
+            {
+                StackStep step = plan.StackSteps[i];
+                step.Target.SetStackCount(step.Target.StackCount + step.Amount);
+            }
 
-        /// <summary>插入前置校验：非空且不在容器内。</summary>
+            if (plan.PlaceIndex != NoIndex)
+            {
+                item.SetStackCount(plan.Remaining);
+                CommitPlacement(item, plan.PlaceIndex, plan.Dimensions);
+            }
+        }
+
+        /// <summary>按独立计划广播接收明细；Changed 回调即使重入接收，也不会覆盖当前操作的通知列表。</summary>
+        private void NotifyReceivedItem(RuntimeItem item, ReceivePlan plan)
+        {
+            if (plan.PlaceIndex != NoIndex) NotifyItemAdded(item);
+
+            for (int i = 0; i < plan.StackSteps.Length; i++)
+            {
+                NotifyStackChanged(plan.StackSteps[i].Target);
+            }
+        }
+
+        /// <summary>仅从权威物品集合重建排序缓存；缓存只供读取，不参与放置、移除或堆叠决策。</summary>
+        private void EnsureItemIndices()
+        {
+            if (!itemIndicesDirty) return;
+
+            indexedItems.Clear();
+            indexedItems.AddRange(placements.Keys);
+            indexedItems.Sort(ItemIdComparison);
+            itemIndicesDirty = false;
+        }
+
+        /// <summary>插入前置校验：非空、不在容器内且有效标识不与已有实例重复；None 保留离线无标识口径。</summary>
         private bool CanInsert(RuntimeItem item, string operation, out string error)
         {
             if (item == null) return Reject(out error, operation, "物品为空。");
             if (placements.ContainsKey(item)) return Reject(out error, operation, "物品已在容器中。");
+            if (item.ItemId.IsValid && TryGetItemById(item.ItemId, out _))
+            {
+                return Reject(out error, operation, $"容器中已有标识为 {item.ItemId} 的另一物品实例。");
+            }
 
             error = null;
             return true;
@@ -559,11 +785,18 @@ namespace RPG4.Backpack.Inventory
 
         // F6 广播（M2 偏差：蓝本 M2 不接事件总线，本工程在变更成功后广播，source 用容器实例）
 
-        /// <summary>推进版本号并广播粗粒度「数据已变」信号：容器内所有成功提交路径的唯一自增入口。</summary>
+        /// <summary>推进版本号并广播粗粒度「数据已变」信号，供单容器操作使用。</summary>
         private void BumpRevision()
         {
-            Revision++;
+            AdvanceRevision();
             NotifyChanged();
+        }
+
+        /// <summary>版本与下标缓存的唯一更新入口；跨容器转移先更新双方，再发送任何同步通知。</summary>
+        private void AdvanceRevision()
+        {
+            itemIndicesDirty = true;
+            Revision++;
         }
 
         /// <summary>广播粗粒度变更信号（无载荷）：表现层据此置脏、帧末合并刷新一次，不区分具体变了什么。</summary>
@@ -588,6 +821,23 @@ namespace RPG4.Backpack.Inventory
         private void NotifyStackChanged(RuntimeItem item)
         {
             EventBus.Global.Publish(InvChannels.StackChanged, this, QueryAvailability(item));
+        }
+
+        /// <summary>一笔接收操作的独立计划；步骤数组不与后续或重入操作共用。</summary>
+        private readonly struct ReceivePlan
+        {
+            public ReceivePlan(GridCoord dimensions, int remaining, int placeIndex, StackStep[] stackSteps)
+            {
+                Dimensions = dimensions;
+                Remaining = remaining;
+                PlaceIndex = placeIndex;
+                StackSteps = stackSteps;
+            }
+
+            public GridCoord Dimensions { get; }
+            public int Remaining { get; }
+            public int PlaceIndex { get; }
+            public StackStep[] StackSteps { get; }
         }
 
         /// <summary>一条待提交的堆叠合并步骤（规划阶段产出、提交阶段执行）。</summary>

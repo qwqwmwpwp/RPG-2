@@ -7,14 +7,26 @@ using RPG4.Backpack.Items;
 
 namespace RPG4.Backpack.Runtime
 {
-    /// <summary>单机背包宿主：挂在玩家或箱子物体上，组合一份 <see cref="InventoryHostCore"/> 作为权威数据（容器、意图命令与编排逻辑都在核心内），只承担「创建核心 + 登记注册 + 测试辅助」；物品读取由调用方直连核心容器，变更通知经容器的 <c>InvChannels</c> 广播、写入意图经 <c>CmdChannels</c> 命令处理，宿主不再中转或转发。</summary>
+    /// <summary>基础背包组件：组合一份 <see cref="InventoryHostCore"/>，统一暴露物品集合、格子映射、空间查询与写入操作；全部状态和提交逻辑委托同一核心与容器，变更通知经容器的 <c>InvChannels</c> 广播、写入意图经 <c>CmdChannels</c> 命令处理；角色归属由组合组件承担。</summary>
     [DisallowMultipleComponent]
     [AddComponentMenu("RPG4/Backpack Inventory")]
     public sealed class BackpackInventory : MonoBehaviour, IBackpackView
     {
+        #region 常量
+
         public const int DefaultRows = InventoryHostCore.DefaultRows; // 尺寸非法时的回退行数（与联机组件默认一致）。
 
         public const int DefaultColumns = InventoryHostCore.DefaultColumns; // 尺寸非法时的回退列数（与联机组件默认一致）。
+
+        public const int NoIndex = InventoryContainer.NoIndex; // 空格与无效下标。
+
+        public const int MaxSlotCount = InventoryContainer.MaxSlotCount; // 槽位总数上限。
+
+        public const int MaxCellCount = InventoryContainer.MaxCellCount; // 格子总数上限。
+
+        #endregion
+
+        #region Inspector 配置
 
         [Header("背包尺寸（创建后不可变更）")]
         [SerializeField, Min(1)]
@@ -23,34 +35,56 @@ namespace RPG4.Backpack.Runtime
         [SerializeField, Min(1)]
         private int columns = DefaultColumns;
 
-        [Header("归属")]
-        [Tooltip("勾选后登记为 BackpackRegistry.Primary（本地玩家背包）；箱子等其它容器应取消勾选。")]
-        [SerializeField]
-        private bool isLocalPlayerInventory = true;
-
         [Header("物品目录（拆分恢复新实例用）")]
         [Tooltip("拆分按类型取模板必需；留空时拆分会被拒绝并记警告。")]
         [SerializeField]
         private ItemManifestCatalog catalog;
 
-        [Header("测试")]
-        [Tooltip("勾选后 Start 时把目录中的模板各填入一份测试堆叠（仅调试用，正式场景请取消勾选）。")]
-        [SerializeField]
-        private bool fillCatalogOnStart;
+        #endregion
 
-        private const int TestStackCount = 5; // 测试填入时每个可堆叠模板的堆叠数（仍受其单堆上限约束）。
-
-        private readonly List<RuntimeItem> testItems = new List<RuntimeItem>(); // 测试遍历用的复用缓冲，避免每次调用分配。
+        #region 运行时字段
 
         private InventoryHostCore core; // 共享核心：容器、意图命令与编排逻辑（单机自任权威）。
 
+        #endregion
+
+        #region 背包状态与统计
+
         public InventoryContainer Container => core != null ? core.Container : null; // 权威容器；Awake 创建后不变。
+
+        public bool IsInitialized => Container != null; // 核心与权威容器是否已创建。
+
+        public int Rows => Container?.Rows ?? 0; // 实际行数；尚未初始化时为 0。
+
+        public int Columns => Container?.Columns ?? 0; // 实际列数；尚未初始化时为 0。
+
+        public int Width => Columns; // 实际背包宽度。
+
+        public int Height => Rows; // 实际背包高度。
+
+        public int SlotCount => Container?.SlotCount ?? 0; // 实际槽位总数。
+
+        public int CellCount => SlotCount; // 格子总数。
+
+        public int OccupiedCellCount => Container?.OccupiedCellCount ?? 0; // 已占用格子数。
+
+        public int EmptyCellCount => Container?.EmptyCellCount ?? 0; // 空格数。
+
+        public int ItemCount => Container?.ItemCount ?? 0; // 当前物品数量。
+
+        public int Count => ItemCount; // 物品集合数量。
+
+        public IReadOnlyCollection<RuntimeItem> Items => Container?.Items ?? Array.Empty<RuntimeItem>(); // 权威物品集合的只读视图，枚举顺序不保证。
+
+        public int Revision => Container?.Revision ?? 0; // 权威容器的状态版本号。
+
+        #endregion
+
+        #region 背包配置与数据源
 
         public int ConfiguredRows => rows; // 面板配置的行数。
 
         public int ConfiguredColumns => columns; // 面板配置的列数。
-
-        public bool IsLocalPlayerInventory => isLocalPlayerInventory; // 是否登记为本地玩家背包。
 
         public object EventSource => Container; // 事件管线键：单机形态恒为权威容器实例（订阅通知与发布意图共用）。
 
@@ -65,40 +99,34 @@ namespace RPG4.Backpack.Runtime
             }
         }
 
-        // 生命周期
+        #endregion
+
+        #region 生命周期
 
         /// <summary>创建共享核心（内部创建权威容器，行列非法或乘积超限时回退默认尺寸并记警告），并把 Inspector 目录同步给核心。</summary>
         private void Awake()
         {
             core = new InventoryHostCore(rows, columns, LogModule.Inventory, name);
             core.Catalog = catalog;
-
-            BackpackLog.Info(
-                LogModule.Inventory,
-                $"背包宿主就绪：{name}，容器 {core.Container.Rows} × {core.Container.Columns}，本地玩家包={isLocalPlayerInventory}。");
         }
 
-        /// <summary>登记到注册表，并以容器为管线键订阅三个写入意图命令；核心未创建时只登记不订阅。</summary>
+        /// <summary>以容器为管线键订阅写入意图命令。</summary>
         private void OnEnable()
         {
-            BackpackRegistry.Register(this);
             if (core != null) core.SubscribeCommands(core.Container);
         }
 
-        /// <summary>注销登记并释放全部意图订阅（与 OnEnable 成对，重复调用安全）。</summary>
+        /// <summary>释放全部意图订阅（与 OnEnable 成对，重复调用安全）。</summary>
         private void OnDisable()
         {
-            BackpackRegistry.Unregister(this);
             if (core != null) core.UnsubscribeCommands();
         }
 
-        /// <summary>测试用自动填充：放在 Start 以保证容器已创建、注册已完成。</summary>
-        private void Start()
-        {
-            if (fillCatalogOnStart) FillFromCatalogForTest();
-        }
+        #endregion
 
-        // 视图契约（物品读取；其余查询与变更请直连 Container）
+        #region 物品与格子查询
+
+        // 未初始化时返回空结果，全部查询使用同一权威容器。
 
         /// <summary>按 ItemId 升序复制当前物品（确定性顺序，先清空目标列表），供界面、存档与日志复用；容器未创建时清空并返回。</summary>
         public void CopyItems(List<RuntimeItem> destination)
@@ -115,39 +143,226 @@ namespace RPG4.Backpack.Runtime
             container.FillItemsByItemId(destination);
         }
 
-        // 写入编排（转发共享核心；其余写入请直连 Container）
+        /// <summary>按 ItemId 升序复制物品，顺序与物品下标查询一致。</summary>
+        public void FillItemsByItemId(List<RuntimeItem> destination) => CopyItems(destination);
+
+        public bool IsIndexValid(int index) => Container != null && Container.IsIndexValid(index);
+
+        public bool IsCellIndexValid(int cellIndex) => IsIndexValid(cellIndex);
+
+        public bool IsIndexOccupied(int index) => Container != null && Container.IsIndexOccupied(index);
+
+        public bool IsCellOccupied(int cellIndex) => IsIndexOccupied(cellIndex);
+
+        public int GetUpperLeftIndexAt(int cellIndex) => Container?.GetUpperLeftIndexAt(cellIndex) ?? NoIndex;
+
+        /// <summary>该格物品在当前 ItemId 升序集合中的下标；空格、越界或未初始化返回 NoIndex。</summary>
+        public int GetItemIndexAt(int cellIndex) => Container?.GetItemIndexAt(cellIndex) ?? NoIndex;
+
+        public RuntimeItem GetItemAt(int cellIndex) => Container?.GetItemAt(cellIndex);
+
+        public RuntimeItem GetItemAt(GridCoord coord) => Container?.GetItemAt(coord);
+
+        public bool Contains(RuntimeItem item) => Container != null && Container.Contains(item);
+
+        /// <summary>按引用查询当前物品下标；增删后下标可能变化，持久标识请使用 ItemId。</summary>
+        public int IndexOf(RuntimeItem item) => Container?.IndexOf(item) ?? NoIndex;
+
+        /// <summary>按当前 ItemId 升序集合的下标读取物品；下标无效或未初始化返回 false。</summary>
+        public bool TryGetItem(int itemIndex, out RuntimeItem item)
+        {
+            item = null;
+            return Container != null && Container.TryGetItem(itemIndex, out item);
+        }
+
+        /// <summary>按持久标识读取物品；标识无效、不在背包或未初始化返回 false。</summary>
+        public bool TryGetItem(ItemId itemId, out RuntimeItem item)
+        {
+            item = null;
+            return core != null && core.TryGetItem(itemId, out item);
+        }
+
+        public bool TryGetItemById(ItemId itemId, out RuntimeItem item) => TryGetItem(itemId, out item);
+
+        #endregion
+
+        #region 物品占位查询
+
+        public bool TryGetPlacement(RuntimeItem item, out InventoryPlacement placement)
+        {
+            placement = InventoryPlacement.Invalid;
+            return Container != null && Container.TryGetPlacement(item, out placement);
+        }
+
+        public bool TryGetUpperLeftIndex(RuntimeItem item, out int upperLeftIndex)
+        {
+            upperLeftIndex = NoIndex;
+            return Container != null && Container.TryGetUpperLeftIndex(item, out upperLeftIndex);
+        }
+
+        /// <summary>升序复制物品全部占格下标（先清空 buffer）；物品不在背包或未初始化返回 false。</summary>
+        public bool TryGetCellIndices(RuntimeItem item, List<int> buffer)
+        {
+            if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+
+            InventoryContainer container = Container;
+            if (container != null) return container.TryGetCellIndices(item, buffer);
+
+            buffer.Clear();
+            return false;
+        }
+
+        #endregion
+
+        #region 空间与容量查询
+
+        public static GridCoord GetItemDimensions(RuntimeItem item) => InventoryContainer.GetItemDimensions(item);
+
+        public SpaceQueryResult<RuntimeItem> QuerySpace(int startIndex, GridCoord dimensions) =>
+            Container != null ? Container.QuerySpace(startIndex, dimensions) : SpaceQueryResult<RuntimeItem>.Empty;
+
+        public SpaceQueryResult<RuntimeItem> QuerySpace(int startIndex, RuntimeItem item) =>
+            Container != null ? Container.QuerySpace(startIndex, item) : SpaceQueryResult<RuntimeItem>.Empty;
+
+        /// <summary>查询物品容量；未初始化时返回独立的空结果。</summary>
+        public SlotAvailabilityResult<RuntimeItem> QueryAvailability(RuntimeItem item, int amountOverride = -1) =>
+            Container != null ? Container.QueryAvailability(item, amountOverride) : new SlotAvailabilityResult<RuntimeItem>();
+
+        /// <summary>将容量查询写入调用方复用的结果；未初始化时清空结果。</summary>
+        public void FillAvailability(RuntimeItem item, int amountOverride, SlotAvailabilityResult<RuntimeItem> result)
+        {
+            if (result == null) throw new ArgumentNullException(nameof(result));
+
+            InventoryContainer container = Container;
+            if (container != null) container.FillAvailability(item, amountOverride, result);
+            else result.Clear();
+        }
+
+        #endregion
+
+        #region 物品写入与堆叠拆分
+
+        // 模板创建与拆分由共享核心编排，实例放置与堆叠由同一权威容器提交。
+
+        /// <summary>在指定上左格放置现有物品实例，不做堆叠合并。</summary>
+        public bool TryPlaceItem(RuntimeItem item, int startIndex, out string error)
+        {
+            if (!EnsureContainer(out error)) return false;
+            return Container.TryPlaceItem(item, startIndex, out error);
+        }
+
+        /// <summary>将现有实例整批收进背包，先合并同类堆叠再落空格；失败时不改变状态。</summary>
+        public bool TryAddItem(RuntimeItem item, out int remainder, out string error)
+        {
+            remainder = 0;
+            if (!EnsureContainer(out error)) return false;
+            return Container.TryAddItem(item, out remainder, out error);
+        }
+
+        /// <summary>整批接收外部物品，可供拾取使用；先合并已有同类堆叠再安放余量，失败不改变状态。成功后调用方交出实例并移除对应拾取物；已在任意背包中的物品须走转移入口。</summary>
+        public bool TryReceiveItem(RuntimeItem item, out string error)
+        {
+            if (!EnsureContainer(out error)) return false;
+            return Container.TryReceiveItem(item, out error);
+        }
+
+        /// <summary>将本背包中的物品整件或整堆转入目标背包；目标按通用接收规则合并与落格，失败时双方不变。</summary>
+        public bool TryTransferItem(RuntimeItem item, BackpackInventory destination, out string error)
+        {
+            if (!EnsureContainer(out error)) return false;
+            if (destination == null)
+            {
+                error = "目标背包为空。";
+                BackpackLog.Warn(LogModule.Inventory, error);
+                return false;
+            }
+
+            if (!destination.EnsureContainer(out error)) return false;
+            return Container.TryTransferItem(item, destination.Container, out error);
+        }
+
+        /// <summary>将本背包中的物品整件或整堆转入目标首个合法空白矩形，不合并已有堆叠；失败双方不变。UI 成功后可另行设置本地展示位置。</summary>
+        public bool TryTransferItemToEmptySpace(RuntimeItem item, BackpackInventory destination, out string error)
+        {
+            if (!EnsureContainer(out error)) return false;
+            if (destination == null)
+            {
+                error = "目标背包为空。";
+                BackpackLog.Warn(LogModule.Inventory, error);
+                return false;
+            }
+
+            if (!destination.EnsureContainer(out error)) return false;
+            return Container.TryTransferItemToEmptySpace(item, destination.Container, out error);
+        }
 
         /// <summary>按模板创建一件新物品并整批收进背包：分配标识、克隆模板并执行首次随机化、先并同类堆叠再落首个空白区域；任一步失败整体失败且不留下半成品。</summary>
         public bool TryAddItem(ItemManifest manifest, int stackCount, out RuntimeItem item, out string error)
         {
             item = null;
-            if (core == null)
-            {
-                error = "背包尚未初始化（组件未执行 Awake）。";
-                BackpackLog.Warn(LogModule.Inventory, error);
-                return false;
-            }
+            if (!EnsureContainer(out error)) return false;
 
             return core.TryAddItem(manifest, stackCount, out item, out error);
+        }
+
+        /// <summary>按实例移除物品并释放其全部占格。</summary>
+        public bool TryRemoveItem(RuntimeItem item, out string error)
+        {
+            if (!EnsureContainer(out error)) return false;
+            return Container.TryRemoveItem(item, out error);
+        }
+
+        /// <summary>按持久标识定位后移除物品。</summary>
+        public bool TryRemoveItem(ItemId itemId, out string error)
+        {
+            if (!EnsureContainer(out error)) return false;
+            return core.TryRemoveItem(itemId, out error);
+        }
+
+        /// <summary>把未入包的来源实例并入背包内目标堆叠，返回实际并入数量。</summary>
+        public bool TryStackItem(RuntimeItem target, RuntimeItem incoming, out int movedCount, out string error)
+        {
+            movedCount = 0;
+            if (!EnsureContainer(out error)) return false;
+            return Container.TryStackItem(target, incoming, out movedCount, out error);
+        }
+
+        /// <summary>按实例修改背包内物品的堆叠数。</summary>
+        public bool TrySetStackCount(RuntimeItem item, int stackCount, out string error)
+        {
+            if (!EnsureContainer(out error)) return false;
+            return Container.TrySetStackCount(item, stackCount, out error);
+        }
+
+        /// <summary>按持久标识定位后修改堆叠数。</summary>
+        public bool TrySetStackCount(ItemId itemId, int stackCount, out string error)
+        {
+            if (!EnsureContainer(out error)) return false;
+            return core.TrySetStackCount(itemId, stackCount, out error);
         }
 
         /// <summary>从指定堆叠拆出独立实例（核心自任权威）：核对归属、可堆叠与数量边界、按类型目录取模板、抓源快照并以新标识恢复一份数值原样继承的新实例、落到行优先扫描出的首个空白区域；任一步失败整体零变更。</summary>
         public bool TrySplitStack(RuntimeItem source, int splitCount, out ItemId newItemId, out string error)
         {
             newItemId = ItemId.None;
-            if (core == null)
-            {
-                error = "背包尚未初始化（组件未执行 Awake）。";
-                BackpackLog.Warn(LogModule.Inventory, error);
-                return false;
-            }
+            if (!EnsureContainer(out error)) return false;
 
             return core.TrySplitStack(source, splitCount, out newItemId, out error);
         }
 
-        // 内部实现
+        /// <summary>按持久标识定位后拆分堆叠，新实例继承源数值并获得新标识。</summary>
+        public bool TrySplitStack(ItemId itemId, int splitCount, out ItemId newItemId, out string error)
+        {
+            newItemId = ItemId.None;
+            if (!EnsureContainer(out error)) return false;
+            return core.TrySplitStack(itemId, splitCount, out newItemId, out error);
+        }
 
-        /// <summary>容器可用性守卫（仅测试辅助使用；正式写入的守卫在核心内）。</summary>
+        #endregion
+
+        #region 内部辅助
+
+        /// <summary>背包写入共用的初始化守卫。</summary>
         private bool EnsureContainer(out string error)
         {
             if (Container != null)
@@ -161,120 +376,7 @@ namespace RPG4.Backpack.Runtime
             return false;
         }
 
-        // 测试辅助（行为与正式调用完全一致，只是把「目录 → 背包」的取证过程自动化；Inspector 组件右键菜单触发）
+        #endregion
 
-        /// <summary>从目录把每个模板各填入一份测试堆叠（可堆叠物品取 TestStackCount 件、受单堆上限约束）；逐件失败只记警告并继续，用于界面与拆分的冒烟。</summary>
-        [ContextMenu("测试/从目录填入物品")]
-        private void FillFromCatalogForTest()
-        {
-            if (!EnsureContainer(out string error)) return;
-
-            if (catalog == null)
-            {
-                BackpackLog.Warn(LogModule.Inventory, $"{name} 未配置物品目录（catalog），无法填入测试物品。");
-                return;
-            }
-
-            IReadOnlyList<ItemManifest> manifests = catalog.Manifests;
-            if (manifests.Count == 0)
-            {
-                BackpackLog.Warn(LogModule.Inventory, $"{name} 的物品目录为空，没有可填入的模板。");
-                return;
-            }
-
-            int added = 0;
-            for (int i = 0; i < manifests.Count; i++)
-            {
-                ItemManifest manifest = manifests[i];
-                if (manifest == null) continue;
-
-                StackableFragment stackable = manifest.GetFragment<StackableFragment>();
-                int stackCount = stackable == null ? 1 : Mathf.Min(TestStackCount, stackable.MaxStackSize);
-
-                if (TryAddItem(manifest, stackCount, out _, out error)) added++;
-                else BackpackLog.Warn(LogModule.Inventory, $"{name} 测试填入 {manifest.ItemType} 失败：{error}");
-            }
-
-            BackpackLog.Info(
-                LogModule.Inventory,
-                $"{name} 测试填入完成：成功 {added}/{manifests.Count}，当前物品 {Container.ItemCount} 件。");
-        }
-
-        /// <summary>移除背包内全部物品（测试用）；逐件失败只记警告并继续。</summary>
-        [ContextMenu("测试/清空背包")]
-        private void ClearForTest()
-        {
-            if (!EnsureContainer(out string error)) return;
-
-            testItems.Clear();
-            Container.FillItemsByItemId(testItems);
-
-            int removed = 0;
-            for (int i = 0; i < testItems.Count; i++)
-            {
-                RuntimeItem item = testItems[i];
-                if (Container.TryRemoveItem(item, out error)) removed++;
-                else BackpackLog.Warn(LogModule.Inventory, $"{name} 测试清空 {item.ItemType} 失败：{error}");
-            }
-
-            BackpackLog.Info(
-                LogModule.Inventory,
-                $"{name} 测试清空完成：移除 {removed} 件，剩余 {Container.ItemCount} 件。");
-        }
-
-        /// <summary>把首个堆叠数 ≥ 2 的物品拆出一半（测试用），用于核对「目录取模板 + 快照恢复 + 空白落位」全链路。</summary>
-        [ContextMenu("测试/拆分首个可堆叠物品")]
-        private void SplitFirstStackableForTest()
-        {
-            if (!EnsureContainer(out string error)) return;
-
-            testItems.Clear();
-            Container.FillItemsByItemId(testItems);
-
-            for (int i = 0; i < testItems.Count; i++)
-            {
-                RuntimeItem item = testItems[i];
-                if (!item.IsStackable || item.StackCount < 2) continue;
-
-                int splitCount = item.StackCount / 2;
-                if (TrySplitStack(item, splitCount, out ItemId newItemId, out error))
-                {
-                    BackpackLog.Info(
-                        LogModule.Inventory,
-                        $"{name} 测试拆分成功：{item.ItemType} 拆出 {splitCount} 件（新标识 {newItemId}），源剩 {item.StackCount} 件。");
-                }
-                else
-                {
-                    BackpackLog.Warn(LogModule.Inventory, $"{name} 测试拆分失败：{error}");
-                }
-
-                return;
-            }
-
-            BackpackLog.Warn(LogModule.Inventory, $"{name} 没有可拆分的堆叠（需堆叠数 ≥ 2），请先填入测试物品。");
-        }
-
-        /// <summary>按 ItemId 升序把当前背包内容打印到控制台（测试用）。</summary>
-        [ContextMenu("测试/打印背包内容")]
-        private void LogContentsForTest()
-        {
-            if (!EnsureContainer(out string error)) return;
-
-            testItems.Clear();
-            Container.FillItemsByItemId(testItems);
-
-            BackpackLog.Info(
-                LogModule.Inventory,
-                $"{name} 背包内容：物品 {Container.ItemCount} 件 / 槽位 {Container.SlotCount} 格。");
-
-            for (int i = 0; i < testItems.Count; i++)
-            {
-                RuntimeItem item = testItems[i];
-                Container.TryGetPlacement(item, out InventoryPlacement placement);
-                BackpackLog.Info(
-                    LogModule.Inventory,
-                    $"  [{i}] {item.ItemType} × {item.StackCount}，占格 {placement.Dimensions}，上左索引 {placement.UpperLeftIndex}。");
-            }
-        }
     }
 }
