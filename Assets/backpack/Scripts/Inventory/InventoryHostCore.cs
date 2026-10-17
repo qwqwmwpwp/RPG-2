@@ -282,6 +282,36 @@ namespace RPG4.Backpack.Inventory
             else BackpackLog.Warn(logModule, $"{ownerName} 不是权威端且未接线拆分堆叠转发，意图已丢弃。");
         }
 
+        /// <summary>将指定数量拆成新实例并直接放入同一或另一容器的空位；源容器无需额外空位，数值继承源快照，确认失败时恢复双方状态。</summary>
+        public bool TrySplitStackToEmptySpace(RuntimeItem source, int splitCount, InventoryContainer destination, out ItemId newItemId, out string error, CommitConfirmHandler destinationConfirm = null)
+        {
+            newItemId = ItemId.None;
+            if (!ResolveAuthority()) return Reject("拆分堆叠", "只有权威端可以拆分库存物品。", out error);
+            if (!EnsureContainer(out error)) return false;
+            if (source == null || !Container.Contains(source)) return Reject("拆分堆叠", "物品不在来源容器中。", out error);
+            if (destination == null) return Reject("拆分堆叠", "目标容器为空。", out error);
+            if (!source.IsStackable) return Reject("拆分堆叠", $"{source.ItemType} 不可堆叠，无法拆分。", out error);
+            if (splitCount < 1 || splitCount >= source.StackCount)
+                return Reject("拆分堆叠", $"拆分数量 {splitCount} 必须在 1..{source.StackCount - 1} 范围内。", out error);
+            if (Catalog == null || !Catalog.TryGet(source.ItemType, out ItemManifest manifest) || manifest == null)
+                return Reject("拆分堆叠", $"类型目录中缺少 {source.ItemType} 的模板，无法创建拆分出的新实例。", out error);
+            if (!RuntimeItemSnapshotCodec.TryCapture(source, out RuntimeItemSnapshot snapshot, out string captureError))
+                return Reject("拆分堆叠", captureError, out error);
+
+            ItemIdGenerator generator = ResolveGenerator();
+            if (generator == null) return Reject("拆分堆叠", "物品标识生成器不可用。", out error);
+            ItemId issued;
+            do issued = generator.Next();
+            while (Container.TryGetItemById(issued, out _) || destination.TryGetItemById(issued, out _));
+
+            if (!TryBuildSplitInstance(manifest, snapshot, issued, splitCount, out RuntimeItem created, out string buildError))
+                return Reject("拆分堆叠", buildError, out error);
+            if (!Container.TrySplitStackToEmptySpace(source, created, destination, CommitConfirm, destinationConfirm, out error)) return false;
+
+            newItemId = issued;
+            return true;
+        }
+
         // 内部实现
 
         /// <summary>自己是否为主端。</summary>

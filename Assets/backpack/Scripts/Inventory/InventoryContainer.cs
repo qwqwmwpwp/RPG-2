@@ -558,6 +558,58 @@ namespace RPG4.Backpack.Inventory
         public bool TryTransferItemToEmptySpace(RuntimeItem item, InventoryContainer destination, out string error)
             => TryTransferItemCore(item, destination, false, nameof(TryTransferItemToEmptySpace), out error);
 
+        /// <summary>从来源堆叠扣除 splitItem 的数量，并将调用方恢复出的新实例放入目标首个空白矩形；支持同容器，不合堆。新实例必须具有未在双方出现的有效标识，失败时数量、占格与版本均不变。</summary>
+        public bool TrySplitStackToEmptySpace(RuntimeItem source, RuntimeItem splitItem, InventoryContainer destination, out string error)
+            => TrySplitStackToEmptySpace(source, splitItem, destination, null, null, out error);
+
+        /// <summary>宿主拆分使用的确认入口：在广播前确认双方投影，确认失败静默还原并补偿投影；确认钩子只负责投影，不得重入修改容器，同容器只执行来源确认。</summary>
+        internal bool TrySplitStackToEmptySpace(RuntimeItem source, RuntimeItem splitItem, InventoryContainer destination, CommitConfirmHandler confirm, CommitConfirmHandler destinationConfirm, out string error)
+        {
+            const string operation = nameof(TrySplitStackToEmptySpace);
+            if (destination == null) return Reject(out error, operation, "目标容器为空。");
+            if (source == null || !placements.ContainsKey(source)) return Reject(out error, operation, "物品不在来源容器中。");
+            if (!source.IsStackable) return Reject(out error, operation, "来源物品不可堆叠。");
+            if (!CanInsert(splitItem, operation, out error)) return false;
+            if (!splitItem.ItemId.IsValid) return Reject(out error, operation, "拆分实例缺少有效标识。");
+            if (!splitItem.IsStackable || !source.ItemType.MatchesTagExact(splitItem.ItemType))
+                return Reject(out error, operation, "拆分实例与来源堆叠类型不一致。");
+            if (splitItem.StackCount < 1 || splitItem.StackCount >= source.StackCount)
+                return Reject(out error, operation, "拆分数量必须大于零且小于来源堆叠数。");
+            if (!destination.TryPlanReceiveItem(splitItem, operation, out ReceivePlan plan, out error, false)) return false;
+
+            bool sameContainer = ReferenceEquals(this, destination);
+            int previousStack = source.StackCount;
+            source.SetStackCount(previousStack - splitItem.StackCount);
+            destination.CommitReceiveItem(splitItem, plan);
+            itemIndicesDirty = true;
+            destination.itemIndicesDirty = true;
+
+            ItemId requiredItem = sameContainer ? splitItem.ItemId : source.ItemId;
+            bool confirmed = confirm == null || confirm(requiredItem, out error);
+            if (confirmed && !sameContainer && destinationConfirm != null)
+                confirmed = destinationConfirm(splitItem.ItemId, out error);
+            if (!confirmed)
+            {
+                destination.ClearCells(destination.placements[splitItem]);
+                destination.placements.Remove(splitItem);
+                source.SetStackCount(previousStack);
+                itemIndicesDirty = true;
+                destination.itemIndicesDirty = true;
+                confirm?.Invoke(ItemId.None, out _);
+                if (!sameContainer) destinationConfirm?.Invoke(ItemId.None, out _);
+                return false;
+            }
+
+            AdvanceRevision();
+            if (!sameContainer) destination.AdvanceRevision();
+            NotifyChanged();
+            if (!sameContainer) destination.NotifyChanged();
+            NotifyStackChanged(source);
+            destination.NotifyReceivedItem(splitItem, plan);
+            error = null;
+            return true;
+        }
+
         private bool TryTransferItemCore(RuntimeItem item, InventoryContainer destination, bool mergeStacks, string operation, out string error)
         {
             if (destination == null) return Reject(out error, operation, "目标容器为空。");

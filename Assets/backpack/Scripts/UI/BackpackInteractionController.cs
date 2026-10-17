@@ -5,11 +5,12 @@ using RPG4.Backpack.Core;
 using RPG4.Backpack.Inventory;
 using RPG4.Backpack.Items;
 using RPG4.Backpack.Network;
+using RPG4.Backpack.Runtime;
 using RPG4.Input;
 
 namespace RPG4.Backpack.UI
 {
-    /// <summary>交互控制层（M6 + 右键拆分）：每帧按鼠标屏幕坐标预计算网格参数与悬停反馈（视图不参与 uGUI 射线，悬停与落点共用同一几何口径），点击时只读本帧缓存；拾起 / 放置 / 交换只改本地位置表不同步，堆叠 / 拆分等数据变更一律提交服务端意图并等待复制结果，不做乐观本地更新。右键拆分只在本机记「已取数量」与源物品显示数量（库存数据不动），左键落下时才提交「源 −N / 目标 +N」或一次拆分，取消即原样还原。</summary>
+    /// <summary>交互控制层（M6 + 右键拆分）：每帧按鼠标屏幕坐标预计算网格参数与悬停反馈（视图不参与 uGUI 射线，悬停与落点共用同一几何口径），点击时只读本帧缓存；单栏位置变化只改本地位置表，堆叠 / 拆分提交服务端意图并等待复制结果；双栏空位转移与拆分直接调用权威宿主 / 容器原子提交。右键拆分只在本机记「已取数量」与源物品显示数量（库存数据不动），左键落下时才提交，取消即原样还原。</summary>
     [DisallowMultipleComponent]
     [DefaultExecutionOrder(100)] // 晚于主控，保证读到的是同一帧已刷新完成的排布结果。
     public sealed class BackpackInteractionController : MonoBehaviour
@@ -37,6 +38,7 @@ namespace RPG4.Backpack.UI
         private BackpackContainerUI secondView;
         private BackpackContainerUI carryView;
         private InventoryContainer carryContainer;
+        private int carrySourceStack; // 双栏拿起时的源数量快照；部分携带数量与它独立。
         private BackpackContainerUI previewView;
         private BackpackContainerUI hoveredView;
 
@@ -104,7 +106,7 @@ namespace RPG4.Backpack.UI
             secondView = null;
         }
 
-        /// <summary>绑定双栏整件转移模式；切换鼠标所在栏不会重新绑定或清除携带来源。</summary>
+        /// <summary>绑定双栏转移与拆分模式；切换鼠标所在栏不会重新绑定或清除携带来源。</summary>
         public void BindContainers(BackpackContainerUI left, BackpackContainerUI right)
         {
             if (containerMode && ReferenceEquals(firstView, left) && ReferenceEquals(secondView, right)) return;
@@ -184,7 +186,7 @@ namespace RPG4.Backpack.UI
             HandleInput(screenPoint);
         }
 
-        /// <summary>双栏第一阶段：只处理整件拿起、空位放下与取消，不提交拆分、合并或互换。</summary>
+        /// <summary>双栏共用携带会话：右键逐个取出，左键整件转移或拆分到空位，不合并或互换。</summary>
         private void UpdateContainerSession()
         {
             ResolveInputActions();
@@ -196,13 +198,15 @@ namespace RPG4.Backpack.UI
 
             if (carried != null && (carryView == null
                 || !ReferenceEquals(carryView.Container, carryContainer)
-                || !carryContainer.Contains(carried) || carried.StackCount != carriedCount))
+                || !carryContainer.Contains(carried) || carried.StackCount != carrySourceStack))
             {
                 ResetSession();
+                return;
             }
 
             // 取消优先于同帧点击，避免关闭/取消意图仍提交库存转移。
-            if ((cancelAction != null && cancelAction.WasPressedThisFrame()) || pendingSecondaryClicks > 0)
+            if ((cancelAction != null && cancelAction.WasPressedThisFrame())
+                || (pendingSecondaryClicks > 0 && carried != null && !carriedPartial))
             {
                 ResetSession();
                 return;
@@ -223,6 +227,29 @@ namespace RPG4.Backpack.UI
                 target.SetItemHovered(owner, true);
             }
 
+            bool secondaryHandled = pendingSecondaryClicks > 0;
+            if (secondaryHandled)
+            {
+                pendingSecondaryClicks--;
+                pendingPrimaryClicks = 0; // 同帧右键优先，不把旧左键延后变成一次落下。
+                if (carried == null)
+                {
+                    if (target != null) BeginContainerCarry(target, targetTile.TileIndex, partial: true);
+                }
+                else if (carriedPartial && ReferenceEquals(target, carryView) && hoveredItemId == carried.ItemId)
+                {
+                    carriedCount++;
+                    if (carriedCount == carrySourceStack)
+                    {
+                        carriedPartial = false;
+                        carryView.ClearStackDisplay(carried.ItemId);
+                        carryView.SetHiddenItem(carried.ItemId);
+                    }
+                    else carryView.SetStackDisplay(carried.ItemId, carrySourceStack - carriedCount);
+                    carryView.Redraw();
+                }
+            }
+
             int index = target != null
                 ? target.GetUpperLeftIndex(targetTile.TileIndex, carriedGrabOffset)
                 : SpaceQueryResult<RuntimeItem>.NoIndex;
@@ -230,16 +257,18 @@ namespace RPG4.Backpack.UI
                 ? target.QuerySpace(index, carried != null ? carriedDimensions : GridCoord.One)
                 : SpaceQueryResult<RuntimeItem>.Empty;
             bool canPlace = carried != null && target != null && index >= 0
-                && (region.HasSpace || (ReferenceEquals(target, carryView) && ReferenceEquals(region.ValidItem, carried)))
-                && (ReferenceEquals(target.Container, carryContainer) || HasEmptyRegion(target.Container, carriedDimensions));
+                && (region.HasSpace || (!carriedPartial && ReferenceEquals(target, carryView) && ReferenceEquals(region.ValidItem, carried)))
+                && ((!carriedPartial && ReferenceEquals(target.Container, carryContainer)) || HasEmptyRegion(target.Container, carriedDimensions));
+            bool canReturn = carriedPartial && ReferenceEquals(target, carryView) && hoveredItemId == carried.ItemId;
 
             if (carried != null)
             {
                 if (target != null && index >= 0)
-                    target.ApplyRegionHighlight(index, carriedDimensions, canPlace ? BackpackHoverState.Available : BackpackHoverState.Blocked);
-                ShowContainerPreview(target ?? carryView, screenPoint, canPlace ? index : SpaceQueryResult<RuntimeItem>.NoIndex);
+                    target.ApplyRegionHighlight(index, carriedDimensions, canPlace || canReturn ? BackpackHoverState.Available : BackpackHoverState.Blocked);
+                ShowContainerPreview(target ?? carryView, screenPoint, canPlace || canReturn ? index : SpaceQueryResult<RuntimeItem>.NoIndex);
             }
 
+            if (secondaryHandled) return;
             if (pendingPrimaryClicks <= 0) return;
             pendingPrimaryClicks--; // 一帧只执行一次点击；放下前使用当前帧重新计算的区域。
             if (target == null) return;
@@ -249,10 +278,26 @@ namespace RPG4.Backpack.UI
                 return;
             }
 
+            if (canReturn)
+            {
+                ResetSession();
+                return;
+            }
+
             if (!canPlace) return;
             GridCoord position = GridUtils.GetPositionFromIndex(index, target.Columns);
             RuntimeItem item = carried;
-            if (!ReferenceEquals(target.Container, carryContainer)
+            ItemId placedId = item.ItemId;
+            if (carriedPartial)
+            {
+                if (!TrySplitContainerCarry(target, out placedId, out string splitError))
+                {
+                    target.ApplyRegionHighlight(index, carriedDimensions, BackpackHoverState.Blocked);
+                    BackpackLog.Debug(LogModule.Interaction, "拆分被拒绝：" + splitError);
+                    return;
+                }
+            }
+            else if (!ReferenceEquals(target.Container, carryContainer)
                 && !carryContainer.TryTransferItemToEmptySpace(item, target.Container, out string error))
             {
                 target.ApplyRegionHighlight(index, carriedDimensions, BackpackHoverState.Blocked);
@@ -260,9 +305,23 @@ namespace RPG4.Backpack.UI
                 return;
             }
 
-            target.SetManualPosition(item.ItemId, new Vector2Int(position.X, position.Y));
+            target.SetManualPosition(placedId, new Vector2Int(position.X, position.Y));
             ResetSession();
             target.Redraw();
+        }
+
+        private bool TrySplitContainerCarry(BackpackContainerUI destination, out ItemId newItemId, out string error)
+        {
+            CommitConfirmHandler destinationConfirm = null;
+            if (!ReferenceEquals(destination.Container, carryContainer) && destination.Inventory is BackpackNetworkInventory targetNetwork)
+                destinationConfirm = targetNetwork.ConfirmSplitProjection;
+            if (carryView.Inventory is BackpackInventory local)
+                return local.TrySplitStackToEmptySpace(carried, carriedCount, destination.Container, out newItemId, out error, destinationConfirm);
+            if (carryView.Inventory is BackpackNetworkInventory network)
+                return network.TrySplitStackToEmptySpace(carried, carriedCount, destination.Container, out newItemId, out error, destinationConfirm);
+            newItemId = ItemId.None;
+            error = "来源不支持权威拆分。";
+            return false;
         }
 
         private static bool IsContainerViewReady(BackpackContainerUI view) =>
@@ -293,21 +352,25 @@ namespace RPG4.Backpack.UI
             return canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
         }
 
-        private void BeginContainerCarry(BackpackContainerUI source, int clickedIndex)
+        private void BeginContainerCarry(BackpackContainerUI source, int clickedIndex, bool partial = false)
         {
             if (!source.TryGetCellOwner(clickedIndex, out ItemId id, out _)
                 || !source.TryGetItem(id, out RuntimeItem item)
                 || !source.Container.Contains(item)
                 || !source.TryGetPlacement(id, out GridDisplayPlacement placement)) return;
 
+            if (partial && (!item.IsStackable || item.StackCount <= 1)) return;
             carryView = source;
             carryContainer = source.Container;
+            carrySourceStack = item.StackCount;
             carried = item;
-            carriedCount = item.StackCount;
+            carriedCount = partial ? 1 : item.StackCount;
+            carriedPartial = partial;
             carriedDimensions = InventoryContainer.GetItemDimensions(item);
             GridCoord clicked = GridUtils.GetPositionFromIndex(clickedIndex, source.Columns);
             carriedGrabOffset = new Vector2Int(clicked.X - placement.Position.x, clicked.Y - placement.Position.y);
-            source.SetHiddenItem(id);
+            if (partial) source.SetStackDisplay(id, item.StackCount - carriedCount);
+            else source.SetHiddenItem(id);
             source.Redraw();
         }
 
@@ -343,6 +406,7 @@ namespace RPG4.Backpack.UI
             if (previewView != null) previewView.HideCarriedPreview();
             if (carryView != null)
             {
+                if (carried != null) carryView.ClearStackDisplay(carried.ItemId);
                 carryView.ClearHiddenItem();
                 if (IsInventoryAlive(carryView.Inventory)) carryView.Redraw();
                 else carryView.UnbindInventory();
@@ -350,6 +414,8 @@ namespace RPG4.Backpack.UI
 
             carried = null;
             carriedCount = 0;
+            carriedPartial = false;
+            carrySourceStack = 0;
             carriedDimensions = GridCoord.One;
             carriedGrabOffset = Vector2Int.zero;
             carryView = null;

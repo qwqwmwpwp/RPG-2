@@ -10,7 +10,7 @@ using RPG4.Input;
 
 namespace RPG4.Backpack.UI
 {
-    /// <summary>箱子双栏窗口：左栏绑定玩家、右栏绑定指定箱子；两个显示组件共用整件转移会话，窗口统一管理输入与光标。</summary>
+    /// <summary>箱子双栏窗口：左栏绑定玩家、右栏绑定指定箱子；两个显示组件共用转移与拆分会话，窗口统一管理输入与光标。</summary>
     [DisallowMultipleComponent]
     [RequireComponent(typeof(RectTransform), typeof(CanvasGroup))]
     [DefaultExecutionOrder(10)]

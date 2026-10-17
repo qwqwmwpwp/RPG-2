@@ -323,6 +323,43 @@ namespace RPG4.Backpack.Network
             return core.TrySplitStack(itemId, splitCount, out newItemId, out error);
         }
 
+        /// <summary>权威端拆出指定数量并直接放入同一或另一容器的空位；来源投影由核心确认，目标若为其它网络库存，调用方传入其 ConfirmSplitProjection。</summary>
+        public bool TrySplitStackToEmptySpace(RuntimeItem source, int splitCount, InventoryContainer destination, out ItemId newItemId, out string error, CommitConfirmHandler destinationConfirm = null)
+        {
+            newItemId = ItemId.None;
+            if (!IsServerInventory)
+            {
+                error = "只有服务端可以拆分库存物品。";
+                BackpackLog.Warn(LogModule.Network, error);
+                return false;
+            }
+
+            return core.TrySplitStackToEmptySpace(source, splitCount, destination, out newItemId, out error, destinationConfirm);
+        }
+
+        /// <summary>拆分事务的目标确认：先验证新实例能按本宿主目录恢复，再同步投影；None 用于事务回滚后的补偿，始终刷新，不按版本短路。</summary>
+        public bool ConfirmSplitProjection(ItemId requiredItem, out string error)
+        {
+            if (!IsServerInventory)
+            {
+                error = "只有服务端可以确认库存投影。";
+                return false;
+            }
+
+            if (requiredItem.IsValid)
+            {
+                if (!Container.TryGetItemById(requiredItem, out RuntimeItem item))
+                {
+                    error = $"目标库存中不存在拆分物品 {requiredItem}。";
+                    return false;
+                }
+                if (!projection.TryBuildEntry(item, out NetworkInventoryEntry entry, out error)) return false;
+                if (!projection.TryRestoreItem(entry, catalog, out _, out error)) return false;
+            }
+
+            return SyncEntries(out error, requiredItem);
+        }
+
         /// <summary>服务端清空库存（容器与同步列表一起清空）。</summary>
         public bool TryServerClearInventory(out string error)
         {

@@ -358,6 +358,14 @@ namespace RPG4.Backpack.Runtime
             return core.TrySplitStack(itemId, splitCount, out newItemId, out error);
         }
 
+        /// <summary>拆出指定数量并直接放入同一或另一权威容器的空位，失败双方状态不变。</summary>
+        public bool TrySplitStackToEmptySpace(RuntimeItem source, int splitCount, InventoryContainer destination, out ItemId newItemId, out string error, CommitConfirmHandler destinationConfirm = null)
+        {
+            newItemId = ItemId.None;
+            if (!EnsureContainer(out error)) return false;
+            return core.TrySplitStackToEmptySpace(source, splitCount, destination, out newItemId, out error, destinationConfirm);
+        }
+
         #endregion
 
         #region 内部辅助
