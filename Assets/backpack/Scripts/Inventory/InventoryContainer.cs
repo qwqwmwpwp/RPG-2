@@ -12,8 +12,6 @@ namespace RPG4.Backpack.Inventory
 
         public const int MaxSlotCount = 65536; // 槽位总数上限（256 × 256），用于拒绝非正尺寸、整数溢出与不可接受的分配规模。
 
-        public const int MaxCellCount = MaxSlotCount; // 格子总数上限，与槽位口径一致。
-
         private static readonly Comparison<RuntimeItem> ItemIdComparison = static (left, right) => left.ItemId.CompareTo(right.ItemId); // 确定性排序比较器，静态缓存避免每次调用分配委托。
 
         private readonly InventoryPlacement[] cells; // 逐格放置记录，空置为 Invalid。
@@ -58,13 +56,7 @@ namespace RPG4.Backpack.Inventory
 
         public int Columns { get; } // 列数。
 
-        public int Width => Columns; // 背包宽度（列数）。
-
-        public int Height => Rows; // 背包高度（行数）。
-
         public int SlotCount => cells.Length; // 槽位总数（行 × 列）。
-
-        public int CellCount => SlotCount; // 格子总数（宽 × 高）。
 
         /// <summary>已占用的格子数：按权威放置记录的冻结尺寸求和，不维护第二份计数状态。</summary>
         public int OccupiedCellCount
@@ -81,11 +73,9 @@ namespace RPG4.Backpack.Inventory
             }
         }
 
-        public int EmptyCellCount => CellCount - OccupiedCellCount; // 空格数。
+        public int EmptyCellCount => SlotCount - OccupiedCellCount; // 空格数。
 
         public int ItemCount => placements.Count; // 当前容器内的物品数量。
-
-        public int Count => ItemCount; // 物品集合数量。
 
         public IReadOnlyCollection<RuntimeItem> Items => itemsView; // 当前容器内的物品集合（枚举顺序不保证，勿依赖）。
 
@@ -134,12 +124,8 @@ namespace RPG4.Backpack.Inventory
         /// <summary>线性索引是否落在此容器内。</summary>
         public bool IsIndexValid(int index) => index >= 0 && index < cells.Length;
 
-        public bool IsCellIndexValid(int cellIndex) => IsIndexValid(cellIndex); // 格子下标边界查询。
-
         /// <summary>该格是否被物品占用。索引非法时返回 false。</summary>
         public bool IsIndexOccupied(int index) => IsIndexValid(index) && cells[index].IsValid;
-
-        public bool IsCellOccupied(int cellIndex) => IsIndexOccupied(cellIndex); // 格子占用查询。
 
         /// <summary>该格物品在当前 ItemId 升序集合中的下标；空格或格子下标非法返回 NoIndex。</summary>
         public int GetItemIndexAt(int cellIndex) => IndexOf(GetItemAt(cellIndex));
@@ -532,6 +518,69 @@ namespace RPG4.Backpack.Inventory
             return true;
         }
 
+        /// <summary>同一容器内合并或交换堆叠数；双方静默修改，确认成功后才推进版本和广播。</summary>
+        internal bool TryChangeStackPair(RuntimeItem source, RuntimeItem target, int count, bool swap,
+            CommitConfirmHandler confirm, out int movedCount, out string error)
+        {
+            movedCount = 0;
+            const string operation = "堆叠操作";
+            if (source == null || target == null || ReferenceEquals(source, target)
+                || !placements.TryGetValue(source, out InventoryPlacement sourcePlacement) || !Contains(target))
+                return Reject(out error, operation, "来源与目标必须是库存内的不同物品。");
+            if (!source.IsStackable || !target.IsStackable || !source.ItemType.MatchesTagExact(target.ItemType))
+                return Reject(out error, operation, "双方必须是同类型的可堆叠物品。");
+
+            int sourceCount = source.StackCount;
+            int targetCount = target.StackCount;
+            if (swap)
+            {
+                if (sourceCount > target.MaxStackSize || targetCount > source.MaxStackSize)
+                    return Reject(out error, operation, "交换后的数量超过单堆上限。");
+                if (sourceCount == targetCount)
+                {
+                    error = null;
+                    return true;
+                }
+                source.SetStackCount(targetCount);
+                target.SetStackCount(sourceCount);
+            }
+            else
+            {
+                if (count < 1 || count > sourceCount)
+                    return Reject(out error, operation, "合并数量必须大于零且不超过来源数量。");
+                movedCount = Math.Min(count, target.MaxStackSize - targetCount);
+                if (movedCount == 0) return Reject(out error, operation, "目标堆叠已满。");
+                target.SetStackCount(targetCount + movedCount);
+                if (movedCount == sourceCount)
+                {
+                    ClearCells(sourcePlacement);
+                    placements.Remove(source);
+                    itemIndicesDirty = true;
+                }
+                else source.SetStackCount(sourceCount - movedCount);
+            }
+
+            error = null;
+            bool confirmed = confirm == null || confirm(target.ItemId, out error);
+            if (confirmed && Contains(source) && confirm != null) confirmed = confirm(source.ItemId, out error);
+            if (!confirmed)
+            {
+                source.SetStackCount(sourceCount);
+                target.SetStackCount(targetCount);
+                if (!Contains(source)) CommitPlacement(source, sourcePlacement.UpperLeftIndex, sourcePlacement.Dimensions);
+                itemIndicesDirty = true;
+                confirm?.Invoke(ItemId.None, out _);
+                movedCount = 0;
+                return false;
+            }
+
+            BumpRevision();
+            NotifyStackChanged(target);
+            if (Contains(source)) NotifyStackChanged(source);
+            else NotifyItemRemoved(source);
+            return true;
+        }
+
         /// <summary>兼容原有添加入口，接收规则统一委托 TryReceiveItem；仍为整批成功或失败，remainder 保留旧契约恒为 0。</summary>
         public bool TryAddItem(RuntimeItem item, out int remainder, out string error)
         {
@@ -557,6 +606,10 @@ namespace RPG4.Backpack.Inventory
         /// <summary>将来源物品整件或整堆转入目标首个合法空白矩形，不合并任何已有堆叠；保留原实例、标识与数量。UI 展示落点不作为权威容器坐标，失败双方零变更，成功在双方版本与缓存更新后广播通知。</summary>
         public bool TryTransferItemToEmptySpace(RuntimeItem item, InventoryContainer destination, out string error)
             => TryTransferItemCore(item, destination, false, nameof(TryTransferItemToEmptySpace), out error);
+
+        internal bool TryTransferItemToEmptySpace(RuntimeItem item, InventoryContainer destination,
+            CommitConfirmHandler confirm, CommitConfirmHandler destinationConfirm, out string error)
+            => TryTransferItemCore(item, destination, false, nameof(TryTransferItemToEmptySpace), out error, confirm, destinationConfirm);
 
         /// <summary>从来源堆叠扣除 splitItem 的数量，并将调用方恢复出的新实例放入目标首个空白矩形；支持同容器，不合堆。新实例必须具有未在双方出现的有效标识，失败时数量、占格与版本均不变。</summary>
         public bool TrySplitStackToEmptySpace(RuntimeItem source, RuntimeItem splitItem, InventoryContainer destination, out string error)
@@ -610,7 +663,8 @@ namespace RPG4.Backpack.Inventory
             return true;
         }
 
-        private bool TryTransferItemCore(RuntimeItem item, InventoryContainer destination, bool mergeStacks, string operation, out string error)
+        private bool TryTransferItemCore(RuntimeItem item, InventoryContainer destination, bool mergeStacks, string operation,
+            out string error, CommitConfirmHandler confirm = null, CommitConfirmHandler destinationConfirm = null)
         {
             if (destination == null) return Reject(out error, operation, "目标容器为空。");
             if (ReferenceEquals(this, destination)) return Reject(out error, operation, "来源与目标是同一个容器。");
@@ -625,7 +679,35 @@ namespace RPG4.Backpack.Inventory
             // 双方静默提交：此段无回调，不能通过两个公开增删操作拼接转移。
             ClearCells(placement);
             placements.Remove(item);
+            int previousStack = item.StackCount;
             destination.CommitReceiveItem(item, plan);
+            itemIndicesDirty = true;
+            destination.itemIndicesDirty = true;
+
+            bool confirmed = confirm == null || confirm(ItemId.None, out error);
+            if (confirmed && destinationConfirm != null)
+                confirmed = destinationConfirm(plan.PlaceIndex != NoIndex ? item.ItemId : ItemId.None, out error);
+            if (!confirmed)
+            {
+                if (plan.PlaceIndex != NoIndex)
+                {
+                    destination.ClearCells(destination.placements[item]);
+                    destination.placements.Remove(item);
+                }
+                for (int i = 0; i < plan.StackSteps.Length; i++)
+                {
+                    StackStep step = plan.StackSteps[i];
+                    step.Target.SetStackCount(step.Target.StackCount - step.Amount);
+                }
+                item.SetStackCount(previousStack);
+                CommitPlacement(item, placement.UpperLeftIndex, placement.Dimensions);
+                itemIndicesDirty = true;
+                destination.itemIndicesDirty = true;
+                confirm?.Invoke(ItemId.None, out _);
+                destinationConfirm?.Invoke(ItemId.None, out _);
+                return false;
+            }
+
             AdvanceRevision();
             destination.AdvanceRevision();
 

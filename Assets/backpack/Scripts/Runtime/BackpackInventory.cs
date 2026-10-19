@@ -10,7 +10,7 @@ namespace RPG4.Backpack.Runtime
     /// <summary>基础背包组件：组合一份 <see cref="InventoryHostCore"/>，统一暴露物品集合、格子映射、空间查询与写入操作；全部状态和提交逻辑委托同一核心与容器，变更通知经容器的 <c>InvChannels</c> 广播、写入意图经 <c>CmdChannels</c> 命令处理；角色归属由组合组件承担。</summary>
     [DisallowMultipleComponent]
     [AddComponentMenu("RPG4/Backpack Inventory")]
-    public sealed class BackpackInventory : MonoBehaviour, IBackpackView
+    public sealed class BackpackInventory : MonoBehaviour, IBackpackView, IInventoryOperations
     {
         #region 常量
 
@@ -21,8 +21,6 @@ namespace RPG4.Backpack.Runtime
         public const int NoIndex = InventoryContainer.NoIndex; // 空格与无效下标。
 
         public const int MaxSlotCount = InventoryContainer.MaxSlotCount; // 槽位总数上限。
-
-        public const int MaxCellCount = InventoryContainer.MaxCellCount; // 格子总数上限。
 
         #endregion
 
@@ -58,21 +56,13 @@ namespace RPG4.Backpack.Runtime
 
         public int Columns => Container?.Columns ?? 0; // 实际列数；尚未初始化时为 0。
 
-        public int Width => Columns; // 实际背包宽度。
-
-        public int Height => Rows; // 实际背包高度。
-
         public int SlotCount => Container?.SlotCount ?? 0; // 实际槽位总数。
-
-        public int CellCount => SlotCount; // 格子总数。
 
         public int OccupiedCellCount => Container?.OccupiedCellCount ?? 0; // 已占用格子数。
 
         public int EmptyCellCount => Container?.EmptyCellCount ?? 0; // 空格数。
 
         public int ItemCount => Container?.ItemCount ?? 0; // 当前物品数量。
-
-        public int Count => ItemCount; // 物品集合数量。
 
         public IReadOnlyCollection<RuntimeItem> Items => Container?.Items ?? Array.Empty<RuntimeItem>(); // 权威物品集合的只读视图，枚举顺序不保证。
 
@@ -87,6 +77,10 @@ namespace RPG4.Backpack.Runtime
         public int ConfiguredColumns => columns; // 面板配置的列数。
 
         public object EventSource => Container; // 事件管线键：单机形态恒为权威容器实例（订阅通知与发布意图共用）。
+
+        public bool CanSubmitTo(IBackpackView destination) => core != null && core.CanSubmitTo(destination);
+
+        public bool HasEmptySpace(GridCoord dimensions) => core != null && core.HasEmptySpace(dimensions);
 
         /// <summary>物品目录：可在运行时注入（例如场景手搭后再赋值），拆分前必须能按类型取到模板。</summary>
         public ItemManifestCatalog Catalog
@@ -143,16 +137,9 @@ namespace RPG4.Backpack.Runtime
             container.FillItemsByItemId(destination);
         }
 
-        /// <summary>按 ItemId 升序复制物品，顺序与物品下标查询一致。</summary>
-        public void FillItemsByItemId(List<RuntimeItem> destination) => CopyItems(destination);
-
         public bool IsIndexValid(int index) => Container != null && Container.IsIndexValid(index);
 
-        public bool IsCellIndexValid(int cellIndex) => IsIndexValid(cellIndex);
-
         public bool IsIndexOccupied(int index) => Container != null && Container.IsIndexOccupied(index);
-
-        public bool IsCellOccupied(int cellIndex) => IsIndexOccupied(cellIndex);
 
         public int GetUpperLeftIndexAt(int cellIndex) => Container?.GetUpperLeftIndexAt(cellIndex) ?? NoIndex;
 
@@ -181,8 +168,6 @@ namespace RPG4.Backpack.Runtime
             item = null;
             return core != null && core.TryGetItem(itemId, out item);
         }
-
-        public bool TryGetItemById(ItemId itemId, out RuntimeItem item) => TryGetItem(itemId, out item);
 
         #endregion
 
@@ -356,14 +341,6 @@ namespace RPG4.Backpack.Runtime
             newItemId = ItemId.None;
             if (!EnsureContainer(out error)) return false;
             return core.TrySplitStack(itemId, splitCount, out newItemId, out error);
-        }
-
-        /// <summary>拆出指定数量并直接放入同一或另一权威容器的空位，失败双方状态不变。</summary>
-        public bool TrySplitStackToEmptySpace(RuntimeItem source, int splitCount, InventoryContainer destination, out ItemId newItemId, out string error, CommitConfirmHandler destinationConfirm = null)
-        {
-            newItemId = ItemId.None;
-            if (!EnsureContainer(out error)) return false;
-            return core.TrySplitStackToEmptySpace(source, splitCount, destination, out newItemId, out error, destinationConfirm);
         }
 
         #endregion

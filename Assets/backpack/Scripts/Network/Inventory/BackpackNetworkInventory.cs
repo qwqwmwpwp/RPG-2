@@ -1,11 +1,3 @@
-// M3-only 裁剪版（蓝本 e:/github/ZDXT2/Assets/backpack/Scripts/Network/Inventory/BackpackNetworkInventory.cs，877 行）。
-// 已剥离 M4 拾取 12 处：DefaultPickupDistance L20 / pickupDistance 字段 L35-38 / PickupDistance L61 / PickupRejectionCount L63 / LastPickupResult L65 /
-// OnStartServer 重置 L124-125 / RequestPickup L194-204 / CmdRequestPickup L206-216 / CanSendPickupRequest L285-301 / TryServerPickup L355-404 /
-// ClearPickupPrompt L406-410 / RegisterPickupRejection L848-853。
-// M6 拆分链路已回填：RequestSplitStack / CmdRequestSplitStack / TryServerSplitStack（拆分编排与辅助已收进 InventoryHostCore，宿主只做服务端守卫与转发）。
-// 未移植蓝本的 SplitRejectionCount + LastSplitResult 两个纯诊断字段：RPG_4 沿用既有 DesyncCount / LastError 与日志口径，不留无人读的状态。
-// 已剥离 M8 钩子 4 个：ResetConsumeDiagnostics L128 / InitializeDropPipeline L129 / SubscribeCommandChannels L152 / UnsubscribeCommandChannels L100、L163。
-// 后续阶段（M4 / M6 / M7 / M8）按上述行号回填；装备分片 BackpackNetworkInventory.Equipment.cs 与消耗分片 .Consumables.cs 本轮不编入。
 using System;
 using System.Collections.Generic;
 using Mirror;
@@ -16,10 +8,10 @@ using RPG4.Backpack.Items;
 
 namespace RPG4.Backpack.Network
 {
-    /// <summary>玩家级库存网络组件：权威操作与意图分发组合自 <see cref="InventoryHostCore"/>（服务端持权威 <see cref="InventoryContainer"/>，纯客户端无容器、只转发 Command），本组件保留 SyncList 单向投影给所属客户端（数据流为客户端意图 → Command → 服务端复核 → 容器原子修改 → 投影差异 → 客户端只读镜像，不允许反向写回）；只同步标识、类型标签、堆叠数与运行时数值快照，不同步网格位置与 Unity 引用（客户端按类型目录取回模板且不重新随机化数值）；本组件是库存唯一写入口，容器不提供事件，外部改动靠 <see cref="InventoryContainer.Revision"/> 观察。</summary>
+    /// <summary>库存网络宿主：客户端完整意图经 Command 交给权威核心；物品标识、数量与数值快照经 SyncList 单向同步，展示位置保留在本地。</summary>
     [DisallowMultipleComponent]
     [AddComponentMenu("RPG4/Backpack Network Inventory")]
-    public sealed partial class BackpackNetworkInventory : NetworkBehaviour, IBackpackView
+    public sealed partial class BackpackNetworkInventory : NetworkBehaviour, IBackpackView, IInventoryOperations
     {
         public const int DefaultRows = 6; // 权威容器默认行数。
 
@@ -84,6 +76,10 @@ namespace RPG4.Backpack.Network
             }
         }
 
+        public bool CanSubmitTo(IBackpackView destination) => core != null && core.CanSubmitTo(destination);
+
+        public bool HasEmptySpace(GridCoord dimensions) => core != null && core.HasEmptySpace(dimensions);
+
         /// <summary>覆盖本实例的类型目录（须在客户端初始化前调用）；框架不提供全局兜底目录，目录缺失属于配置错误并由诊断信息暴露。</summary>
         public void UseCatalog(ItemManifestCatalog value)
         {
@@ -114,10 +110,8 @@ namespace RPG4.Backpack.Network
             core.Catalog = catalog;
             core.IsAuthority = () => IsServerInventory;
             core.IdGeneratorProvider = ResolveGenerator;
-            core.ForwardSetStackCount = RequestSetStackCount;
-            core.ForwardRemoveItem = RequestRemoveItem;
-            core.ForwardSplitStack = RequestSplitStack;
-            core.CommitConfirm = (ItemId requiredItem, out string confirmError) => SyncEntries(out confirmError, requiredItem);
+            core.ForwardOperation = RequestInventoryOperation;
+            core.CommitConfirm = ConfirmInventoryProjection;
 
             projection.Clear();
             mirror.Clear();
@@ -156,9 +150,7 @@ namespace RPG4.Backpack.Network
             core = new InventoryHostCore(LogModule.Network, name);
             core.Catalog = catalog;
             core.IsAuthority = () => false;
-            core.ForwardSetStackCount = RequestSetStackCount;
-            core.ForwardRemoveItem = RequestRemoveItem;
-            core.ForwardSplitStack = RequestSplitStack;
+            core.ForwardOperation = RequestInventoryOperation;
 
             RebuildMirror();
             core.SubscribeCommands(this);
@@ -177,80 +169,38 @@ namespace RPG4.Backpack.Network
 
         // 客户端意图（Command）：只表达意图，最终状态由服务端复核后决定。
 
-        /// <summary>请求修改堆叠数（客户端入口，主机模式同样走 Command 本地执行）；标识必须是服务端已下发的标识。</summary>
-        public void RequestSetStackCount(ItemId itemId, int stackCount)
+        /// <summary>同库存的一次完整操作只发送一条 Command；跨库存交互由权威宿主直接执行。</summary>
+        private void RequestInventoryOperation(InventoryOperation operation)
         {
-            if (!CanSendRequest("修改堆叠数", itemId)) return;
-            CmdRequestSetStackCount(itemId.Value, stackCount);
-        }
-
-        /// <summary>请求移除物品（客户端入口）。</summary>
-        public void RequestRemoveItem(ItemId itemId)
-        {
-            if (!CanSendRequest("移除物品", itemId)) return;
-            CmdRequestRemoveItem(itemId.Value);
-        }
-
-        /// <summary>请求从某个堆叠中拆出指定数量（客户端入口）；拆分创建新物品因此必须走服务端，新实例由服务端从源物品的快照恢复、数值原样继承不重新掷点，合法数量为 1 .. 源堆叠数 - 1。</summary>
-        public void RequestSplitStack(ItemId itemId, int splitCount)
-        {
-            if (!CanSendRequest("拆分堆叠", itemId)) return;
-            CmdRequestSplitStack(itemId.Value, splitCount);
-        }
-
-        /// <summary>接收堆叠修改请求并转交服务端校验；拒绝原因由共享核心或宿主守卫记录。</summary>
-        [Command(requiresAuthority = true)]
-        private void CmdRequestSetStackCount(ulong itemId, int stackCount)
-        {
-            TryServerSetStackCount(new ItemId(itemId), stackCount, out _);
-        }
-
-        /// <summary>接收移除请求并转交服务端校验；拒绝原因由共享核心或宿主守卫记录。</summary>
-        [Command(requiresAuthority = true)]
-        private void CmdRequestRemoveItem(ulong itemId)
-        {
-            TryServerRemoveItem(new ItemId(itemId), out _);
-        }
-
-        /// <summary>接收拆分请求并转交服务端校验；拒绝原因由共享核心或宿主守卫记录。</summary>
-        [Command(requiresAuthority = true)]
-        private void CmdRequestSplitStack(ulong itemId, int splitCount)
-        {
-            if (!TryServerSplitStack(new ItemId(itemId), splitCount, out ItemId newItemId, out _))
+            if (!isClient || !isOwned || !operation.SourceItemId.IsValid
+                || (operation.Destination != null && !ReferenceEquals(operation.Destination.EventSource, EventSource)))
             {
+                core?.PublishOperationResult(new InventoryOperationResult(operation.RequestId, false,
+                    ItemId.None, 0, "当前客户端不能提交此库存操作。"));
                 return;
             }
-
-            BackpackLog.Info(
-                LogModule.Interaction,
-                $"服务端拆分成功：源 item={itemId}，已拆出 {splitCount} 件（新标识 {newItemId}），当前 {ItemCount} 件。");
+            CmdExecuteInventoryOperation(operation.RequestId, (int)operation.Kind,
+                operation.SourceItemId.Value, operation.TargetItemId.Value, operation.Count);
         }
 
-        /// <summary>命令类请求的本地前置判定：未启动客户端 / 非本人库存 / 标识无效一律不发送。</summary>
-        private bool CanSendRequest(string action, ItemId itemId)
+        [Command(requiresAuthority = true)]
+        private void CmdExecuteInventoryOperation(int requestId, int kind, ulong sourceId, ulong targetId, int count)
         {
-            if (!isClient)
-            {
-                BackpackLog.Warn(LogModule.Network, $"未启动客户端，忽略{action}请求：item={itemId}。");
-                return false;
-            }
-
-            if (!isOwned)
-            {
-                BackpackLog.Warn(LogModule.Network, $"非本人库存，拒绝{action}请求：item={itemId}。");
-                return false;
-            }
-
-            if (!itemId.IsValid)
-            {
-                BackpackLog.Warn(LogModule.Network, $"{action}请求的物品标识无效（None）。");
-                return false;
-            }
-
-            return true;
+            InventoryOperationResult result = IsServerInventory
+                ? core.ExecuteOperation(new InventoryOperation(requestId, (InventoryOperationKind)kind,
+                    new ItemId(sourceId), new ItemId(targetId), count))
+                : new InventoryOperationResult(requestId, false, ItemId.None, 0, "服务端库存尚未就绪。");
+            TargetInventoryOperationCompleted(connectionToClient, result.RequestId, result.Success,
+                result.ResultItemId.Value, result.MovedCount, result.Error, result.SourceStackCount, result.ResultStackCount);
         }
 
-        // 意图命令的订阅与分发已收进 InventoryHostCore（权威端直接执行、纯客户端转发为 Command），宿主只提供 Request* 与 TryServer* 两端。
+        [TargetRpc]
+        private void TargetInventoryOperationCompleted(NetworkConnectionToClient target, int requestId,
+            bool success, ulong resultItemId, int movedCount, string error, int sourceStackCount, int resultStackCount)
+        {
+            core?.PublishOperationResult(new InventoryOperationResult(requestId, success,
+                new ItemId(resultItemId), movedCount, error, sourceStackCount, resultStackCount));
+        }
 
         // 服务端权威修改：复核通过才改容器，改完立即投影。
 
@@ -323,22 +273,8 @@ namespace RPG4.Backpack.Network
             return core.TrySplitStack(itemId, splitCount, out newItemId, out error);
         }
 
-        /// <summary>权威端拆出指定数量并直接放入同一或另一容器的空位；来源投影由核心确认，目标若为其它网络库存，调用方传入其 ConfirmSplitProjection。</summary>
-        public bool TrySplitStackToEmptySpace(RuntimeItem source, int splitCount, InventoryContainer destination, out ItemId newItemId, out string error, CommitConfirmHandler destinationConfirm = null)
-        {
-            newItemId = ItemId.None;
-            if (!IsServerInventory)
-            {
-                error = "只有服务端可以拆分库存物品。";
-                BackpackLog.Warn(LogModule.Network, error);
-                return false;
-            }
-
-            return core.TrySplitStackToEmptySpace(source, splitCount, destination, out newItemId, out error, destinationConfirm);
-        }
-
-        /// <summary>拆分事务的目标确认：先验证新实例能按本宿主目录恢复，再同步投影；None 用于事务回滚后的补偿，始终刷新，不按版本短路。</summary>
-        public bool ConfirmSplitProjection(ItemId requiredItem, out string error)
+        /// <summary>先验证提交物品能按本宿主目录恢复，再同步投影；None 用于回滚后的补偿。</summary>
+        private bool ConfirmInventoryProjection(ItemId requiredItem, out string error)
         {
             if (!IsServerInventory)
             {
@@ -350,7 +286,7 @@ namespace RPG4.Backpack.Network
             {
                 if (!Container.TryGetItemById(requiredItem, out RuntimeItem item))
                 {
-                    error = $"目标库存中不存在拆分物品 {requiredItem}。";
+                    error = $"库存中不存在待确认物品 {requiredItem}。";
                     return false;
                 }
                 if (!projection.TryBuildEntry(item, out NetworkInventoryEntry entry, out error)) return false;

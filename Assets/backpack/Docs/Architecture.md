@@ -119,12 +119,12 @@ ItemFragment
 
 - 查询：`FillItemsByItemId` / `TryGetItem` / `IndexOf` / `TryGetItemById` / `TryGetPlacement` / `TryGetCellIndices`。
 - 空间：`QuerySpace`（落点全空 / 单个挡路物品 / 多物品阻塞）、`QueryAvailability` / `FillAvailability`（行优先容量）。
-- 变更：`TryPlaceItem` / `TryRemoveItem` / `TryStackItem` / `TrySetStackCount` / `TryReceiveItem` / `TryTransferItem` / `TryTransferItemToEmptySpace` / `TrySplitStackToEmptySpace`。
+- 变更：`TryPlaceItem` / `TryRemoveItem` / `TryStackItem` / `TrySetStackCount` / `TryChangeStackPair` / `TryReceiveItem` / `TryTransferItem` / `TryTransferItemToEmptySpace` / `TrySplitStackToEmptySpace`。
 - 自检：`TryValidateMapping`。
 
 接收规则：先按行优先合并同类堆叠（类型精确匹配、双方可堆叠、未满），剩余量放入首个合法空白矩形；整批成功或整体失败。
 
-原子性：变更先完整校验 / 规划，再一次性提交。跨容器转移在提交前对目标做完整规划；拆分事务可在提交后调用确认钩子，确认失败则撤销新实例、恢复来源堆叠并补偿确认。
+原子性：变更先完整校验 / 规划，再一次性提交。合堆与数量交换由 `TryChangeStackPair` 同时更新双方；跨容器转移与拆分统一执行双方的确认钩子，确认失败则回滚数据并补偿投影。
 
 ### 4.2 `InventoryHostCore`
 
@@ -132,9 +132,10 @@ ItemFragment
 
 - 创建 / 持有权威容器（纯客户端不创建）。
 - 提供 `Catalog`、`IdGeneratorProvider`、`IsAuthority`。
-- 订阅 `SetStackCount` / `RemoveItem` / `SplitStack` 意图：权威端直接执行，非权威端通过 `Forward*` 转发。
-- 权威操作：`TryAddItem`（分配标识 + 创建 + 接收）、`TrySetStackCount`、`TryRemoveItem`、`TrySplitStack`、`TrySplitStackToEmptySpace`。
-- 提交后调用 `CommitConfirm`；联机时它就是投影同步。确认失败按操作口径回滚：新增 / 设堆叠 / 拆分回滚，移除不回滚。
+- 只订阅 `InventoryOperation` 完整意图：权威端执行 `ExecuteOperation`，非权威端通过 `ForwardOperation` 转发。
+- UI 操作包含合堆、交换数量、拆分和整件转移；核心按来源 / 目标宿主统一校验、提交与确认，不由 UI 拼接设数量、移除等原语。
+- `CommitConfirm` 在联机时负责投影同步；完整操作确认失败回滚。结果包含请求 ID、成功状态、确切物品 ID、数量及错误，通过 `OperationCompleted` 返回。
+- 保留 `TryAddItem`、`TrySetStackCount`、`TryRemoveItem`、`TrySplitStack` 等宿主 API，供库存内部与其他运行逻辑使用。
 
 ### 4.3 `IBackpackView`
 
@@ -146,6 +147,8 @@ void CopyItems(List<RuntimeItem> destination); // 按 ItemId 升序
 ```
 
 `EventSource` 同时用于订阅 `Inv.*` 和发布 `Cmd.*`：单机 / 服务端 / 主机是**容器实例**；纯客户端是**宿主自身**。这是同一套 UI 能适配两种形态的关键。
+
+写入能力单独通过 `IInventoryOperations.CanSubmitTo(destination)` / `HasEmptySpace(dimensions)` 预检；物品读取仍依赖 `IBackpackView`，视图不暴露可变容器。
 
 ---
 
@@ -165,7 +168,8 @@ void CopyItems(List<RuntimeItem> destination); // 按 ItemId 升序
 | `Inv.Item.Added` / `Inv.ItemRemoved` | 物品进入 / 离开容器；当前无订阅者 |
 | `Inv.Stack.Changed` | 堆叠变化（`SlotAvailabilityResult`）；当前无订阅者 |
 | `Inv.Changed` | 粗粒度脏信号；UI 置脏、帧末合并重绘 |
-| `Cmd.Item.SetStackCount` / `Cmd.Item.Remove` / `Cmd.Item.Split` | 已接入的写入意图 |
+| `Cmd.Inventory.Operation` | 完整库存意图（`InventoryOperation`） |
+| `Inv.Operation.Completed` | 对应请求的结果（`InventoryOperationResult`，含确切结果物品 ID） |
 | `Cmd.Item.Drop` / `Cmd.Item.Consume` / `Cmd.EquipSlot.Clicked` | 已定义，无处理者 |
 | `Ui.*` | 已定义；当前点击走 `PushClick` 直接调用，未使用 |
 
@@ -175,14 +179,15 @@ void CopyItems(List<RuntimeItem> destination); // 按 ItemId 升序
 UI → Publish(Cmd.*, source = EventSource)
    → InventoryHostCore
        ├─ 权威端：直接执行
-       └─ 非权威端：Forward* → Request* → [Command] → 服务端
+       └─ 非权威端：ForwardOperation → RequestInventoryOperation → [Command] → 服务端
    → InventoryContainer 校验 / 规划 / 原子提交 → 广播 Inv.*（source = 容器）
    → UI 置脏 → LateUpdate 重绘
+   → OperationCompleted（按请求 ID 匹配结果；纯客户端经 TargetRpc 返回）
 ```
 
 纯客户端没有容器：服务端容器变化 → `SyncList` → 客户端镜像 → `BackpackNetworkInventory.LateUpdate` 代发 `Inv.Changed`（source = 宿主）→ UI 重绘。
 
-例外：双栏转移 / 拆分由交互层直接调用权威容器 / 宿主 API，不经过 `Cmd.*`（见 8.4）。
+单双栏都走同一完整操作入口；双栏转移 / 拆分的目标宿主解析与双方确认由核心处理。
 
 ---
 
@@ -251,7 +256,7 @@ BackpackInteractionController.Bind → 订阅 Inv.Changed
 
 ### 7.4 客户端命令
 
-`CmdRequestSetStackCount` / `CmdRequestRemoveItem` / `CmdRequestSplitStack`，均 `requiresAuthority = true`。发送前检查：客户端已启动、`isOwned`、标识有效。
+同库存操作通过一条 `CmdExecuteInventoryOperation`（`requiresAuthority = true`）提交：携带请求 ID、操作类型、来源 / 目标物品 ID 与数量。发送前检查客户端已启动、`isOwned`、标识有效；服务端完成校验与提交后，通过 `TargetInventoryOperationCompleted` 返回对应结果。
 
 拆分由服务端创建新实例：取模板 → 抓源快照 → 新标识恢复（数值继承）→ 找空白区域 → 扣减来源并放置 → 投影。
 
@@ -259,7 +264,6 @@ BackpackInteractionController.Bind → 订阅 Inv.Changed
 
 - 位置不同步；本地拖动仅本机可见。
 - 纯客户端无容器，双栏转移 / 拆分不可用。
-- 双栏“整件转移”直接调用容器 API，不经过 `CommitConfirm`；主机 / 服务端形态需要额外 `SyncNow` 补齐投影。
 - 当前网络组件为裁剪版：不含拾取；装备 / 消耗网络分片未编入。
 - 客户端目录必须与服务端模板一致（数值节点数量 / 顺序一致）。
 
@@ -272,10 +276,10 @@ BackpackInteractionController.Bind → 订阅 Inv.Changed
 | 组件 | 职责 |
 |---|---|
 | `BackpackGridUI` | 单栏窗口兼容壳：解析本地玩家、开关、输入、光标、CanvasGroup 显隐 |
-| `BackpackContainerUI` | 可复用网格显示：格子、物品框、溢出提示、携带预览、本地显示状态 |
+| `BackpackContainerUI` | 可复用网格显示：格子、物品框、溢出提示、本地显示状态与坐标换算 |
 | `InventoryGridLayout` | 纯本地排布：`ItemId` 排序 → 显式位置 → 上次位置 → 行优先寻位 |
 | `BackpackItemUI` | 物品框：图标、数量、悬停色、透明度 |
-| `BackpackInteractionController` | 单栏 / 双栏交互：拾取、放下、堆叠、交换、右键拆分 |
+| `BackpackInteractionController` | 单双栏共用 `CarrySession`：拾取、放下、堆叠、交换、右键拆分；独占一个携带预览 |
 | `ChestBackpackUI` | 双栏窗口：玩家 + 箱子，共用携带会话与光标层 |
 
 ### 8.2 绑定与重绘
@@ -302,12 +306,12 @@ Inv.Changed → dataDirty
 
 | 状态 | 用途 |
 |---|---|
-| `manualPositions` | 物品本地落点；拖动 / 交换 / 拆分认领后写入 |
+| `manualPositions` | 物品本地落点；拖动 / 交换 / 操作结果到达后写入 |
 | `stackDisplayOverrides` | 右键拆分时源物品显示“总数 − 已取” |
 | `HiddenItemId` | 携带期间隐藏但仍占格 |
 | `HoveredItemId` | 悬停高亮 |
 
-**权威占格 ≠ 显示位置**：容器放置记录用于容量 / 转移 / 拆分校验；UI 用本地排布显示。单栏拖动只改本地位置，所以“界面看起来放得下”不一定等于服务端一定接受，失败会通过命令拒绝、拆分认领超时或显示覆盖超时体现。
+**权威占格 ≠ 显示位置**：容器放置记录用于容量 / 转移 / 拆分校验；UI 用本地排布显示。单栏拖动只改本地位置，所以“界面看起来放得下”不一定等于服务端一定接受；容量预检用于落点反馈，最终以权威操作结果为准。
 
 ### 8.4 交互
 
@@ -317,22 +321,24 @@ Inv.Changed → dataDirty
 |---|---|---|
 | 左键点物品 | 拾起，本地隐藏 | 否 |
 | 左键点空位 | 写本地位置 | 否 |
-| 左键点同类可堆叠 | 合堆 / 部分填充 / 必要时移除 | 是（Cmd） |
+| 左键点同类可堆叠 | 一次 `MergeStack` 完成合堆、部分填充及来源移除 | 是（完整操作） |
 | 左键点异类 / 不可堆叠 | 本地交换位置 | 否 |
-| 左键点同类已满 | 交换堆叠数；双方都满则退化为本地交换位置 | 交换堆叠数为 Cmd |
+| 左键点同类已满 | 一次 `SwapStackCounts` 交换数量；双方都满则退化为本地交换位置 | 交换数量为完整操作 |
 | 右键可堆叠物品 | 部分携带，每次再取 1 个 | 否 |
-| 部分携带落空位 | `SplitStack`，回传后认领新标识并写本地位置 | 是（Cmd） |
-| 部分携带落同类 | 合堆 / 必要时移除 | 是（Cmd） |
+| 部分携带落空位 | `SplitStack`，按结果返回的确切物品 ID 写本地位置 | 是（完整操作） |
+| 部分携带落同类 | `MergeStack` 合堆 / 必要时移除 | 是（完整操作） |
 | 整件携带右键 / ESC | 取消携带 | 否 |
 
-部分携带的拆分认领超时 0.5s；提交后显示覆盖最多保留 1s，超时还原库存真值。
+单栏绑定一个视图，双栏绑定两个视图；两者共用拾取、部分携带、落点判定、提交与取消流程。一次会话只有一个预览物，跨栏时调整其尺寸和位置。
+
+提交后按请求 ID 等待显式结果，并等待来源与结果数量同步，最长 5s；拆分 / 转移再按确切结果物品 ID 写入本地落点。失败、超时或取消会恢复实际库存显示；超时不撤销已经提交的权威操作。
 
 双栏：
 
 - 右键从目标堆叠取 1 个；继续右键源物品再取 1 个。
-- 左键：空位放下；部分携带 → 拆分到目标空位；跨栏整件 → `TryTransferItemToEmptySpace`（不合堆）。
-- 需要两侧都能拿到 `InventoryContainer`，因此仅单机 / 服务端 / 主机可用。
-- 目标栏为网络库存时，拆分传入 `ConfirmSplitProjection`；整件转移不经过 `CommitConfirm`，需 `SyncNow` 补齐投影。
+- 左键：空位放下；部分携带提交 `SplitStack`；跨栏整件提交 `TransferItem`，保留只放空位、不跨栏合堆 / 交换的规则。
+- 通过 `IInventoryOperations` 预检写入与权威空位；跨库存仍需要权威宿主，因此纯客户端暂不支持玩家与箱子之间的转移 / 拆分。
+- 核心负责目标宿主解析、容量校验与双方投影确认；UI 只消费结果，不直接调用容器、确认钩子或 `SyncNow`。
 
 ### 8.5 悬停、输入与窗口
 
@@ -367,7 +373,7 @@ Inv.Changed → dataDirty
   - `player`：`BackpackInventory`（6×8）+ `CharacterBackpack`。
   - `Cube (1)`：`BackpackInventory`（6×8）+ `ChestInventory`。
   - `UI`：`BackpackGridUI` + `BackpackInteractionController`。
-  - `UI_ChestBackpack` 预制体实例：`ChestBackpackUI` + 两个 `BackpackContainerUI` + 交互组件，默认打开。
+  - `和箱子交互ui` 预制体实例：`ChestBackpackUI` + `ChestBackpackUIData` + 两个 `BackpackContainerUI` + 交互组件，默认打开。标题、图层在预制体中创建并接线；格子通过带 `BackpackSlotUI` 的预制体复用，物品通过带 `BackpackItemUI` 的预制体复用。
 - 联机组件当前**未挂到场景**；需要按第 7 节自行接线，客户端与服务端使用同一目录。
 
 ### 10.2 当前未接入
@@ -388,7 +394,7 @@ Inv.Changed → dataDirty
 |---|---|
 | 事件 | `Core/Events/EventBus.cs`、`EventChannels.cs` |
 | 物品 | `Items/Runtime/RuntimeItem.cs`、`Manifest/ItemManifest.cs`、`Runtime/RuntimeItemSnapshotCodec.cs` |
-| 库存 | `Inventory/InventoryContainer.cs`、`InventoryHostCore.cs`、`IBackpackView.cs` |
+| 库存 | `Inventory/InventoryContainer.cs`、`InventoryHostCore.cs`、`InventoryOperation.cs`、`IBackpackView.cs` |
 | 单机 | `Runtime/BackpackInventory.cs`、`CharacterBackpack.cs`、`BackpackRegistry.cs` |
 | 网络 | `Network/Inventory/BackpackNetworkInventory.cs`、`InventoryNetworkProjection.cs` |
 | UI | `UI/BackpackContainerUI.cs`、`BackpackInteractionController.cs`、`ChestBackpackUI.cs` |

@@ -6,6 +6,7 @@ using UnityEngine.UI;
 namespace RPG4.Backpack.UI
 {
     /// <summary>物品框视图：由主控实例化物品预制体而来，只负责把主控算好的像素尺寸、图标、显示数量与悬停态画到预制体上；不做尺寸推导、不改动库存，物品框外观完全由预制体决定。</summary>
+    [RequireComponent(typeof(RectTransform), typeof(CanvasGroup))]
     public class BackpackItemUI : MonoBehaviour
     {
         #region 序列化字段
@@ -16,6 +17,7 @@ namespace RPG4.Backpack.UI
         [SerializeField] private Image iconImage; // 物品图标（无图标时整块隐藏）。
         [SerializeField] private TMP_Text stackText; // 显示数量文本（不大于 1 时不显示）。
         [SerializeField] private float iconPadding; // 图标可用区域相对物品框的内缩量（像素）。
+        [SerializeField] private CanvasGroup group; // 预制体上的整体透明度组件（携带预览用）。
 
         #endregion
 
@@ -25,7 +27,6 @@ namespace RPG4.Backpack.UI
         private Color backgroundColor; // 底图常态色：唤醒时取自预制体，取消悬停时原样还原。
         private Vector2 pixelSize; // 最近一次写入的物品像素尺寸。
         private Sprite icon; // 当前图标。
-        private CanvasGroup group; // 整体透明度（携带预览用，按需创建）。
         private bool warnedIcon; // 图标未接线的警告是否已输出（每实例一条，避免逐帧刷屏）。
         private bool warnedStack; // 数量文本未接线的警告是否已输出。
 
@@ -37,6 +38,7 @@ namespace RPG4.Backpack.UI
         private void Awake()
         {
             rectTransform = GetComponent<RectTransform>();
+            if (group == null) group = GetComponent<CanvasGroup>();
             if (backgroundImage0 != null) backgroundColor = backgroundImage0.color;
             else BackpackLog.Warn(LogModule.UI, "物品框未接线物品背景，悬停将不换色。");
         }
@@ -84,17 +86,10 @@ namespace RPG4.Backpack.UI
             backgroundImage0.color = hovered ? BackpackFeedbackPalette.ItemFrameHovered : backgroundColor;
         }
 
-        /// <summary>写入整体透明度（携带预览用）；按需挂 CanvasGroup 并固定为不接收交互与指针事件。</summary>
+        /// <summary>写入预制体上 CanvasGroup 的整体透明度（携带预览用）。</summary>
         public void SetAlpha(float alpha)
         {
-            if (group == null)
-            {
-                if (!TryGetComponent(out group)) group = gameObject.AddComponent<CanvasGroup>();
-                group.interactable = false;
-                group.blocksRaycasts = false;
-            }
-
-            group.alpha = alpha;
+            if (group != null) group.alpha = alpha;
         }
 
         #endregion

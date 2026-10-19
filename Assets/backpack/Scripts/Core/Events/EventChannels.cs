@@ -12,22 +12,20 @@ namespace RPG4.Backpack.Core
         public const string ItemRemoved = "Inv.ItemRemoved"; // 移除物品条目。载荷 (item)；M2 移除路径发送。
 
         public const string Changed = "Inv.Changed"; // 粗粒度「数据已变」脏信号，无载荷；表现层收到后置脏标记、帧末合并刷新一次，不区分具体变了什么。
+
+        public const string OperationCompleted = "Inv.Operation.Completed"; // 完整库存操作结果。载荷 (InventoryOperationResult)，source 为来源库存的事件键。
     }
 
     /// <summary>UI → 数据层意图命令：UI 只声明意图，不关心谁处理；命令不保证成功，结果一律由 <see cref="InvChannels"/> 的状态广播回传。</summary>
     public static class CmdChannels
     {
+        public const string InventoryOperation = "Cmd.Inventory.Operation"; // 完整库存意图。载荷 (InventoryOperation)。
+
         public const string DropItem = "Cmd.Item.Drop"; // 丢弃物品。载荷 (item, int stackCount)。
 
         public const string ConsumeItem = "Cmd.Item.Consume"; // 消耗物品。载荷 (item, int stackCount)，数量范围 1 .. 当前堆叠数。
 
         public const string EquipSlotClicked = "Cmd.EquipSlot.Clicked"; // 装备槽点击。载荷 (itemToEquip, itemToUnequip)。
-
-        public const string SetStackCount = "Cmd.Item.SetStackCount"; // 设置堆叠数。载荷 (itemId, int stackCount)，范围 1 .. 单堆上限。
-
-        public const string RemoveItem = "Cmd.Item.Remove"; // 移除物品。载荷 (itemId)。
-
-        public const string SplitStack = "Cmd.Item.Split"; // 拆分堆叠。载荷 (itemId, int splitCount)，范围 1 .. 堆叠数 - 1。
     }
 
     /// <summary>UI 内部事件：发送方以自身组件实例作 source key，取代父子控件互相持引用；不经过数据层。</summary>

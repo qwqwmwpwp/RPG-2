@@ -8,7 +8,7 @@ namespace RPG4.Backpack.Inventory
     /// <summary>权威提交后的确认回调（联机 = 投影同步）：返回 false 表示外部表示未能跟随本次提交，核心按各操作的回滚口径撤销变更，并再执行一次补偿确认（requiredItem 传 None）。</summary>
     public delegate bool CommitConfirmHandler(ItemId requiredItem, out string error);
 
-    /// <summary>背包宿主共享核心：单机与联机宿主各持一份，容器创建、意图命令分发、物品编排（新增 / 设置堆叠 / 移除 / 拆分）只在本类实现；权威端（自己为主端）直接复核执行，非权威端把意图交给宿主注入的 Forward* 委托转发，结果一律由容器广播回传。</summary>
+    /// <summary>共享库存核心：权威端执行完整意图并返回结果，纯客户端通过宿主转发；容器持有真实数据。</summary>
     public sealed class InventoryHostCore
     {
         public const int DefaultRows = 6; // 尺寸非法时的回退行数（与联机组件默认一致）。
@@ -18,10 +18,10 @@ namespace RPG4.Backpack.Inventory
         private readonly string ownerName; // 日志里的宿主名（组件名或兜底名）。
 
         private static readonly ItemIdGenerator SharedGenerator = new ItemIdGenerator(); // 未注入提供者时共用的标识生成器，避免单机玩家与箱子分别从 1 发号而在转移后重号。
+        private static readonly Dictionary<object, InventoryHostCore> CommandHosts = new Dictionary<object, InventoryHostCore>();
 
-        private EventSubscription setStackCountSubscription; // 意图订阅句柄：设置堆叠数。
-        private EventSubscription removeItemSubscription; // 意图订阅句柄：移除物品。
-        private EventSubscription splitStackSubscription; // 意图订阅句柄：拆分堆叠。
+        private object commandSource;
+        private EventSubscription operationSubscription;
 
         /// <summary>非权威端（纯客户端）构造：不创建容器，只承载意图订阅与转发。</summary>
         public InventoryHostCore(LogModule logModule, string ownerName)
@@ -56,17 +56,13 @@ namespace RPG4.Backpack.Inventory
 
         public Func<bool> IsAuthority { get; set; } // 自己是否为主端；留空恒为 true。
 
-        public Action<ItemId, int> ForwardSetStackCount { get; set; } // 非权威端转发：设置堆叠数。
-
-        public Action<ItemId> ForwardRemoveItem { get; set; } // 非权威端转发：移除物品。
-
-        public Action<ItemId, int> ForwardSplitStack { get; set; } // 非权威端转发：拆分堆叠。
+        public Action<InventoryOperation> ForwardOperation { get; set; }
 
         public CommitConfirmHandler CommitConfirm { get; set; } // 权威提交后的确认钩子；留空表示无需确认。
 
-        // 意图命令（source = 宿主的事件管线键；只记警告不抛异常，结果由 InvChannels 广播回传）
+        // 命令及完成结果共用来源宿主的事件键。
 
-        /// <summary>以指定管线键（权威端 = 容器，纯客户端 = 宿主自身）订阅三个写入意图频道；重复调用先退订再订阅，避免条目累积。</summary>
+        /// <summary>以宿主的事件键订阅写入意图；重复调用先退订。</summary>
         public void SubscribeCommands(object sourceKey)
         {
             UnsubscribeCommands();
@@ -77,26 +73,117 @@ namespace RPG4.Backpack.Inventory
                 return;
             }
 
-            setStackCountSubscription = EventBus.Global.Subscribe<ItemId, int>(
-                CmdChannels.SetStackCount, sourceKey, this, OnSetStackCountCommand);
-            removeItemSubscription = EventBus.Global.Subscribe<ItemId>(
-                CmdChannels.RemoveItem, sourceKey, this, OnRemoveItemCommand);
-            splitStackSubscription = EventBus.Global.Subscribe<ItemId, int>(
-                CmdChannels.SplitStack, sourceKey, this, OnSplitStackCommand);
+            commandSource = sourceKey;
+            CommandHosts[sourceKey] = this;
+            operationSubscription = EventBus.Global.Subscribe<InventoryOperation>(
+                CmdChannels.InventoryOperation, sourceKey, this, OnOperationCommand);
         }
 
         /// <summary>释放全部意图订阅（幂等）。</summary>
         public void UnsubscribeCommands()
         {
-            setStackCountSubscription.Dispose();
-            removeItemSubscription.Dispose();
-            splitStackSubscription.Dispose();
-            setStackCountSubscription = default;
-            removeItemSubscription = default;
-            splitStackSubscription = default;
+            operationSubscription.Dispose();
+            operationSubscription = default;
+            if (commandSource != null && CommandHosts.TryGetValue(commandSource, out InventoryHostCore owner)
+                && ReferenceEquals(owner, this)) CommandHosts.Remove(commandSource);
+            commandSource = null;
         }
 
         // 权威操作（任一步失败零变更；提交后确认失败按各操作口径回滚）
+
+        public bool CanSubmitTo(IBackpackView destination)
+        {
+            object destinationSource = destination == null ? commandSource : destination.EventSource;
+            if (commandSource == null || destinationSource == null) return false;
+            if (ReferenceEquals(commandSource, destinationSource))
+                return ResolveAuthority() ? Container != null : ForwardOperation != null;
+            return ResolveAuthority() && Container != null
+                && CommandHosts.TryGetValue(destinationSource, out InventoryHostCore target)
+                && target.ResolveAuthority() && target.Container != null;
+        }
+
+        public bool HasEmptySpace(GridCoord dimensions) => Container == null
+            ? ForwardOperation != null
+            : FindFirstFreeRegion(Container, dimensions) != InventoryContainer.NoIndex;
+
+        /// <summary>服务端或本地宿主执行整次操作；结果只在完整提交或回滚后返回。</summary>
+        public InventoryOperationResult ExecuteOperation(InventoryOperation operation)
+        {
+            ItemId resultId = ItemId.None;
+            int moved = 0;
+            string error;
+            bool success = false;
+            if (!ResolveAuthority() || !EnsureContainer(out error))
+                return new InventoryOperationResult(operation.RequestId, false, resultId, 0, "库存不是可写的权威来源。");
+            if (!TryResolveItem(operation.SourceItemId, out RuntimeItem source, out error))
+                return new InventoryOperationResult(operation.RequestId, false, resultId, 0, error);
+
+            InventoryHostCore destination = this;
+            object destinationSource = operation.Destination?.EventSource;
+            if (operation.Destination != null && destinationSource == null)
+                return new InventoryOperationResult(operation.RequestId, false, resultId, 0, "目标库存尚未就绪。");
+            if (destinationSource != null && !ReferenceEquals(destinationSource, commandSource))
+            {
+                if (!CanSubmitTo(operation.Destination)
+                    || !CommandHosts.TryGetValue(destinationSource, out destination))
+                    return new InventoryOperationResult(operation.RequestId, false, resultId, 0, "目标库存当前不支持此操作。");
+            }
+
+            switch (operation.Kind)
+            {
+                case InventoryOperationKind.MergeStack:
+                case InventoryOperationKind.SwapStackCounts:
+                    if (!ReferenceEquals(destination, this))
+                    {
+                        error = "跨库存暂不支持合堆或交换数量。";
+                        break;
+                    }
+                    if (!TryResolveItem(operation.TargetItemId, out RuntimeItem target, out error)) break;
+                    success = Container.TryChangeStackPair(source, target, operation.Count,
+                        operation.Kind == InventoryOperationKind.SwapStackCounts, CommitConfirm, out moved, out error);
+                    resultId = target.ItemId;
+                    break;
+                case InventoryOperationKind.SplitStack:
+                    success = TrySplitStackToEmptySpace(source, operation.Count, destination.Container,
+                        out resultId, out error, destination.CommitConfirm);
+                    moved = operation.Count;
+                    break;
+                case InventoryOperationKind.TransferItem:
+                    success = Container.TryTransferItemToEmptySpace(source, destination.Container,
+                        CommitConfirm, destination.CommitConfirm, out error);
+                    resultId = source.ItemId;
+                    moved = source.StackCount;
+                    break;
+                default:
+                    error = "未知的库存操作。";
+                    break;
+            }
+
+            int sourceStack = success ? (Container.Contains(source) ? source.StackCount : 0) : -1;
+            int resultStack = success && destination.Container.TryGetItemById(resultId, out RuntimeItem resultItem)
+                ? resultItem.StackCount : -1;
+            return new InventoryOperationResult(operation.RequestId, success,
+                success ? resultId : ItemId.None, success ? moved : 0, success ? null : error, sourceStack, resultStack);
+        }
+
+        public void PublishOperationResult(InventoryOperationResult result)
+        {
+            if (commandSource != null)
+                EventBus.Global.Publish(InvChannels.OperationCompleted, commandSource, result);
+        }
+
+        private void OnOperationCommand(InventoryOperation operation)
+        {
+            if (ResolveAuthority())
+            {
+                PublishOperationResult(ExecuteOperation(operation));
+                return;
+            }
+            if (CanSubmitTo(operation.Destination) && ForwardOperation != null)
+                ForwardOperation(operation);
+            else PublishOperationResult(new InventoryOperationResult(operation.RequestId, false,
+                ItemId.None, 0, "目标库存当前不支持此操作。"));
+        }
 
         /// <summary>按标识查找权威容器内物品（线性扫描，仅低频操作调用）；无容器或标识无效返回 false。</summary>
         public bool TryGetItem(ItemId itemId, out RuntimeItem item)
@@ -180,106 +267,7 @@ namespace RPG4.Backpack.Inventory
         {
             newItemId = ItemId.None;
             if (!TryResolveItem(itemId, out RuntimeItem source, out error)) return false;
-
-            if (!source.IsStackable)
-            {
-                return Reject("拆分堆叠", $"{source.ItemType} 不可堆叠，无法拆分。", out error);
-            }
-
-            if (splitCount < 1 || splitCount >= source.StackCount)
-            {
-                return Reject(
-                    "拆分堆叠",
-                    $"拆分数量 {splitCount} 必须在 1..{source.StackCount - 1} 范围内（上限为堆叠数减一）。",
-                    out error);
-            }
-
-            if (Catalog == null || !Catalog.TryGet(source.ItemType, out ItemManifest manifest) || manifest == null)
-            {
-                return Reject("拆分堆叠", $"类型目录中缺少 {source.ItemType} 的模板，无法创建拆分出的新实例。", out error);
-            }
-
-            if (!RuntimeItemSnapshotCodec.TryCapture(source, out RuntimeItemSnapshot snapshot, out string captureError))
-            {
-                return Reject("拆分堆叠", captureError, out error);
-            }
-
-            ItemIdGenerator generator = ResolveGenerator();
-            if (generator == null) return Reject("拆分堆叠", "物品标识生成器不可用。", out error);
-
-            ItemId issued = generator.Next();
-            if (!TryBuildSplitInstance(manifest, snapshot, issued, splitCount, out RuntimeItem created, out string buildError))
-            {
-                return Reject("拆分堆叠", buildError, out error);
-            }
-
-            GridCoord dimensions = InventoryContainer.GetItemDimensions(created);
-            int placeIndex = FindFirstFreeRegion(Container, dimensions);
-            if (placeIndex == InventoryContainer.NoIndex)
-            {
-                return Reject("拆分堆叠", $"没有能容纳 {dimensions} 拆分结果的空白区域。", out error);
-            }
-
-            int previousStack = source.StackCount;
-            source.SetStackCount(previousStack - splitCount);
-            if (!Container.TryPlaceItem(created, placeIndex, out error))
-            {
-                source.SetStackCount(previousStack);
-                return false;
-            }
-
-            if (CommitConfirm != null && !CommitConfirm(issued, out error))
-            {
-                Container.TryRemoveItem(created, out _);
-                source.SetStackCount(previousStack);
-                CommitConfirm(ItemId.None, out _);
-                return false;
-            }
-
-            newItemId = issued;
-            error = null;
-            return true;
-        }
-
-        // 意图分发（自己为主端直接执行，否则交给宿主转发）
-
-        /// <summary>处理「设置堆叠数」意图。</summary>
-        private void OnSetStackCountCommand(ItemId itemId, int stackCount)
-        {
-            if (ResolveAuthority())
-            {
-                TrySetStackCount(itemId, stackCount, out _);
-                return;
-            }
-
-            if (ForwardSetStackCount != null) ForwardSetStackCount(itemId, stackCount);
-            else BackpackLog.Warn(logModule, $"{ownerName} 不是权威端且未接线设置堆叠数转发，意图已丢弃。");
-        }
-
-        /// <summary>处理「移除物品」意图。</summary>
-        private void OnRemoveItemCommand(ItemId itemId)
-        {
-            if (ResolveAuthority())
-            {
-                TryRemoveItem(itemId, out _);
-                return;
-            }
-
-            if (ForwardRemoveItem != null) ForwardRemoveItem(itemId);
-            else BackpackLog.Warn(logModule, $"{ownerName} 不是权威端且未接线移除物品转发，意图已丢弃。");
-        }
-
-        /// <summary>处理「拆分堆叠」意图。</summary>
-        private void OnSplitStackCommand(ItemId itemId, int splitCount)
-        {
-            if (ResolveAuthority())
-            {
-                TrySplitStack(itemId, splitCount, out _, out _);
-                return;
-            }
-
-            if (ForwardSplitStack != null) ForwardSplitStack(itemId, splitCount);
-            else BackpackLog.Warn(logModule, $"{ownerName} 不是权威端且未接线拆分堆叠转发，意图已丢弃。");
+            return TrySplitStackToEmptySpace(source, splitCount, Container, out newItemId, out error);
         }
 
         /// <summary>将指定数量拆成新实例并直接放入同一或另一容器的空位；源容器无需额外空位，数值继承源快照，确认失败时恢复双方状态。</summary>

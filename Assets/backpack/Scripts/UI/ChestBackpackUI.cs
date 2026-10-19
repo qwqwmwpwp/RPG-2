@@ -1,5 +1,4 @@
 using Mirror;
-using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using RPG4.Backpack.Core;
@@ -12,14 +11,11 @@ namespace RPG4.Backpack.UI
 {
     /// <summary>箱子双栏窗口：左栏绑定玩家、右栏绑定指定箱子；两个显示组件共用转移与拆分会话，窗口统一管理输入与光标。</summary>
     [DisallowMultipleComponent]
-    [RequireComponent(typeof(RectTransform), typeof(CanvasGroup))]
+    [RequireComponent(typeof(RectTransform), typeof(CanvasGroup), typeof(ChestBackpackUIData))]
     [DefaultExecutionOrder(10)]
     public sealed class ChestBackpackUI : MonoBehaviour
     {
-        [Header("左右显示组件")]
-        [SerializeField] private BackpackContainerUI playerView;
-        [SerializeField] private BackpackContainerUI chestView;
-        [SerializeField] private BackpackInteractionController interaction;
+        [SerializeField] private ChestBackpackUIData ui;
 
         [Header("背包来源")]
         [Tooltip("留空时寻找本地玩家背包；指定后始终使用这个玩家背包。")]
@@ -34,25 +30,20 @@ namespace RPG4.Backpack.UI
         [SerializeField] private Vector2 padding = new Vector2(24f, 24f);
         [SerializeField, Min(0f)] private float paneSpacing = 48f;
         [SerializeField, Min(0f)] private float titleHeight = 40f;
-        [SerializeField] private TMP_FontAsset uiFont;
-        [SerializeField] private TMP_Text playerTitle;
-        [SerializeField] private TMP_Text chestTitle;
 
         [Header("标题文本")]
-        [Tooltip("默认字体只包含拉丁字符；使用中文标题时请同时指定包含中文字形的字体。")]
+        [Tooltip("使用中文标题时，请在标题的 TextMeshProUGUI 组件上指定包含中文字形的字体。")]
         [SerializeField] private string playerTitleText = "Player Backpack";
         [SerializeField] private string chestTitleText = "Chest Backpack";
         [SerializeField] private string waitingPlayerTitleText = "Player Backpack (waiting)";
         [SerializeField] private string unboundChestTitleText = "Chest Backpack (unbound)";
 
         private RectTransform windowRect;
-        private CanvasGroup windowGroup;
         private Vector2 lastPlayerSize;
         private Vector2 lastChestSize;
         private bool layoutDirty = true;
         private bool configurationWarned;
         private float nextBindingCheck;
-        private RectTransform sharedCursorLayer;
         private InputManager inputHost;
         private InputAction primaryAction;
         private InputAction secondaryAction;
@@ -69,12 +60,10 @@ namespace RPG4.Backpack.UI
         public static bool BlocksPlayerBackpackInput => ActiveWindow != null || lastClosedFrame == Time.frameCount;
 
         public bool IsOpen { get; private set; }
-        public BackpackContainerUI PlayerView => playerView;
-        public BackpackContainerUI ChestView => chestView;
-        public IBackpackView PlayerInventory => playerView != null ? playerView.Inventory : null;
-        public IBackpackView ChestInventory => chestView != null ? chestView.Inventory : null;
-        public InventoryContainer PlayerContainer => playerView != null ? playerView.Container : null;
-        public InventoryContainer ChestContainer => chestView != null ? chestView.Container : null;
+        public BackpackContainerUI PlayerView => ui != null ? ui.playerView : null;
+        public BackpackContainerUI ChestView => ui != null ? ui.chestView : null;
+        public IBackpackView PlayerInventory => PlayerView != null ? PlayerView.Inventory : null;
+        public IBackpackView ChestInventory => ChestView != null ? ChestView.Inventory : null;
 
         private void Awake()
         {
@@ -126,7 +115,7 @@ namespace RPG4.Backpack.UI
                 // 先还原旧单栏窗口的快照，再采集箱子窗口的原始状态。
                 foreach (BackpackGridUI window in FindObjectsOfType<BackpackGridUI>()) window.Close();
             }
-            interaction.CancelInteraction();
+            ui.interaction.CancelInteraction();
 
             enabled = true;
             if (!gameObject.activeSelf) gameObject.SetActive(true);
@@ -134,8 +123,8 @@ namespace RPG4.Backpack.UI
             ActiveWindow = this;
             nextBindingCheck = 0f;
             RefreshBindings();
-            interaction.BindContainers(playerView, chestView);
-            interaction.enabled = true;
+            ui.interaction.BindContainers(ui.playerView, ui.chestView);
+            ui.interaction.enabled = true;
             CaptureInput();
             BindInputActions();
             SetVisible(true);
@@ -153,23 +142,23 @@ namespace RPG4.Backpack.UI
         /// <summary>隐藏窗口并释放双方显示订阅；保留格子配置，再次 Open 时重新获取与显示库存。</summary>
         public void Close()
         {
-            if (interaction != null)
+            if (ui != null && ui.interaction != null)
             {
-                interaction.Unbind();
-                interaction.enabled = false;
+                ui.interaction.Unbind();
+                ui.interaction.enabled = false;
             }
             UnbindInputActions();
             IsOpen = false;
-            if (playerView != null)
+            if (ui != null && ui.playerView != null)
             {
-                playerView.UnbindInventory();
-                playerView.SetPresentationVisible(false);
+                ui.playerView.UnbindInventory();
+                ui.playerView.SetPresentationVisible(false);
             }
 
-            if (chestView != null)
+            if (ui != null && ui.chestView != null)
             {
-                chestView.UnbindInventory();
-                chestView.SetPresentationVisible(false);
+                ui.chestView.UnbindInventory();
+                ui.chestView.SetPresentationVisible(false);
             }
 
             SetVisible(false);
@@ -214,12 +203,12 @@ namespace RPG4.Backpack.UI
 
         private void OnPrimaryClick(InputAction.CallbackContext context)
         {
-            if (IsOpen && ActiveWindow == this && context.performed) interaction.PushClick(UiChannels.MouseButton.Left);
+            if (IsOpen && ActiveWindow == this && context.performed) ui.interaction.PushClick(UiChannels.MouseButton.Left);
         }
 
         private void OnSecondaryClick(InputAction.CallbackContext context)
         {
-            if (IsOpen && ActiveWindow == this && context.performed) interaction.PushClick(UiChannels.MouseButton.Right);
+            if (IsOpen && ActiveWindow == this && context.performed) ui.interaction.PushClick(UiChannels.MouseButton.Right);
         }
 
         private void OnCloseAction(InputAction.CallbackContext context)
@@ -270,12 +259,12 @@ namespace RPG4.Backpack.UI
             BackpackInventory chest = defaultChest != null ? defaultChest.Inventory : null;
             if (chest != null && !chest.IsInitialized) chest = null;
 
-            playerView.BindInventory(player);
-            chestView.BindInventory(chest);
-            playerView.SetPresentationVisible(true);
-            chestView.SetPresentationVisible(true);
-            playerTitle.text = player != null ? playerTitleText : waitingPlayerTitleText;
-            chestTitle.text = chest != null ? chestTitleText : unboundChestTitleText;
+            ui.playerView.BindInventory(player);
+            ui.chestView.BindInventory(chest);
+            ui.playerView.SetPresentationVisible(true);
+            ui.chestView.SetPresentationVisible(true);
+            ui.playerTitle.text = player != null ? playerTitleText : waitingPlayerTitleText;
+            ui.chestTitle.text = chest != null ? chestTitleText : unboundChestTitleText;
             layoutDirty = true;
         }
 
@@ -304,59 +293,31 @@ namespace RPG4.Backpack.UI
         private bool EnsureInitialized()
         {
             if (windowRect == null) windowRect = GetComponent<RectTransform>();
-            if (windowGroup == null && !TryGetComponent(out windowGroup)) windowGroup = gameObject.AddComponent<CanvasGroup>();
-
-            if (playerView == null || chestView == null || ReferenceEquals(playerView, chestView))
+            if (ui == null) ui = GetComponent<ChestBackpackUIData>();
+            if (ui == null || ui.windowGroup == null || ui.playerView == null || ui.chestView == null
+                || ui.playerView == ui.chestView || ui.interaction == null
+                || ui.playerTitle == null || ui.chestTitle == null || ui.cursorLayer == null
+                || ui.playerView.cursorLayer != ui.cursorLayer || ui.chestView.cursorLayer != ui.cursorLayer)
             {
                 if (!configurationWarned)
                 {
                     configurationWarned = true;
-                    BackpackLog.Warn(LogModule.UI, "箱子窗口需要两个不同的容器显示组件，分别接到玩家栏与箱子栏。");
+                    BackpackLog.Warn(LogModule.UI, "请在预制体的 ChestBackpackUIData 中接线窗口、两个不同的容器、交互组件、标题和共用携带预览层。");
                 }
-
                 return false;
             }
 
             configurationWarned = false;
-            if (interaction == null) interaction = GetComponent<BackpackInteractionController>();
-            if (interaction == null) interaction = gameObject.AddComponent<BackpackInteractionController>();
-            if (!IsOpen) interaction.enabled = false;
-            if (sharedCursorLayer == null)
-            {
-                sharedCursorLayer = new GameObject("SharedCursorLayer", typeof(RectTransform)).GetComponent<RectTransform>();
-                sharedCursorLayer.gameObject.layer = gameObject.layer;
-                sharedCursorLayer.SetParent(windowRect, false);
-            }
-            playerView.cursorLayer = sharedCursorLayer;
-            chestView.cursorLayer = sharedCursorLayer;
-            playerView.EnsureInitialized();
-            chestView.EnsureInitialized();
-            if (playerTitle == null) playerTitle = CreateTitle("PlayerTitle", playerTitleText);
-            if (chestTitle == null) chestTitle = CreateTitle("ChestTitle", chestTitleText);
+            if (!ui.playerView.EnsureInitialized() || !ui.chestView.EnsureInitialized()) return false;
+            if (!IsOpen) ui.interaction.enabled = false;
             return true;
-        }
-
-        private TMP_Text CreateTitle(string objectName, string text)
-        {
-            var titleObject = new GameObject(objectName, typeof(RectTransform), typeof(TextMeshProUGUI));
-            titleObject.layer = gameObject.layer;
-            titleObject.transform.SetParent(windowRect, false);
-            TMP_Text title = titleObject.GetComponent<TMP_Text>();
-            if (uiFont != null) title.font = uiFont;
-            title.text = text;
-            title.fontSize = 24f;
-            title.alignment = TextAlignmentOptions.TopLeft;
-            title.enableWordWrapping = false;
-            title.raycastTarget = false;
-            title.color = Color.white;
-            return title;
         }
 
         private void ArrangeViews()
         {
-            if (playerView == null || chestView == null || windowRect == null) return;
-            RectTransform playerRect = playerView.GetComponent<RectTransform>();
-            RectTransform chestRect = chestView.GetComponent<RectTransform>();
+            if (ui.playerView == null || ui.chestView == null || windowRect == null) return;
+            RectTransform playerRect = ui.playerView.GetComponent<RectTransform>();
+            RectTransform chestRect = ui.chestView.GetComponent<RectTransform>();
             Vector2 playerSize = playerRect.sizeDelta;
             Vector2 chestSize = chestRect.sizeDelta;
             if (!layoutDirty && playerSize == lastPlayerSize && chestSize == lastChestSize) return;
@@ -372,14 +333,14 @@ namespace RPG4.Backpack.UI
 
             PlaceRect(playerRect, new Vector2(left, -top - header));
             PlaceRect(chestRect, new Vector2(rightX, -top - header));
-            PlaceRect(playerTitle.rectTransform, new Vector2(left, -top));
-            PlaceRect(chestTitle.rectTransform, new Vector2(rightX, -top));
-            playerTitle.rectTransform.sizeDelta = new Vector2(playerSize.x, header);
-            chestTitle.rectTransform.sizeDelta = new Vector2(chestSize.x, header);
+            PlaceRect(ui.playerTitle.rectTransform, new Vector2(left, -top));
+            PlaceRect(ui.chestTitle.rectTransform, new Vector2(rightX, -top));
+            ui.playerTitle.rectTransform.sizeDelta = new Vector2(playerSize.x, header);
+            ui.chestTitle.rectTransform.sizeDelta = new Vector2(chestSize.x, header);
             windowRect.sizeDelta = new Vector2(
                 left * 2f + playerSize.x + spacing + chestSize.x,
                 top * 2f + header + Mathf.Max(playerSize.y, chestSize.y));
-            sharedCursorLayer.SetAsLastSibling();
+            ui.cursorLayer.SetAsLastSibling();
         }
 
         private static void PlaceRect(RectTransform rect, Vector2 position)
@@ -390,10 +351,10 @@ namespace RPG4.Backpack.UI
 
         private void SetVisible(bool visible)
         {
-            if (windowGroup == null) return;
-            windowGroup.alpha = visible ? 1f : 0f;
-            windowGroup.interactable = false;
-            windowGroup.blocksRaycasts = false;
+            if (ui == null || ui.windowGroup == null) return;
+            ui.windowGroup.alpha = visible ? 1f : 0f;
+            ui.windowGroup.interactable = false;
+            ui.windowGroup.blocksRaycasts = false;
         }
     }
 }

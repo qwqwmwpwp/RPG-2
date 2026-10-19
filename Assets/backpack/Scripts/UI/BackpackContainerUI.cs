@@ -38,7 +38,7 @@ namespace RPG4.Backpack.UI
         public Color slotSwapColor = BackpackFeedbackPalette.SlotSwap;
         public Color warningColor = BackpackFeedbackPalette.Warning;
 
-        [Header("可选携带预览")]
+        [Header("携带预览图层")]
         public RectTransform cursorLayer;
 
         #endregion
@@ -133,9 +133,6 @@ namespace RPG4.Backpack.UI
 
             public IReadOnlyDictionary<ItemId, Vector2Int> ManualPositions => manualPositions; // 供排布读取的本地位置表。
 
-            /// <summary>当前是否还有显示数量覆盖（超时兜底据此判断是否真的需要还原）。</summary>
-            public bool HasStackDisplayOverride => stackDisplayOverrides.Count > 0;
-
             /// <summary>写入物品的本地位置（列、行）；越界位置在排布时会被忽略并自动寻位。</summary>
             public void SetManualPosition(ItemId id, Vector2Int position)
             {
@@ -156,7 +153,7 @@ namespace RPG4.Backpack.UI
             /// <summary>清除某物品的显示数量覆盖；返回是否确有覆盖。</summary>
             public bool ClearStackDisplay(ItemId id) => stackDisplayOverrides.Remove(id);
 
-            /// <summary>清除全部显示数量覆盖（结束携带、会话复位与超时兜底用）。</summary>
+            /// <summary>清除全部显示数量覆盖。</summary>
             public void ClearAllStackDisplays() => stackDisplayOverrides.Clear();
 
             /// <summary>设置携带期间隐藏的物品。</summary>
@@ -261,18 +258,13 @@ namespace RPG4.Backpack.UI
         private object subscribedEventSource;
         private bool dataDirty;
         private bool presentationVisible = true;
-        private ItemWidget carriedPreview;
         private bool itemPrefabWarned;
+        private bool configurationWarned;
 
         public int Columns { get; private set; }
         public int Rows { get; private set; }
-        public int GridColumns => Columns;
-        public int GridRows => Rows;
         public IBackpackView Inventory { get; private set; }
-        /// <summary>单机 / 服务端的实际容器；纯客户端只读镜像没有容器，返回 null。</summary>
-        public InventoryContainer Container => Inventory?.EventSource as InventoryContainer;
         public bool IsReady => Inventory != null && Inventory.EventSource != null && itemLayer != null && Columns > 0 && Rows > 0;
-        public IReadOnlyList<BackpackItemUI> ItemViews => itemUIList;
         private GridMetrics Metrics => new GridMetrics(cellSize, slotSpacing);
 
         #endregion
@@ -322,13 +314,25 @@ namespace RPG4.Backpack.UI
         private void OnDestroy() => ReleaseSubscription();
 
         /// <summary>确保合法占位网格存在；重复调用不会重复生成格子。</summary>
-        public void EnsureInitialized()
+        public bool EnsureInitialized()
         {
             if (rectTransform == null) rectTransform = GetComponent<RectTransform>();
             if (itemUIList == null) itemUIList = new List<BackpackItemUI>();
+            if (slotLayer == null || itemLayer == null || cursorLayer == null || slotPrefab == null
+                || !slotPrefab.TryGetComponent(out BackpackSlotUI slot) || slot.background == null)
+            {
+                if (!configurationWarned)
+                {
+                    configurationWarned = true;
+                    BackpackLog.Warn(LogModule.UI, "请在预制体中接线格子层、物品层、携带预览层，以及带 BackpackSlotUI 和背景引用的格子预制体。");
+                }
+                return false;
+            }
+
+            configurationWarned = false;
             ConfigureOverflowText();
-            if (Columns > 0 && Rows > 0) return;
-            BuildGrid(Mathf.Max(1, initialColumns), Mathf.Max(1, initialRows));
+            if (Columns < 1 || Rows < 1) BuildGrid(Mathf.Max(1, initialColumns), Mathf.Max(1, initialRows));
+            return true;
         }
 
         private void ConfigureOverflowText()
@@ -341,7 +345,7 @@ namespace RPG4.Backpack.UI
         /// <summary>显式绑定展示来源；同源重复调用会补接晚初始化的事件键，并保留本地显示状态。</summary>
         public void BindInventory(IBackpackView source)
         {
-            EnsureInitialized();
+            if (!EnsureInitialized()) return;
             bool sameSource = ReferenceEquals(Inventory, source);
             if (!sameSource)
             {
@@ -364,7 +368,6 @@ namespace RPG4.Backpack.UI
             Inventory = null;
             render.snapshot.Clear();
             local.Clear();
-            HideCarriedPreview();
             ClearHoverHighlight();
             Refresh();
         }
@@ -433,7 +436,7 @@ namespace RPG4.Backpack.UI
             GridMetrics metrics = Metrics;
             rectTransform.sizeDelta = metrics.PaneSize(columns, rows);
 
-            RectTransform parent = slotLayer != null ? slotLayer : rectTransform;
+            RectTransform parent = slotLayer;
             GridLayoutGroup gridLayout = parent.GetComponent<GridLayoutGroup>();
 
             // 布局组件存在时由它统一格子尺寸与间距，避免预制体参数与脚本字段漂移。
@@ -460,14 +463,7 @@ namespace RPG4.Backpack.UI
 
             for (int i = 0; i < columns * rows; i++)
             {
-                GameObject slot;
-                if (slotPrefab != null) slot = Instantiate(slotPrefab, parent);
-                else
-                {
-                    slot = new GameObject("Slot", typeof(RectTransform), typeof(Image));
-                    slot.transform.SetParent(parent, false);
-                    slot.layer = gameObject.layer;
-                }
+                GameObject slot = Instantiate(slotPrefab, parent);
                 slot.name = "Slot_" + i;
                 RectTransform rect = (RectTransform)slot.transform;
 
@@ -479,7 +475,7 @@ namespace RPG4.Backpack.UI
                     rect.anchoredPosition = metrics.ManualSlotPosition(i, columns);
                 }
 
-                Image image = slot.GetComponent<Image>();
+                Image image = slot.GetComponent<BackpackSlotUI>().background;
                 if (image != null)
                 {
                     image.raycastTarget = false;
@@ -493,18 +489,9 @@ namespace RPG4.Backpack.UI
             Refresh();
         }
 
-        /// <summary>物品图层：留空时创建为面板子物体，并标记忽略布局，避免被网格布局当成又一格。</summary>
+        /// <summary>更新预制体中已接线的物品层尺寸。</summary>
         private void EnsureItemLayer()
         {
-            if (itemLayer == null)
-            {
-                itemLayer = new GameObject("ItemLayer", typeof(RectTransform)).GetComponent<RectTransform>();
-                itemLayer.SetParent(rectTransform, false);
-                itemLayer.gameObject.layer = 5;
-            }
-
-            if (!itemLayer.TryGetComponent(out LayoutElement layoutElement)) layoutElement = itemLayer.gameObject.AddComponent<LayoutElement>();
-            layoutElement.ignoreLayout = true;
             itemLayer.anchorMin = itemLayer.anchorMax = itemLayer.pivot = new Vector2(0, 1);
             itemLayer.anchoredPosition = Vector2.zero;
             itemLayer.sizeDelta = Metrics.LayerSize(Columns, Rows);
@@ -512,21 +499,15 @@ namespace RPG4.Backpack.UI
             EnsureCursorLayer();
         }
 
-        /// <summary>携带预览图层：留空时创建为面板子物体，并标记忽略布局、置于物品层之上。</summary>
+        /// <summary>更新独立预览层尺寸；双栏共用层保持预制体中的窗口坐标与尺寸。</summary>
         private void EnsureCursorLayer()
         {
-            if (cursorLayer == null)
+            if (cursorLayer.parent == rectTransform)
             {
-                cursorLayer = new GameObject("CursorLayer", typeof(RectTransform)).GetComponent<RectTransform>();
-                cursorLayer.SetParent(rectTransform, false);
-                cursorLayer.gameObject.layer = 5;
+                cursorLayer.anchorMin = cursorLayer.anchorMax = cursorLayer.pivot = new Vector2(0, 1);
+                cursorLayer.anchoredPosition = Vector2.zero;
+                cursorLayer.sizeDelta = itemLayer.sizeDelta;
             }
-
-            if (!cursorLayer.TryGetComponent(out LayoutElement layoutElement)) layoutElement = cursorLayer.gameObject.AddComponent<LayoutElement>();
-            layoutElement.ignoreLayout = true;
-            cursorLayer.anchorMin = cursorLayer.anchorMax = cursorLayer.pivot = new Vector2(0, 1);
-            cursorLayer.anchoredPosition = Vector2.zero;
-            cursorLayer.sizeDelta = itemLayer.sizeDelta;
             cursorLayer.SetAsLastSibling();
         }
 
@@ -537,7 +518,7 @@ namespace RPG4.Backpack.UI
         /// <summary>本机状态（本地位置表、隐藏物、悬停态）变化后重绘一次；数据层变化经 Inv.Changed 广播置脏、帧末合并，不经过此方法。</summary>
         public void Redraw()
         {
-            EnsureInitialized();
+            if (!EnsureInitialized()) return;
             SyncGridSize(Inventory);
             Refresh();
         }
@@ -701,11 +682,8 @@ namespace RPG4.Backpack.UI
         /// <summary>清除某物品的显示数量覆盖；返回是否确有覆盖。</summary>
         public bool ClearStackDisplay(ItemId id) => local.ClearStackDisplay(id);
 
-        /// <summary>清除全部显示数量覆盖（结束携带、会话复位与超时兜底用）。</summary>
+        /// <summary>清除全部显示数量覆盖。</summary>
         public void ClearAllStackDisplays() => local.ClearAllStackDisplays();
-
-        /// <summary>当前是否还有显示数量覆盖（超时兜底据此判断是否真的需要还原）。</summary>
-        public bool HasStackDisplayOverride => local.HasStackDisplayOverride;
 
         /// <summary>携带期间把某物品从网格隐藏（仍占用格子，避免其它物品回流导致抖动）。</summary>
         public void SetHiddenItem(ItemId id) => local.SetHiddenItem(id);
@@ -745,17 +723,6 @@ namespace RPG4.Backpack.UI
             GridUtils.ForEach2D(startIndex, visible, Columns, (index, coord) => SetSlotHoverState(index, state));
         }
 
-        /// <summary>复制本帧快照中的全部物品标识（拆分结果认领时做标识比对用）。</summary>
-        public void CopyItemIds(List<ItemId> destination)
-        {
-            if (destination == null) return;
-            destination.Clear();
-            foreach (RuntimeItem item in render.snapshot)
-            {
-                if (item != null) destination.Add(item.ItemId);
-            }
-        }
-
         /// <summary>按标识取本帧快照中的物品数据。</summary>
         public bool TryGetItem(ItemId id, out RuntimeItem item) => render.itemsById.TryGetValue(id, out item);
 
@@ -780,66 +747,27 @@ namespace RPG4.Backpack.UI
 
         #endregion
 
-        #region 携带预览
+        #region 查询与几何换算
 
-        private const float CarriedAlpha = 0.78f; // 携带预览物的整体透明度。
+        public Vector2 GetItemPixelSize(GridCoord dimensions) => Metrics.ItemPixelSize(dimensions.X, dimensions.Y);
 
-        /// <summary>确保携带预览物存在并显示指定物品（半透明、不接收指针事件）；显示数量由调用方给出（预览与源物品同标识，不能走按标识的覆盖表）。</summary>
-        public bool TryShowCarriedPreview(RuntimeItem item, int displayStack)
+        /// <summary>取格子左上角的世界坐标，供会话的统一携带预览定位。</summary>
+        public Vector3 GetCellWorldPosition(int index)
         {
-            if (item == null) return false;
-            EnsureCursorLayer();
-            if (cursorLayer == null) return false;
-
-            if (carriedPreview == null)
-            {
-                carriedPreview = CreateWidget(cursorLayer);
-                if (carriedPreview == null) return false;
-            }
-
-            GridFragment grid = item.GetFragment<GridFragment>();
-            carriedPreview.root.SetActive(true);
-            carriedPreview.view.SetSize(
-                Metrics.ItemPixelSize(Mathf.Max(1, grid?.Width ?? 1), Mathf.Max(1, grid?.Height ?? 1)));
-            ApplyWidget(carriedPreview, item, displayStack);
-            SetWidgetAlpha(carriedPreview, CarriedAlpha);
-            carriedPreview.root.name = "CarriedPreview"; // ApplyWidget 按物品改名，预览物在最后统一命名。
-            return true;
+            GridCoord cell = GridUtils.GetPositionFromIndex(index, Columns);
+            return itemLayer.TransformPoint(Metrics.CellToPixel(new Vector2(cell.X, cell.Y)));
         }
 
-        /// <summary>把携带预览物定位到网格局部坐标（左上角为原点，单位为格）。</summary>
-        public void SetCarriedPreviewCellPosition(Vector2 cellPosition)
+        /// <summary>未命中网格时自由跟随光标，保持抓取格中心与光标对齐。</summary>
+        public bool TryGetPointerWorldPosition(Vector2 screenPoint, Camera camera, Vector2Int grabOffset, out Vector3 position)
         {
-            if (carriedPreview == null || carriedPreview.root == null) return;
-            // 预览可以位于双栏共用的上层；落点仍按当前网格的局部坐标换算。
-            carriedPreview.root.transform.position = itemLayer.TransformPoint(Metrics.CellToPixel(cellPosition));
-        }
-
-        /// <summary>把携带预览物定位到屏幕坐标（未命中网格时的自由跟随）：被点击的那一格中心对准光标，与网格内贴格口径一致。</summary>
-        public bool TrySetCarriedPreviewScreenPosition(Vector2 screenPoint, Camera uiCamera, Vector2Int grabOffset)
-        {
-            if (carriedPreview == null || carriedPreview.root == null || cursorLayer == null) return false;
-            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(cursorLayer, screenPoint, uiCamera, out Vector2 local)) return false;
+            position = default;
+            if (cursorLayer == null || !RectTransformUtility.ScreenPointToLocalPointInRectangle(cursorLayer, screenPoint, camera, out Vector2 local)) return false;
 
             Vector2 grabCenter = Metrics.GrabCenterOffset(grabOffset);
-            float x = local.x;
-            float y = -local.y;
-            ((RectTransform)carriedPreview.root.transform).anchoredPosition =
-                new Vector2(x - grabCenter.x, -(y - grabCenter.y));
+            position = cursorLayer.TransformPoint(local + new Vector2(-grabCenter.x, grabCenter.y));
             return true;
         }
-
-        /// <summary>隐藏并复位携带预览物。</summary>
-        public void HideCarriedPreview()
-        {
-            if (carriedPreview == null || carriedPreview.root == null) return;
-            carriedPreview.root.SetActive(false);
-            SetWidgetAlpha(carriedPreview, 1f);
-        }
-
-        #endregion
-
-        #region M6 查询与几何换算
 
         /// <summary>取某格当前的占用者（物品标识 + 其上左线性索引）。</summary>
         public bool TryGetCellOwner(int index, out ItemId ownerId, out int upperLeftIndex)
@@ -963,13 +891,6 @@ namespace RPG4.Backpack.UI
         {
             if (widget?.view == null) return;
             widget.view.SetHover(hovered);
-        }
-
-        /// <summary>写入物品框整体透明度（携带预览用）。</summary>
-        private static void SetWidgetAlpha(ItemWidget widget, float alpha)
-        {
-            if (widget?.view == null) return;
-            widget.view.SetAlpha(alpha);
         }
 
         /// <summary>物品预制体缺失或不合规的告警：每组件只输出一条，避免逐帧刷屏。</summary>

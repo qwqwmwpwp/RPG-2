@@ -6,14 +6,13 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using RPG4.Backpack.Core;
 using RPG4.Backpack.Inventory;
-using RPG4.Backpack.Items;
 using RPG4.Backpack.Network;
 using RPG4.Backpack.Runtime;
 using RPG4.Input;
 
 namespace RPG4.Backpack.UI
 {
-    /// <summary>原玩家背包窗口的兼容壳：保留场景配置、玩家来源解析与输入开关；格子、物品、本地排布与预览委托给 BackpackContainerUI。</summary>
+    /// <summary>玩家背包窗口：保留场景配置、玩家来源解析与输入开关；显示委托给 BackpackContainerUI，携带交互由控制器处理。</summary>
     [DisallowMultipleComponent]
     public class BackpackGridUI : MonoBehaviour
     {
@@ -28,7 +27,7 @@ namespace RPG4.Backpack.UI
         public float cellSize = 100f; // 单格边长（像素）；面板与物品框尺寸都按它换算。
         public Vector2 slotSpacing; // 格子之间的间距（x 横向、y 纵向）。
         public RectTransform slotLayer; // 格子图层；有 GridLayoutGroup 时由其排布，否则脚本手工摆放。
-        public RectTransform itemLayer; // 物品图层；留空时创建为面板子物体。
+        public RectTransform itemLayer; // 预制体中接线的物品图层。
 
         [Header("界面")]
         public TMP_Text hudHint; // 关闭背包时的操作提示。
@@ -40,8 +39,8 @@ namespace RPG4.Backpack.UI
         [Header("输入")]
         public string openKeyHint; // 关闭态提示里显示的按键名（仅文案）；留空时取开关键的实际绑定显示名，实际按键绑定在 InputActions.inputactions 的 backpack 映射上。
 
-        [Header("交互（M6）")]
-        public RectTransform cursorLayer; // 携带预览图层；留空时创建为面板子物体并置于物品层之上。
+        [Header("交互")]
+        public RectTransform cursorLayer; // 预制体中接线的携带预览图层。
         public BackpackInteractionController interaction; // 交互控制层；随本组件的数据源一起绑定 / 解绑，留空则只有网格表现。
 
         #endregion
@@ -150,7 +149,6 @@ namespace RPG4.Backpack.UI
         public int Rows => containerUI != null ? containerUI.Rows : 0;
         public IBackpackView Inventory => boundInventory;
         public bool IsOpen => isOpen;
-        public IReadOnlyList<BackpackItemUI> ItemViews => itemUIList;
 
         private BackpackContainerUI Display
         {
@@ -178,13 +176,7 @@ namespace RPG4.Backpack.UI
             containerUI.SetPresentationVisible(false);
         }
 
-        private void Start()
-        {
-            Display.EnsureInitialized();
-            // 运行时自动创建的图层仍回写原字段，保留外部读取兼容性。
-            itemLayer = containerUI.itemLayer;
-            cursorLayer = containerUI.cursorLayer;
-        }
+        private void Start() => Display.EnsureInitialized();
 
         private void OnEnable()
         {
@@ -275,14 +267,6 @@ namespace RPG4.Backpack.UI
             Display.BindInventory(source);
             SetHint(OpenKeyLabel + "   /   打开背包");
             if (interaction != null) interaction.Bind(source);
-            BackpackLog.Info(LogModule.UI, "已绑定本地玩家库存：" + DescribeSource(source));
-        }
-
-        private static string DescribeSource(IBackpackView source)
-        {
-            if (source is BackpackNetworkInventory network) return "netId=" + network.netId;
-            if (source is Component component) return component.name;
-            return source.ToString();
         }
 
         private void Unbind()
@@ -308,7 +292,6 @@ namespace RPG4.Backpack.UI
             if (binding.TryBind(InputManager.Instance, OnToggleAction, OnPrimaryClickAction, OnSecondaryClickAction))
             {
                 binding.warned = false;
-                BackpackLog.Info(LogModule.UI, "已订阅输入宿主（InputManager）的 backpack 动作。");
                 return;
             }
 
@@ -342,14 +325,7 @@ namespace RPG4.Backpack.UI
         private void PushClick(int mouseButton)
         {
             if (ChestBackpackUI.BlocksPlayerBackpackInput) return;
-            BackpackLog.Debug(LogModule.UI, mouseButton == UiChannels.MouseButton.Left ? "背包主控：收到左键。" : "背包主控：收到右键。");
-            if (interaction == null)
-            {
-                BackpackLog.Warn(LogModule.UI, "背包主控：interaction 未接线，点击被丢弃。");
-                return;
-            }
-
-            interaction.PushClick(mouseButton);
+            if (interaction != null) interaction.PushClick(mouseButton);
         }
 
         /// <summary>请求切换背包开关（输入动作与外部按钮的意图入口）：窗口、光标与输入都按同一条状态联动。</summary>
@@ -387,7 +363,6 @@ namespace RPG4.Backpack.UI
             isOpen = open;
             SetWindowVisible(open);
             if (hudHint != null) hudHint.gameObject.SetActive(!open);
-            BackpackLog.Info(LogModule.UI, open ? "背包已打开。" : "背包已关闭。");
         }
 
         /// <summary>还原打开背包前保存的光标与输入状态。</summary>
@@ -412,34 +387,6 @@ namespace RPG4.Backpack.UI
             hudHint.text = text;
             hudHint.gameObject.SetActive(!isOpen);
         }
-
-        #endregion
-
-        #region 显示组件兼容入口
-
-        public void Redraw() => Display.Redraw();
-        public void SetManualPosition(ItemId id, Vector2Int position) => Display.SetManualPosition(id, position);
-        public bool ClearManualPosition(ItemId id) => Display.ClearManualPosition(id);
-        public void SetStackDisplay(ItemId id, int displayStack) => Display.SetStackDisplay(id, displayStack);
-        public bool ClearStackDisplay(ItemId id) => Display.ClearStackDisplay(id);
-        public void ClearAllStackDisplays() => Display.ClearAllStackDisplays();
-        public bool HasStackDisplayOverride => Display.HasStackDisplayOverride;
-        public void SetHiddenItem(ItemId id) => Display.SetHiddenItem(id);
-        public void ClearHiddenItem() => Display.ClearHiddenItem();
-        public void SetItemHovered(ItemId id, bool hovered) => Display.SetItemHovered(id, hovered);
-        public void ClearHoverHighlight() => Display.ClearHoverHighlight();
-        public void ApplyRegionHighlight(int startIndex, GridCoord dimensions, BackpackHoverState state) => Display.ApplyRegionHighlight(startIndex, dimensions, state);
-        public void CopyItemIds(List<ItemId> destination) => Display.CopyItemIds(destination);
-        public bool TryGetItem(ItemId id, out RuntimeItem item) => Display.TryGetItem(id, out item);
-        public bool TryGetPlacement(ItemId id, out GridDisplayPlacement placement) => Display.TryGetPlacement(id, out placement);
-        public bool TryShowCarriedPreview(RuntimeItem item, int displayStack) => Display.TryShowCarriedPreview(item, displayStack);
-        public void SetCarriedPreviewCellPosition(Vector2 cellPosition) => Display.SetCarriedPreviewCellPosition(cellPosition);
-        public bool TrySetCarriedPreviewScreenPosition(Vector2 screenPoint, Camera uiCamera, Vector2Int grabOffset) => Display.TrySetCarriedPreviewScreenPosition(screenPoint, uiCamera, grabOffset);
-        public void HideCarriedPreview() => Display.HideCarriedPreview();
-        public bool TryGetCellOwner(int index, out ItemId ownerId, out int upperLeftIndex) => Display.TryGetCellOwner(index, out ownerId, out upperLeftIndex);
-        public SpaceQueryResult<RuntimeItem> QuerySpace(int startIndex, GridCoord dimensions) => Display.QuerySpace(startIndex, dimensions);
-        public bool TryResolveTile(Vector2 screenPoint, Camera uiCamera, out TileParams tile) => Display.TryResolveTile(screenPoint, uiCamera, out tile);
-        public int GetUpperLeftIndex(int hoverIndex, Vector2Int grabOffset) => Display.GetUpperLeftIndex(hoverIndex, grabOffset);
 
         #endregion
     }
