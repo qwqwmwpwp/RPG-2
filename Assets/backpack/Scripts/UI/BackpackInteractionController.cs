@@ -3,17 +3,37 @@ using UnityEngine;
 using RPG4.Backpack.Core;
 using RPG4.Backpack.Inventory;
 using RPG4.Backpack.Items;
-using RPG4.Input;
 
 namespace RPG4.Backpack.UI
 {
-    /// <summary>单双栏共用的携带会话。位置留在本机，库存变化以完整操作提交。</summary>
+    /// <summary>单双栏共用的物品交互会话：由宿主开始、传入输入并结束。位置留在本机，库存变化以完整操作提交。</summary>
     [DisallowMultipleComponent]
     [DefaultExecutionOrder(100)]
     public sealed class BackpackInteractionController : MonoBehaviour
     {
         private const float OperationTimeout = 5f;
-        [SerializeField] private BackpackGridUI grid;
+        [SerializeField] private RectTransform cursorLayer;
+
+        public RectTransform CursorLayer => cursorLayer;
+
+        /// <summary>宿主在 Update 中传入的本帧输入；交互组件不直接读取输入系统。</summary>
+        public readonly struct SessionInput
+        {
+            public Vector2 PointerPosition { get; }
+            public bool HasPointer { get; }
+            public bool PrimaryClick { get; }
+            public bool SecondaryClick { get; }
+            public bool Cancel { get; }
+
+            public SessionInput(Vector2 pointerPosition, bool hasPointer, bool primaryClick, bool secondaryClick, bool cancel)
+            {
+                PointerPosition = pointerPosition;
+                HasPointer = hasPointer;
+                PrimaryClick = primaryClick;
+                SecondaryClick = secondaryClick;
+                Cancel = cancel;
+            }
+        }
 
         private enum DropAction { Blocked, Return, Place, SwapPosition, Merge, SwapStackCounts, Split, Transfer }
 
@@ -50,12 +70,12 @@ namespace RPG4.Backpack.UI
             private int count;
             private Vector2 size;
 
-            public void Show(BackpackContainerUI target, CarrySession carry, Vector2 point, int index)
+            public void Show(BackpackContainerUI target, CarrySession carry, Vector2 point, int index, RectTransform cursorLayer)
             {
                 if (view == null)
                 {
-                    if (target.itemPrefab == null || target.cursorLayer == null) return;
-                    GameObject root = Instantiate(target.itemPrefab, target.cursorLayer);
+                    if (target.ItemPrefab == null || cursorLayer == null) return;
+                    GameObject root = Instantiate(target.ItemPrefab, cursorLayer);
                     if (!root.TryGetComponent(out view))
                     {
                         Destroy(root);
@@ -73,7 +93,7 @@ namespace RPG4.Backpack.UI
                     size = Vector2.zero;
                 }
 
-                if (view.transform.parent != target.cursorLayer) view.transform.SetParent(target.cursorLayer, false);
+                if (view.transform.parent != cursorLayer) view.transform.SetParent(cursorLayer, false);
                 Vector2 nextSize = target.GetItemPixelSize(carry.Dimensions);
                 if (size != nextSize)
                 {
@@ -88,8 +108,11 @@ namespace RPG4.Backpack.UI
                 }
                 view.gameObject.SetActive(true);
                 if (index >= 0) view.transform.position = target.GetCellWorldPosition(index);
-                else if (target.TryGetPointerWorldPosition(point, GetUICamera(target), carry.GrabOffset, out Vector3 position))
-                    view.transform.position = position;
+                else if (RectTransformUtility.ScreenPointToLocalPointInRectangle(cursorLayer, point, GetUICamera(target), out Vector2 local))
+                {
+                    Vector2 grabCenter = target.GetGrabCenterOffset(carry.GrabOffset);
+                    view.transform.position = cursorLayer.TransformPoint(local + new Vector2(-grabCenter.x, grabCenter.y));
+                }
             }
 
             public void Hide()
@@ -100,6 +123,7 @@ namespace RPG4.Backpack.UI
             public void Dispose()
             {
                 if (view != null) Destroy(view.gameObject);
+                view = null;
             }
         }
 
@@ -108,8 +132,8 @@ namespace RPG4.Backpack.UI
         private readonly CarryPreview preview = new CarryPreview();
         private CarrySession carry;
         private PendingOperation pending;
-        private bool primaryClick;
-        private bool secondaryClick;
+        private SessionInput pendingInput;
+        private int receivedInputFrame = -1;
         private BackpackContainerUI hoveredView;
         private ItemId hoveredItemId;
         private BackpackContainerUI highlightedView;
@@ -117,67 +141,72 @@ namespace RPG4.Backpack.UI
         private GridCoord highlightedDimensions;
         private BackpackHoverState highlightedState;
 
-        public void Bind(IBackpackView source)
+        public bool IsSessionActive => views.Length > 0;
+        public int SessionVersion { get; private set; }
+
+        /// <summary>为一个或多个容器开始交互；已有会话会先完整结束。容器可等待数据源就绪。</summary>
+        public void BeginSession(params BackpackContainerUI[] containers)
         {
-            Unbind();
-            if (source != null && grid != null && grid.ContainerUI != null)
-                views = new[] { grid.ContainerUI };
+            EndSession();
+            if (cursorLayer == null)
+            {
+                BackpackLog.Warn(LogModule.UI, "请在 BackpackInteractionController 中接线携带预览层。");
+                return;
+            }
+            cursorLayer.SetAsLastSibling();
+            views = containers ?? Array.Empty<BackpackContainerUI>();
+            SessionVersion++;
         }
 
-        public void BindContainers(BackpackContainerUI left, BackpackContainerUI right)
+        /// <summary>只接收活动会话的本帧输入；由较晚执行的 Update 在视图刷新后消费一次。</summary>
+        public void ReceiveInput(SessionInput input)
         {
-            Unbind();
-            views = new[] { left, right };
+            if (!IsSessionActive || !isActiveAndEnabled) return;
+            pendingInput = input;
+            receivedInputFrame = Time.frameCount;
         }
 
-        public void Unbind()
+        /// <summary>结束会话，释放操作结果订阅、临时显示覆盖、携带预览及容器引用。</summary>
+        public void EndSession()
         {
             CancelInteraction();
+            preview.Dispose();
             views = Array.Empty<BackpackContainerUI>();
         }
 
-        public void PushClick(int mouseButton)
-        {
-            if (mouseButton == UiChannels.MouseButton.Left) primaryClick = true;
-            else if (mouseButton == UiChannels.MouseButton.Right) secondaryClick = true;
-        }
-
-        public void CancelInteraction()
+        private void CancelInteraction()
         {
             if (pending != null) pending.Subscription.Dispose();
             pending = null;
-            primaryClick = secondaryClick = false;
+            pendingInput = default;
+            receivedInputFrame = -1;
             ClearFeedback();
             preview.Hide();
             CarrySession previous = carry;
             carry = null;
-            if (previous?.Source == null) return;
+            if (previous?.Source == null || !ReferenceEquals(previous.Source.Inventory, previous.Inventory)) return;
             previous.Source.ClearStackDisplay(previous.Item.ItemId);
             previous.Source.ClearHiddenItem();
             if (IsInventoryAlive(previous.Source.Inventory)) previous.Source.Redraw();
         }
 
-        private void OnDisable() => CancelInteraction();
+        private void OnDisable() => EndSession();
 
-        private void OnDestroy()
-        {
-            Unbind();
-            preview.Dispose();
-        }
+        private void OnDestroy() => EndSession();
 
         private void Update()
         {
-            InputManager input = InputManager.Instance;
-            bool left = primaryClick;
-            bool right = secondaryClick;
-            primaryClick = secondaryClick = false;
+            SessionInput input = pendingInput;
+            bool hasInput = receivedInputFrame == Time.frameCount;
+            pendingInput = default;
+            receivedInputFrame = -1;
+            if (!IsSessionActive) return;
             if (!CanInteract())
             {
                 CancelInteraction();
                 return;
             }
-            if (input == null) return;
-            if (input.backpackInput.cancel.WasPressedThisFrame())
+            if (hasInput && input.Cancel)
             {
                 CancelInteraction();
                 return;
@@ -190,19 +219,19 @@ namespace RPG4.Backpack.UI
                 CancelInteraction();
                 return;
             }
-            if (!InputManager.HasPointer)
+            if (!hasInput || !input.HasPointer)
             {
                 ClearFeedback();
                 preview.Hide();
                 return;
             }
 
-            Vector2 point = input.backpackInput.pointerPosition.ReadValue<Vector2>();
+            Vector2 point = input.PointerPosition;
             BackpackContainerUI target = ResolveView(point, out TileParams tile);
             SetHoveredItem(target, tile.TileIndex);
             // 取消与右键先于放下，避免同一帧把取消解释成一次提交。
-            if (right) HandleSecondaryClick(target, tile.TileIndex);
-            else if (left)
+            if (input.SecondaryClick) HandleSecondaryClick(target, tile.TileIndex);
+            else if (input.PrimaryClick)
             {
                 if (carry == null) BeginCarry(target, tile.TileIndex, false);
                 else TryDrop(target, tile.TileIndex);
@@ -251,7 +280,7 @@ namespace RPG4.Backpack.UI
 
         private bool CanInteract()
         {
-            if (views.Length == 0 || (views.Length == 1 && (grid == null || !grid.IsOpen))) return false;
+            if (!IsSessionActive) return false;
             foreach (BackpackContainerUI view in views)
                 if (!IsViewReady(view)) return false;
             return true;
@@ -449,7 +478,7 @@ namespace RPG4.Backpack.UI
                 highlightedState = state;
                 if (target != null && highlightIndex >= 0) target.ApplyRegionHighlight(highlightIndex, dimensions, state);
             }
-            preview.Show(target ?? carry.Source, carry, point, action == DropAction.Blocked ? -1 : index);
+            preview.Show(target ?? carry.Source, carry, point, action == DropAction.Blocked ? -1 : index, cursorLayer);
         }
 
         private void ClearFeedback()

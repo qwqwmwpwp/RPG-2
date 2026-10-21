@@ -16,30 +16,30 @@ namespace RPG4.Backpack.UI
     {
         #region 序列化字段
 
-        public GameObject slotPrefab;
-        public GameObject itemPrefab;
-        public List<BackpackItemUI> itemUIList = new List<BackpackItemUI>();
+        [SerializeField] private GameObject slotPrefab;
+        [SerializeField] private GameObject itemPrefab;
 
         [Header("网格")]
-        [Min(1)] public int initialColumns = 4;
-        [Min(1)] public int initialRows = 5;
-        [Min(1f)] public float cellSize = 100f;
-        public Vector2 slotSpacing;
-        public RectTransform slotLayer;
-        public RectTransform itemLayer;
+        [SerializeField, Min(1)] private int initialColumns = 4;
+        [SerializeField, Min(1)] private int initialRows = 5;
+        [SerializeField, Min(1f)] private float cellSize = 100f;
+        [SerializeField] private Vector2 slotSpacing;
+        [SerializeField] private RectTransform slotLayer;
+        [SerializeField] private RectTransform itemLayer;
 
         [Header("显示")]
-        public TMP_Text overflowText;
-        public TMP_FontAsset uiFont;
-        public Color slotEmptyColor = BackpackFeedbackPalette.SlotEmpty;
-        public Color slotOccupiedColor = BackpackFeedbackPalette.SlotFilled;
-        public Color slotAvailableColor = BackpackFeedbackPalette.SlotAvailable;
-        public Color slotBlockedColor = BackpackFeedbackPalette.SlotBlocked;
-        public Color slotSwapColor = BackpackFeedbackPalette.SlotSwap;
-        public Color warningColor = BackpackFeedbackPalette.Warning;
+        [SerializeField] private TMP_Text overflowText;
+        [SerializeField] private TMP_FontAsset uiFont;
+        [SerializeField] private Color slotEmptyColor = BackpackFeedbackPalette.SlotEmpty;
+        [SerializeField] private Color slotOccupiedColor = BackpackFeedbackPalette.SlotFilled;
+        [SerializeField] private Color slotAvailableColor = BackpackFeedbackPalette.SlotAvailable;
+        [SerializeField] private Color slotBlockedColor = BackpackFeedbackPalette.SlotBlocked;
+        [SerializeField] private Color slotSwapColor = BackpackFeedbackPalette.SlotSwap;
+        [SerializeField] private Color warningColor = BackpackFeedbackPalette.Warning;
 
-        [Header("携带预览图层")]
-        public RectTransform cursorLayer;
+        [Header("编辑器展示")]
+        [Tooltip("预制体中保存的格子和示例物品，仅供调整界面；进入游戏后自动隐藏。")]
+        [SerializeField] private GameObject editorPreview;
 
         #endregion
 
@@ -249,6 +249,7 @@ namespace RPG4.Backpack.UI
 
         #region 运行时状态
 
+        private readonly List<BackpackItemUI> itemUIList = new List<BackpackItemUI>();
         private readonly List<SlotVisual> slotViews = new List<SlotVisual>();
         private readonly LocalDisplayState local = new LocalDisplayState();
         private readonly RenderCache render = new RenderCache();
@@ -261,6 +262,7 @@ namespace RPG4.Backpack.UI
         private bool itemPrefabWarned;
         private bool configurationWarned;
 
+        public GameObject ItemPrefab => itemPrefab;
         public int Columns { get; private set; }
         public int Rows { get; private set; }
         public IBackpackView Inventory { get; private set; }
@@ -273,8 +275,8 @@ namespace RPG4.Backpack.UI
 
         private void Awake()
         {
+            if (editorPreview != null) editorPreview.SetActive(false);
             rectTransform = GetComponent<RectTransform>();
-            if (itemUIList == null) itemUIList = new List<BackpackItemUI>();
             ConfigureOverflowText();
         }
 
@@ -282,7 +284,7 @@ namespace RPG4.Backpack.UI
 
         private void OnEnable()
         {
-            // 不在 Awake 前创建格子：兼容壳可先把旧 Inspector 配置传入。
+            // 网格尚未初始化时，等待宿主绑定或 Start 创建。
             if (Columns < 1 || Rows < 1) return;
             UpdateSubscription();
             Redraw();
@@ -317,14 +319,13 @@ namespace RPG4.Backpack.UI
         public bool EnsureInitialized()
         {
             if (rectTransform == null) rectTransform = GetComponent<RectTransform>();
-            if (itemUIList == null) itemUIList = new List<BackpackItemUI>();
-            if (slotLayer == null || itemLayer == null || cursorLayer == null || slotPrefab == null
+            if (slotLayer == null || itemLayer == null || slotPrefab == null
                 || !slotPrefab.TryGetComponent(out BackpackSlotUI slot) || slot.background == null)
             {
                 if (!configurationWarned)
                 {
                     configurationWarned = true;
-                    BackpackLog.Warn(LogModule.UI, "请在预制体中接线格子层、物品层、携带预览层，以及带 BackpackSlotUI 和背景引用的格子预制体。");
+                    BackpackLog.Warn(LogModule.UI, "请在预制体中接线格子层、物品层，以及带 BackpackSlotUI 和背景引用的格子预制体。");
                 }
                 return false;
             }
@@ -496,19 +497,6 @@ namespace RPG4.Backpack.UI
             itemLayer.anchoredPosition = Vector2.zero;
             itemLayer.sizeDelta = Metrics.LayerSize(Columns, Rows);
             itemLayer.SetAsLastSibling();
-            EnsureCursorLayer();
-        }
-
-        /// <summary>更新独立预览层尺寸；双栏共用层保持预制体中的窗口坐标与尺寸。</summary>
-        private void EnsureCursorLayer()
-        {
-            if (cursorLayer.parent == rectTransform)
-            {
-                cursorLayer.anchorMin = cursorLayer.anchorMax = cursorLayer.pivot = new Vector2(0, 1);
-                cursorLayer.anchoredPosition = Vector2.zero;
-                cursorLayer.sizeDelta = itemLayer.sizeDelta;
-            }
-            cursorLayer.SetAsLastSibling();
         }
 
         #endregion
@@ -751,22 +739,13 @@ namespace RPG4.Backpack.UI
 
         public Vector2 GetItemPixelSize(GridCoord dimensions) => Metrics.ItemPixelSize(dimensions.X, dimensions.Y);
 
+        public Vector2 GetGrabCenterOffset(Vector2Int grabOffset) => Metrics.GrabCenterOffset(grabOffset);
+
         /// <summary>取格子左上角的世界坐标，供会话的统一携带预览定位。</summary>
         public Vector3 GetCellWorldPosition(int index)
         {
             GridCoord cell = GridUtils.GetPositionFromIndex(index, Columns);
             return itemLayer.TransformPoint(Metrics.CellToPixel(new Vector2(cell.X, cell.Y)));
-        }
-
-        /// <summary>未命中网格时自由跟随光标，保持抓取格中心与光标对齐。</summary>
-        public bool TryGetPointerWorldPosition(Vector2 screenPoint, Camera camera, Vector2Int grabOffset, out Vector3 position)
-        {
-            position = default;
-            if (cursorLayer == null || !RectTransformUtility.ScreenPointToLocalPointInRectangle(cursorLayer, screenPoint, camera, out Vector2 local)) return false;
-
-            Vector2 grabCenter = Metrics.GrabCenterOffset(grabOffset);
-            position = cursorLayer.TransformPoint(local + new Vector2(-grabCenter.x, grabCenter.y));
-            return true;
         }
 
         /// <summary>取某格当前的占用者（物品标识 + 其上左线性索引）。</summary>

@@ -1,0 +1,9 @@
+{
+    "name": "RPG4.Interaction",
+    "rootNamespace": "RPG4.Interaction",
+    "references": [
+        "RPG4.UI",
+        "Unity.InputSystem",
+        "UnityEngine.UI"
+    ]
+}

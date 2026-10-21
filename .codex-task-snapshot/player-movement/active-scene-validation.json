@@ -1,0 +1,17 @@
+{
+  "changed_blocks": [
+    696164342,
+    629847864733125438,
+    7331079584931666036
+  ],
+  "added_reference_blocks": [
+    740000001,
+    740000002,
+    740000003
+  ],
+  "unchanged_blocks": 31,
+  "removed_blocks": 0,
+  "single_camera_and_listener": true,
+  "existing_input_manager_reused": true,
+  "scene_roots_preserved": true
+}

@@ -1,0 +1,12 @@
+{
+  "Scripts/PlayerMovement": "14df8465297e4b8b8472f7f28a9d2a98",
+  "player/Materials": "57d49952dc684d4c9383ae91c8030d7a",
+  "Scripts/PlayerMovement/PlayerMovement.cs": "f47420f529ab47af89714ea31bf8b43f",
+  "Scripts/PlayerMovement/PlayerCameraController.cs": "398bbc327594468887c2d644b212c907",
+  "Scripts/PlayerMovement/RPG4.PlayerMovement.asmdef": "40564adab534477faf9df93ecf1d3580",
+  "player/PlayerCamera.prefab": "3a3cc0360af447918940eb53044c927f",
+  "player/player.prefab": "aa97745298d86ce4bac5cfa60b19bc0f",
+  "player/Materials/MovementGround.mat": "256296ab09674c04bd5b102f5a97dbfd",
+  "player/Materials/MovementObstacle.mat": "6a4a4bdb9d1e4772951362e097241600",
+  "Scenes/PlayerMovement.unity": "e872ac2cac9e43eea53df7768f7feb72"
+}

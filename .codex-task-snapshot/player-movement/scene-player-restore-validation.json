@@ -1,0 +1,12 @@
+{
+  "status": "PASS",
+  "scene_documents": 38,
+  "existing_objects_preserved": 32,
+  "player_instances": 1,
+  "input_managers": 1,
+  "actual_cameras": 1,
+  "audio_listeners": 1,
+  "follow_and_movement_references": "bound",
+  "camera_tuning": "preserved",
+  "ground_and_items_and_chest_and_UI": "preserved"
+}

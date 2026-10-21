@@ -16,9 +16,11 @@ namespace RPG4.Backpack.Core
         public const string OperationCompleted = "Inv.Operation.Completed"; // 完整库存操作结果。载荷 (InventoryOperationResult)，source 为来源库存的事件键。
     }
 
-    /// <summary>UI → 数据层意图命令：UI 只声明意图，不关心谁处理；命令不保证成功，结果一律由 <see cref="InvChannels"/> 的状态广播回传。</summary>
+    /// <summary>交互意图命令：发送方只声明意图，不关心谁处理；命令不保证成功，库存操作结果由 <see cref="InvChannels"/> 的状态广播回传。</summary>
     public static class CmdChannels
     {
+        public const string OpenChestUI = "Cmd.Chest.OpenUI"; // 请求打开箱子窗口。载荷 (ChestInventory)，source 为发起交互的箱子；窗口按通配来源订阅。
+
         public const string InventoryOperation = "Cmd.Inventory.Operation"; // 完整库存意图。载荷 (InventoryOperation)。
 
         public const string DropItem = "Cmd.Item.Drop"; // 丢弃物品。载荷 (item, int stackCount)。

@@ -1,29 +1,23 @@
-using Mirror;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using RPG4.Backpack.Core;
 using RPG4.Backpack.Inventory;
-using RPG4.Backpack.Network;
 using RPG4.Backpack.Runtime;
-using RPG4.Input;
+using RPG4.UI;
 
 namespace RPG4.Backpack.UI
 {
-    /// <summary>箱子双栏窗口：左栏绑定玩家、右栏绑定指定箱子；两个显示组件共用转移与拆分会话，窗口统一管理输入与光标。</summary>
+    /// <summary>箱子双栏窗口：左栏绑定玩家、右栏绑定指定箱子；协调双栏交互会话、标题与窗口布局。</summary>
     [DisallowMultipleComponent]
     [RequireComponent(typeof(RectTransform), typeof(CanvasGroup), typeof(ChestBackpackUIData))]
     [DefaultExecutionOrder(10)]
-    public sealed class ChestBackpackUI : MonoBehaviour
+    public sealed class ChestBackpackUI : UIBase
     {
         [SerializeField] private ChestBackpackUIData ui;
 
         [Header("背包来源")]
         [Tooltip("留空时寻找本地玩家背包；指定后始终使用这个玩家背包。")]
         [SerializeField] private BackpackInventory playerInventory;
-        [Tooltip("初始箱子；也可由后续箱子交互调用 Open(chest) 指定。")]
-        [SerializeField] private ChestInventory defaultChest;
         [SerializeField] private bool resolveLocalPlayer = true;
-        [SerializeField] private bool openOnStart = true;
         [SerializeField, Min(0.05f)] private float bindingCheckInterval = 0.25f;
 
         [Header("双栏布局")]
@@ -44,40 +38,29 @@ namespace RPG4.Backpack.UI
         private bool layoutDirty = true;
         private bool configurationWarned;
         private float nextBindingCheck;
-        private InputManager inputHost;
-        private InputAction primaryAction;
-        private InputAction secondaryAction;
-        private InputAction closeAction;
-        private bool inputCaptured;
-        private PlayerInput suspendedPlayer;
-        private bool playerWasEnabled;
-        private bool cursorWasVisible;
-        private CursorLockMode cursorWasLocked;
-        private static int lastClosedFrame = -1;
+        private ChestInventory currentChest;
+        private EventSubscription openSubscription;
+        private readonly InventoryInputScope inputScope = new InventoryInputScope();
+        private object boundPlayerEventSource;
+        private object boundChestEventSource;
 
-        public static ChestBackpackUI ActiveWindow { get; private set; }
-        // 同一帧关闭后仍拦截旧背包回调，避免同一次开关键又打开单栏窗口。
-        public static bool BlocksPlayerBackpackInput => ActiveWindow != null || lastClosedFrame == Time.frameCount;
-
-        public bool IsOpen { get; private set; }
         public BackpackContainerUI PlayerView => ui != null ? ui.playerView : null;
         public BackpackContainerUI ChestView => ui != null ? ui.chestView : null;
+        public BackpackInteractionController Interaction => ui != null ? ui.interaction : null;
         public IBackpackView PlayerInventory => PlayerView != null ? PlayerView.Inventory : null;
         public IBackpackView ChestInventory => ChestView != null ? ChestView.Inventory : null;
 
-        private void Awake()
+        protected override void Awake()
         {
+            base.Awake();
             EnsureInitialized();
-            SetVisible(false);
         }
 
-        private void Start()
+        protected override void OnEnable()
         {
-            if (openOnStart) Open(defaultChest);
-        }
-
-        private void OnEnable()
-        {
+            base.OnEnable();
+            openSubscription = EventBus.Global.Subscribe<ChestInventory>(
+                CmdChannels.OpenChestUI, EventBus.AnySource, this, OnOpenRequested);
             nextBindingCheck = 0f;
             if (!IsOpen) return;
             RefreshBindings();
@@ -86,13 +69,12 @@ namespace RPG4.Backpack.UI
         private void Update()
         {
             if (!IsOpen) return;
-            BindInputActions();
             if (Time.unscaledTime >= nextBindingCheck)
             {
                 nextBindingCheck = Time.unscaledTime + Mathf.Max(0.05f, bindingCheckInterval);
                 RefreshBindings();
             }
-            SuspendPlayerInput();
+            inputScope.SetSource(PlayerInventory);
         }
 
         private void LateUpdate()
@@ -100,36 +82,35 @@ namespace RPG4.Backpack.UI
             if (IsOpen) ArrangeViews();
         }
 
-        private void OnDisable() => Close();
-        private void OnDestroy() => Close();
+        protected override void OnDisable()
+        {
+            openSubscription.Dispose();
+            openSubscription = default;
+            base.OnDisable();
+        }
 
-        /// <summary>显示指定箱子的双栏背包；来源尚未初始化时显示占位格并等待就绪。传 null 可查看未绑定箱子的基础布局。</summary>
+        private void OnOpenRequested(ChestInventory chest) => Open(chest);
+
+        /// <summary>显示指定箱子的双栏背包，仅在打开期间保留箱子引用；来源尚未初始化时显示占位格并等待就绪。</summary>
         public bool Open(ChestInventory chest)
         {
-            defaultChest = chest;
-            if (!EnsureInitialized()) return false;
+            if (chest == null || !EnsureInitialized()) return false;
+            Close();
+            currentChest = chest;
+            if (base.Open()) return true;
+            currentChest = null;
+            return false;
+        }
 
-            if (ActiveWindow != null && ActiveWindow != this) ActiveWindow.Close();
-            if (!IsOpen)
-            {
-                // 先还原旧单栏窗口的快照，再采集箱子窗口的原始状态。
-                foreach (BackpackGridUI window in FindObjectsOfType<BackpackGridUI>()) window.Close();
-            }
-            ui.interaction.CancelInteraction();
+        protected override bool CanOpen() => currentChest != null && EnsureInitialized();
 
-            enabled = true;
-            if (!gameObject.activeSelf) gameObject.SetActive(true);
-            IsOpen = true;
-            ActiveWindow = this;
+        protected override void OnOpened()
+        {
             nextBindingCheck = 0f;
-            RefreshBindings();
-            ui.interaction.BindContainers(ui.playerView, ui.chestView);
             ui.interaction.enabled = true;
-            CaptureInput();
-            BindInputActions();
-            SetVisible(true);
+            RefreshBindings();
+            inputScope.Capture(PlayerInventory);
             ArrangeViews();
-            return true;
         }
 
         /// <summary>显式指定玩家与箱子，左右来源不会随鼠标位置或其他背包窗口改变。</summary>
@@ -140,15 +121,15 @@ namespace RPG4.Backpack.UI
         }
 
         /// <summary>隐藏窗口并释放双方显示订阅；保留格子配置，再次 Open 时重新获取与显示库存。</summary>
-        public void Close()
+        protected override void OnClosed()
         {
+            EndInteractionSession();
             if (ui != null && ui.interaction != null)
             {
-                ui.interaction.Unbind();
                 ui.interaction.enabled = false;
             }
-            UnbindInputActions();
-            IsOpen = false;
+            currentChest = null;
+            boundPlayerEventSource = boundChestEventSource = null;
             if (ui != null && ui.playerView != null)
             {
                 ui.playerView.UnbindInventory();
@@ -161,106 +142,36 @@ namespace RPG4.Backpack.UI
                 ui.chestView.SetPresentationVisible(false);
             }
 
-            SetVisible(false);
-            RestoreInput();
-            if (ActiveWindow == this)
-            {
-                ActiveWindow = null;
-                lastClosedFrame = Time.frameCount;
-            }
+            inputScope.Release();
         }
 
-        private void BindInputActions()
+        private void EndInteractionSession()
         {
-            InputManager host = InputManager.Instance;
-            if (host == null)
-            {
-                UnbindInputActions();
-                return;
-            }
-            if (inputHost == host && primaryAction != null) return;
-            UnbindInputActions();
-            inputHost = host;
-            InputActions.BackpackActions actions = host.backpackInput;
-            primaryAction = actions.leftButton;
-            secondaryAction = actions.rightButton;
-            closeAction = actions.BackPackUI;
-            primaryAction.performed += OnPrimaryClick;
-            secondaryAction.performed += OnSecondaryClick;
-            closeAction.performed += OnCloseAction;
+            if (ui != null && ui.interaction != null) ui.interaction.EndSession();
         }
 
-        private void UnbindInputActions()
-        {
-            if (primaryAction != null) primaryAction.performed -= OnPrimaryClick;
-            if (secondaryAction != null) secondaryAction.performed -= OnSecondaryClick;
-            if (closeAction != null) closeAction.performed -= OnCloseAction;
-            primaryAction = null;
-            secondaryAction = null;
-            closeAction = null;
-            inputHost = null;
-        }
-
-        private void OnPrimaryClick(InputAction.CallbackContext context)
-        {
-            if (IsOpen && ActiveWindow == this && context.performed) ui.interaction.PushClick(UiChannels.MouseButton.Left);
-        }
-
-        private void OnSecondaryClick(InputAction.CallbackContext context)
-        {
-            if (IsOpen && ActiveWindow == this && context.performed) ui.interaction.PushClick(UiChannels.MouseButton.Right);
-        }
-
-        private void OnCloseAction(InputAction.CallbackContext context)
-        {
-            if (IsOpen && ActiveWindow == this && context.performed) Close();
-        }
-
-        private void CaptureInput()
-        {
-            if (!inputCaptured)
-            {
-                cursorWasVisible = Cursor.visible;
-                cursorWasLocked = Cursor.lockState;
-                inputCaptured = true;
-            }
-            SuspendPlayerInput();
-            Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
-        }
-
-        private void SuspendPlayerInput()
-        {
-            Component source = PlayerInventory as Component;
-            PlayerInput player = source != null ? source.GetComponent<PlayerInput>() : null;
-            if (suspendedPlayer == player) return;
-            if (suspendedPlayer != null) suspendedPlayer.enabled = playerWasEnabled;
-            suspendedPlayer = player;
-            playerWasEnabled = player != null && player.enabled;
-            if (player != null) player.enabled = false;
-        }
-
-        private void RestoreInput()
-        {
-            if (!inputCaptured) return;
-            if (suspendedPlayer != null) suspendedPlayer.enabled = playerWasEnabled;
-            suspendedPlayer = null;
-            Cursor.lockState = cursorWasLocked;
-            Cursor.visible = cursorWasVisible;
-            inputCaptured = false;
-        }
-
-        /// <summary>重新获取双方数据源；这里只解析玩家来源，箱子始终由 defaultChest 或 Open 参数指定。</summary>
+        /// <summary>重新获取双方数据源；这里只解析玩家来源，箱子由本次 Open 参数指定。</summary>
         public void RefreshBindings()
         {
             if (!IsOpen || !EnsureInitialized()) return;
 
             IBackpackView player = ResolvePlayer();
-            BackpackInventory chest = defaultChest != null ? defaultChest.Inventory : null;
+            BackpackInventory chest = currentChest != null ? currentChest.Inventory : null;
             if (chest != null && !chest.IsInitialized) chest = null;
 
+            object playerEventSource = player?.EventSource;
+            object chestEventSource = chest?.EventSource;
+            bool sourceChanged = !ReferenceEquals(ui.playerView.Inventory, player)
+                || !ReferenceEquals(ui.chestView.Inventory, chest)
+                || !ReferenceEquals(boundPlayerEventSource, playerEventSource)
+                || !ReferenceEquals(boundChestEventSource, chestEventSource);
+            // 任一侧来源或事件键变化，都要在视图改绑前清理旧交互。
+            if (sourceChanged) EndInteractionSession();
             ui.playerView.BindInventory(player);
             ui.chestView.BindInventory(chest);
+            boundPlayerEventSource = playerEventSource;
+            boundChestEventSource = chestEventSource;
+            if (!ui.interaction.IsSessionActive) ui.interaction.BeginSession(ui.playerView, ui.chestView);
             ui.playerView.SetPresentationVisible(true);
             ui.chestView.SetPresentationVisible(true);
             ui.playerTitle.text = player != null ? playerTitleText : waitingPlayerTitleText;
@@ -278,31 +189,21 @@ namespace RPG4.Backpack.UI
 
             if (!resolveLocalPlayer) return null;
 
-            NetworkIdentity localIdentity = NetworkClient.localPlayer;
-            if (localIdentity != null)
-            {
-                BackpackNetworkInventory network = localIdentity.GetComponent<BackpackNetworkInventory>();
-                if (network != null && network.EventSource != null) return network;
-            }
-
-            return BackpackRegistry.TryGetPrimary(out BackpackInventory backpack) && backpack.IsInitialized
-                ? backpack
-                : null;
+            return LocalBackpackSourceResolver.Resolve();
         }
 
         private bool EnsureInitialized()
         {
             if (windowRect == null) windowRect = GetComponent<RectTransform>();
             if (ui == null) ui = GetComponent<ChestBackpackUIData>();
-            if (ui == null || ui.windowGroup == null || ui.playerView == null || ui.chestView == null
+            if (ui == null || ui.playerView == null || ui.chestView == null
                 || ui.playerView == ui.chestView || ui.interaction == null
-                || ui.playerTitle == null || ui.chestTitle == null || ui.cursorLayer == null
-                || ui.playerView.cursorLayer != ui.cursorLayer || ui.chestView.cursorLayer != ui.cursorLayer)
+                || ui.playerTitle == null || ui.chestTitle == null || ui.interaction.CursorLayer == null)
             {
                 if (!configurationWarned)
                 {
                     configurationWarned = true;
-                    BackpackLog.Warn(LogModule.UI, "请在预制体的 ChestBackpackUIData 中接线窗口、两个不同的容器、交互组件、标题和共用携带预览层。");
+                    BackpackLog.Warn(LogModule.UI, "请在 ChestBackpackUIData 中接线两个不同的容器、交互组件和标题，并在交互组件中接线携带预览层。");
                 }
                 return false;
             }
@@ -340,21 +241,13 @@ namespace RPG4.Backpack.UI
             windowRect.sizeDelta = new Vector2(
                 left * 2f + playerSize.x + spacing + chestSize.x,
                 top * 2f + header + Mathf.Max(playerSize.y, chestSize.y));
-            ui.cursorLayer.SetAsLastSibling();
+            ui.interaction.CursorLayer.SetAsLastSibling();
         }
 
         private static void PlaceRect(RectTransform rect, Vector2 position)
         {
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 1f);
             rect.anchoredPosition = position;
-        }
-
-        private void SetVisible(bool visible)
-        {
-            if (ui == null || ui.windowGroup == null) return;
-            ui.windowGroup.alpha = visible ? 1f : 0f;
-            ui.windowGroup.interactable = false;
-            ui.windowGroup.blocksRaycasts = false;
         }
     }
 }

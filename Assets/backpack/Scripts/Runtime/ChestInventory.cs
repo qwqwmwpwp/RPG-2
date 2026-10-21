@@ -2,12 +2,13 @@ using System.Collections.Generic;
 using UnityEngine;
 using RPG4.Backpack.Core;
 using RPG4.Backpack.Items;
+using RPG4.Interaction;
 
 namespace RPG4.Backpack.Runtime
 {
     [DisallowMultipleComponent]
     [RequireComponent(typeof(BackpackInventory))]
-    public sealed class ChestInventory : MonoBehaviour
+    public sealed class ChestInventory : MonoBehaviour, IInteractable
     {
         #region 字段与属性
         private BackpackInventory inventory;
@@ -22,6 +23,18 @@ namespace RPG4.Backpack.Runtime
             if (fillCatalogOnStart) FillFromCatalogForTest();
         }
         #endregion
+
+        public bool CanInteract(PlayerInteraction player) =>
+            isActiveAndEnabled && player != null && Inventory.isActiveAndEnabled && Inventory.IsInitialized;
+
+        public void Interact(PlayerInteraction player)
+        {
+            if (CanInteract(player)) OpenUI();
+        }
+
+        /// <summary>供外部交互调用，请求显示本箱子的背包；箱子不持有 UI 引用。</summary>
+        [ContextMenu("交互/打开箱子背包")]
+        public void OpenUI() => EventBus.Global.Publish(CmdChannels.OpenChestUI, this, this);
 
         #region 测试物品生成
         private const int TestStackCount = 5;

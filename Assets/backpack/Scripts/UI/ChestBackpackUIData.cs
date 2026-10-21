@@ -7,12 +7,10 @@ namespace RPG4.Backpack.UI
     [DisallowMultipleComponent]
     public sealed class ChestBackpackUIData : MonoBehaviour
     {
-        public CanvasGroup windowGroup;
         public BackpackContainerUI playerView;
         public BackpackContainerUI chestView;
         public BackpackInteractionController interaction;
         public TMP_Text playerTitle;
         public TMP_Text chestTitle;
-        public RectTransform cursorLayer;
     }
 }

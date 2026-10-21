@@ -1,0 +1,10 @@
+{
+  "changed_fields": [
+    "m_Follow",
+    "m_LookAt"
+  ],
+  "target_fileID": 740000003,
+  "preserved_camera_overrides": 63,
+  "preserved_other_scene_blocks": 42,
+  "backup": "..\\.codex-task-snapshot\\player-movement\\New Scene.unity.before-follow-rebind-07ef8d46"
+}

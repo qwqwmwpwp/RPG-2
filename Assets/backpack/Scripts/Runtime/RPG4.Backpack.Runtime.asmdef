@@ -4,7 +4,8 @@
     "references": [
         "RPG4.Backpack.Core",
         "RPG4.Backpack.Items",
-        "RPG4.Backpack.Inventory"
+        "RPG4.Backpack.Inventory",
+        "RPG4.Interaction"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

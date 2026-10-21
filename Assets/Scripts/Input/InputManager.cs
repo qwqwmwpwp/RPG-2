@@ -12,13 +12,16 @@ namespace RPG4.Input
         /// <summary>背包映射的动作集（struct，重复访问不产生堆分配）；订阅方只增删回调，不启用 / 释放映射。</summary>
         public InputActions.BackpackActions backpackInput => inputActions.backpack;
 
+        /// <summary>玩家动作集；映射生命周期由本宿主统一管理。</summary>
+        public InputActions.PlayerActions playerInput => inputActions.player;
+
         /// <summary>宿主实例；场景里没有挂载时为 null。</summary>
         public static InputManager Instance { get; private set; }
 
         /// <summary>本机是否存在指针设备；设备口径只在输入层判定，消费方据此丢弃点击。</summary>
         public static bool HasPointer => Mouse.current != null;
 
-        /// <summary>建立单例并常驻，随后构造输入资产并常驻启用背包映射。</summary>
+        /// <summary>建立单例并常驻，随后构造输入资产并启用动作映射。</summary>
         private void Awake()
         {
             if (Instance != null && Instance != this)
@@ -31,6 +34,7 @@ namespace RPG4.Input
             DontDestroyOnLoad(gameObject);
             inputActions = new InputActions(); // 放在单例判定之后：被回收的重复实例不会构造出无人释放的资产副本。
             inputActions.backpack.Enable(); // 映射常驻启用，订阅方注册的 performed 才会回调。
+            inputActions.player.Enable();
         }
 
         /// <summary>释放映射与资产副本；只在自身仍是当前单例时执行，避免重复实例误清 Instance。</summary>
@@ -42,6 +46,7 @@ namespace RPG4.Input
             if (inputActions == null) return;
 
             inputActions.backpack.Disable();
+            inputActions.player.Disable();
             inputActions.Dispose();
             inputActions = null;
         }

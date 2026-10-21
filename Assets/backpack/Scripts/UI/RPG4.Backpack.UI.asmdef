@@ -9,6 +9,7 @@
         "RPG4.Backpack.Network",
         "RPG4.Backpack.Runtime",
         "RPG4.Input",
+        "RPG4.UI",
         "Mirror",
         "UnityEngine.UI",
         "Unity.TextMeshPro",
