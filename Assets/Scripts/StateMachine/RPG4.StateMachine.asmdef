@@ -1,0 +1,6 @@
+{
+    "name": "RPG4.StateMachine",
+    "rootNamespace": "RPG4.StateMachine",
+    "references": [],
+    "noEngineReferences": true
+}

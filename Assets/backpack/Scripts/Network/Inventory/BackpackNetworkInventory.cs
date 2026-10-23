@@ -8,7 +8,7 @@ using RPG4.Backpack.Items;
 
 namespace RPG4.Backpack.Network
 {
-    /// <summary>库存网络宿主：客户端完整意图经 Command 交给权威核心；物品标识、数量与数值快照经 SyncList 单向同步，展示位置保留在本地。</summary>
+    /// <summary>库存网络宿主：客户端完整意图经 Command 交给权威核心；物品标识、数量、数值快照与权威布局经 SyncList 单向同步。</summary>
     [DisallowMultipleComponent]
     [AddComponentMenu("RPG4/Backpack Network Inventory")]
     public sealed partial class BackpackNetworkInventory : NetworkBehaviour, IBackpackView, IInventoryOperations
@@ -23,7 +23,7 @@ namespace RPG4.Backpack.Network
         private ItemManifestCatalog catalog;
 
         [Header("权威容器尺寸（仅服务端使用）")]
-        [Tooltip("只同步物品身份与状态，不同步位置；尺寸仅用于服务端容量与空间校验。")]
+        [Tooltip("服务端创建权威容器，行列与物品落点同步到客户端。")]
         [SerializeField, Min(1)]
         private int rows = DefaultRows;
 
@@ -33,6 +33,16 @@ namespace RPG4.Backpack.Network
         public int ConfiguredRows => rows; // 预制体配置的展示行数（本地配置，不代表服务端已同步的尺寸）。
 
         public int ConfiguredColumns => columns; // 预制体配置的展示列数（本地配置，不代表服务端已同步的尺寸）。
+
+        [SyncVar(hook = nameof(OnGridSizeChanged))] private int authoritativeRows;
+        [SyncVar(hook = nameof(OnGridSizeChanged))] private int authoritativeColumns;
+        private readonly Dictionary<ulong, InventoryPlacement> mirrorPlacements = new Dictionary<ulong, InventoryPlacement>();
+        private bool mirrorDirty;
+        private bool mirrorReady;
+
+        public int Rows => IsServerInventory ? Container.Rows : authoritativeRows;
+        public int Columns => IsServerInventory ? Container.Columns : authoritativeColumns;
+        public bool IsReady => IsServerInventory || (isClient && core != null && mirrorReady);
 
         private readonly SyncList<NetworkInventoryEntry> entries = new SyncList<NetworkInventoryEntry>();
         private readonly InventoryNetworkProjection projection = new InventoryNetworkProjection();
@@ -88,7 +98,7 @@ namespace RPG4.Backpack.Network
             CatalogChanged?.Invoke(value);
         }
 
-        /// <summary>订阅同步列表回调，用于客户端增量维护镜像。</summary>
+        /// <summary>订阅同步列表回调，客户端在同批变更接收后统一重建镜像。</summary>
         private void Awake()
         {
             entries.Callback += OnEntryChanged;
@@ -113,8 +123,11 @@ namespace RPG4.Backpack.Network
             core.ForwardOperation = RequestInventoryOperation;
             core.CommitConfirm = ConfirmInventoryProjection;
 
+            authoritativeRows = Container.Rows;
+            authoritativeColumns = Container.Columns;
             projection.Clear();
             mirror.Clear();
+            mirrorPlacements.Clear();
             syncedRevision = -1;
             DesyncCount = 0;
             LastError = null;
@@ -162,6 +175,8 @@ namespace RPG4.Backpack.Network
             if (core != null) core.UnsubscribeCommands();
             core = null;
             mirror.Clear();
+            mirrorPlacements.Clear();
+            mirrorReady = false;
             projection.Clear();
             RaiseChanged();
             base.OnStopClient();
@@ -172,7 +187,7 @@ namespace RPG4.Backpack.Network
         /// <summary>同库存的一次完整操作只发送一条 Command；跨库存交互由权威宿主直接执行。</summary>
         private void RequestInventoryOperation(InventoryOperation operation)
         {
-            if (!isClient || !isOwned || !operation.SourceItemId.IsValid
+            if (!isClient || !isOwned || !IsReady || !operation.SourceItemId.IsValid
                 || (operation.Destination != null && !ReferenceEquals(operation.Destination.EventSource, EventSource)))
             {
                 core?.PublishOperationResult(new InventoryOperationResult(operation.RequestId, false,
@@ -180,15 +195,16 @@ namespace RPG4.Backpack.Network
                 return;
             }
             CmdExecuteInventoryOperation(operation.RequestId, (int)operation.Kind,
-                operation.SourceItemId.Value, operation.TargetItemId.Value, operation.Count);
+                operation.SourceItemId.Value, operation.TargetItemId.Value, operation.Count, operation.UpperLeftIndex);
         }
 
         [Command(requiresAuthority = true)]
-        private void CmdExecuteInventoryOperation(int requestId, int kind, ulong sourceId, ulong targetId, int count)
+        private void CmdExecuteInventoryOperation(int requestId, int kind, ulong sourceId, ulong targetId, int count,
+            int upperLeftIndex)
         {
             InventoryOperationResult result = IsServerInventory
                 ? core.ExecuteOperation(new InventoryOperation(requestId, (InventoryOperationKind)kind,
-                    new ItemId(sourceId), new ItemId(targetId), count))
+                    new ItemId(sourceId), new ItemId(targetId), count, upperLeftIndex: upperLeftIndex))
                 : new InventoryOperationResult(requestId, false, ItemId.None, 0, "服务端库存尚未就绪。");
             TargetInventoryOperationCompleted(connectionToClient, result.RequestId, result.Success,
                 result.ResultItemId.Value, result.MovedCount, result.Error, result.SourceStackCount, result.ResultStackCount);
@@ -259,7 +275,7 @@ namespace RPG4.Backpack.Network
             return true;
         }
 
-        /// <summary>服务端从某个堆叠中拆出指定数量并返回新实例标识：核心按「源物品存在 → 可堆叠 → 数量边界（1 .. 堆叠数 - 1）→ 模板可用 → 快照可捕获 → 存在能容纳拆分结果的空白区域」依次复核，任一步失败都不修改任何状态；新实例由源物品快照恢复（换新标识 + 拆分数量），数值原样继承不重新掷点，落点由服务端在空白区域中选取，网格位置仍不同步。</summary>
+        /// <summary>服务端从某个堆叠中拆出指定数量并返回新实例标识：核心按「源物品存在 → 可堆叠 → 数量边界（1 .. 堆叠数 - 1）→ 模板可用 → 快照可捕获 → 存在能容纳拆分结果的空白区域」依次复核，任一步失败都不修改任何状态；新实例由源物品快照恢复（换新标识 + 拆分数量），数值原样继承不重新掷点，落点由服务端在空白区域中选取，落点与占格尺寸同时同步。</summary>
         public bool TryServerSplitStack(ItemId itemId, int splitCount, out ItemId newItemId, out string error)
         {
             newItemId = ItemId.None;
@@ -371,6 +387,15 @@ namespace RPG4.Backpack.Network
             return mirror.TryGetValue(itemId.Value, out item);
         }
 
+        public bool TryGetPlacement(ItemId itemId, out InventoryPlacement placement)
+        {
+            placement = InventoryPlacement.Invalid;
+            if (!IsReady || !itemId.IsValid) return false;
+            if (IsServerInventory) return Container.TryGetItemById(itemId, out RuntimeItem item)
+                && Container.TryGetPlacement(item, out placement);
+            return mirrorPlacements.TryGetValue(itemId.Value, out placement);
+        }
+
         /// <summary>按标识升序复制当前物品（确定性顺序，供调用方只读遍历；先清空目标列表）。</summary>
         public void CopyItems(List<RuntimeItem> destination)
         {
@@ -401,7 +426,7 @@ namespace RPG4.Backpack.Network
 
         // 内部：投影同步与镜像维护。
 
-        /// <summary>把权威容器差异投影到 <see cref="entries"/>：其它物品因缺少标识或模板被拒绝只记诊断，仅 requiredItem（本次新增 / 修改的物品）未进入投影才算失败。</summary>
+        /// <summary>把权威容器差异投影到 <see cref="entries"/>：任意物品投影被拒绝，或 requiredItem（本次新增 / 修改的物品）未进入投影时均返回失败。</summary>
         private bool SyncEntries(out string error, ItemId requiredItem = default)
         {
             if (!IsServerInventory)
@@ -426,6 +451,12 @@ namespace RPG4.Backpack.Network
                 RaiseChanged();
             }
 
+            if (report.Rejected > 0)
+            {
+                error = report.FirstError;
+                return false;
+            }
+
             if (requiredItem.IsValid && !projection.TryGetItem(requiredItem, out _))
             {
                 error = $"物品 {requiredItem} 未能进入投影：{report.FirstError}";
@@ -439,65 +470,76 @@ namespace RPG4.Backpack.Network
         /// <summary>客户端按当前目录与同步条目整体重建镜像，并汇总被拒绝的条目。</summary>
         private void RebuildMirror()
         {
+            mirrorDirty = false;
+            mirrorReady = false;
+            mirrorPlacements.Clear();
+            mirror.Clear();
+            if (Rows < 1 || Columns < 1 || (long)Rows * Columns > InventoryContainer.MaxSlotCount)
+            {
+                RegisterFailure("同步的容器行列非法或尚未就绪。");
+                RaiseChanged();
+                return;
+            }
             int rejected = projection.RestoreAll(entries, catalog, mirror, out string firstError);
+            var occupied = new bool[Rows * Columns];
+            if (rejected == 0)
+            {
+                for (int i = 0; i < entries.Count; i++)
+                {
+                    NetworkInventoryEntry entry = entries[i];
+                    GridCoord dimensions = new GridCoord(entry.width, entry.height);
+                    if (!GridUtils.IsInGridBounds(entry.upperLeftIndex, dimensions, Columns, Rows))
+                    {
+                        firstError = $"物品 {entry.itemId} 的同步位置越界。";
+                        rejected++;
+                        break;
+                    }
+                    int originX = entry.upperLeftIndex % Columns, originY = entry.upperLeftIndex / Columns;
+                    for (int y = 0; y < entry.height && rejected == 0; y++)
+                    for (int x = 0; x < entry.width; x++)
+                    {
+                        int cell = (originY + y) * Columns + originX + x;
+                        if (occupied[cell])
+                        {
+                            firstError = $"物品 {entry.itemId} 的同步占格与其他物品重叠。";
+                            rejected++;
+                            break;
+                        }
+                        occupied[cell] = true;
+                    }
+                    if (rejected != 0) break;
+                    mirrorPlacements.Add(entry.itemId, new InventoryPlacement(mirror[entry.itemId], entry.upperLeftIndex, dimensions));
+                }
+            }
             if (rejected > 0)
             {
+                mirror.Clear();
+                mirrorPlacements.Clear();
                 RegisterFailure("镜像恢复被拒绝：" + firstError);
-                BackpackLog.Error(
-                    LogModule.Network,
-                    $"客户端镜像有 {rejected} 个条目无法恢复（首个原因：{firstError}）。");
+                BackpackLog.Error(LogModule.Network, LastError);
             }
             else
             {
                 LastError = null;
+                mirrorReady = true;
             }
-
-            BackpackLog.Info(
-                LogModule.Network,
-                $"客户端库存镜像已建立：{mirror.Count} 件（初始条目 {entries.Count} 个）。");
             RaiseChanged();
         }
 
-        /// <summary>客户端增量跟随同步列表的操作维护镜像；服务端是权威源，直接跳过。</summary>
-        private void OnEntryChanged(
-            SyncList<NetworkInventoryEntry>.Operation op,
-            int index,
-            NetworkInventoryEntry oldItem,
-            NetworkInventoryEntry newItem)
+        private void OnGridSizeChanged(int previous, int current)
         {
-            // 服务端是权威源，条目变化即自身状态变化，不需要维护镜像。
             if (isServer) return;
-
-            switch (op)
-            {
-                case SyncList<NetworkInventoryEntry>.Operation.OP_ADD:
-                case SyncList<NetworkInventoryEntry>.Operation.OP_INSERT:
-                case SyncList<NetworkInventoryEntry>.Operation.OP_SET:
-                    ApplyToMirror(newItem);
-                    break;
-                case SyncList<NetworkInventoryEntry>.Operation.OP_REMOVEAT:
-                    mirror.Remove(oldItem.itemId);
-                    break;
-                case SyncList<NetworkInventoryEntry>.Operation.OP_CLEAR:
-                    mirror.Clear();
-                    break;
-            }
-
+            mirrorDirty = true;
             RaiseChanged();
         }
 
-        /// <summary>把单个条目恢复为镜像中的运行时实例；恢复失败则从镜像移除并记为不同步。</summary>
-        private void ApplyToMirror(NetworkInventoryEntry entry)
+        /// <summary>同批条目全部应用后再恢复布局，避免交换位置的中间条目被误判重叠。</summary>
+        private void OnEntryChanged(SyncList<NetworkInventoryEntry>.Operation op, int index,
+            NetworkInventoryEntry oldItem, NetworkInventoryEntry newItem)
         {
-            if (!projection.TryRestoreItem(entry, catalog, out RuntimeItem item, out string error))
-            {
-                mirror.Remove(entry.itemId);
-                RegisterFailure("条目恢复失败：" + error);
-                BackpackLog.Error(LogModule.Network, $"客户端拒绝条目 {entry.itemId}：{error}");
-                return;
-            }
-
-            mirror[entry.itemId] = item;
+            if (isServer) return;
+            mirrorDirty = true;
+            RaiseChanged();
         }
 
         /// <summary>取服务端标识生成器：优先用 NetworkManager 上的实例，缺失时启用兜底实例并记一次警告。</summary>
@@ -535,6 +577,8 @@ namespace RPG4.Backpack.Network
         /// <summary>帧末统一派发一次视图变化通知；纯客户端没有容器，额外由宿主自身补发粗粒度变更信号供表现层订阅。</summary>
         private void LateUpdate()
         {
+            if (IsServerInventory && Container.Revision != syncedRevision) SyncEntries(out _);
+            if (!IsServerInventory && mirrorDirty) RebuildMirror();
             if (!changedPending) return;
 
             changedPending = false;

@@ -6,4 +6,10 @@ namespace RPG4.Interaction
         bool CanInteract(PlayerInteraction player);
         void Interact(PlayerInteraction player);
     }
+
+    /// <summary>可选的准星提示；不改变普通交互物体的行为。</summary>
+    public interface IInteractionPrompt
+    {
+        string InteractionPrompt { get; }
+    }
 }

@@ -4,7 +4,7 @@ using RPG4.Backpack.Items;
 
 namespace RPG4.Backpack.Network
 {
-    /// <summary>库存同步条目：SyncList 的元素必须是值类型，因此这里只放「物品身份的稳定投影」（标识、类型标签、堆叠数、运行时数值载荷）；不放运行时实例 / 片段对象 / Unity 引用（模板派生数据不上网）与网格位置（位置由本地表现层负责），字段必须保持 public 实例字段供 Mirror Weaver 生成读写器。</summary>
+    /// <summary>库存同步条目：SyncList 的元素必须是值类型，因此这里只放「物品身份的稳定投影」（标识、类型标签、堆叠数、运行时数值载荷）；不放运行时实例 / 片段对象 / Unity 引用（模板派生数据不上网）；位置与冻结占格尺寸同源于权威容器，字段必须保持 public 实例字段供 Mirror Weaver 生成读写器。</summary>
     public struct NetworkInventoryEntry : IEquatable<NetworkInventoryEntry>
     {
         public ulong itemId; // 运行时实例标识（0 表示未登记，属于非法状态）。
@@ -15,13 +15,20 @@ namespace RPG4.Backpack.Network
 
         public byte[] fragmentState; // 运行时数值载荷，由 RuntimeItemSnapshotCodec 编码；首字节即快照版本。
 
+        public int upperLeftIndex;
+        public int width;
+        public int height;
+
         /// <summary>以运行时物品信息构造条目；载荷为空时抛出 <see cref="ArgumentNullException"/>。</summary>
-        public NetworkInventoryEntry(ItemId itemId, BackpackTag itemType, int stackCount, byte[] fragmentState)
+        public NetworkInventoryEntry(ItemId itemId, BackpackTag itemType, int stackCount, byte[] fragmentState, int upperLeftIndex = 0, int width = 1, int height = 1)
         {
             this.fragmentState = fragmentState ?? throw new ArgumentNullException(nameof(fragmentState));
             this.itemId = itemId.Value;
             this.itemType = itemType.ToString();
             this.stackCount = stackCount;
+            this.upperLeftIndex = upperLeftIndex;
+            this.width = width;
+            this.height = height;
         }
 
         public ItemId Id => new ItemId(itemId); // 物品标识。
@@ -65,6 +72,13 @@ namespace RPG4.Backpack.Network
                 return false;
             }
 
+            if (upperLeftIndex < 0 || upperLeftIndex >= RPG4.Backpack.Inventory.InventoryContainer.MaxSlotCount
+                || width < 1 || height < 1 || (long)width * height > RPG4.Backpack.Inventory.InventoryContainer.MaxSlotCount)
+            {
+                error = $"条目 {itemId} 的位置或占格尺寸非法。";
+                return false;
+            }
+
             if (fragmentState == null || fragmentState.Length == 0)
             {
                 error = $"条目 {itemId} 的运行时状态载荷为空。";
@@ -89,11 +103,12 @@ namespace RPG4.Backpack.Network
             return true;
         }
 
-        /// <summary>状态等价：标识、类型、堆叠数与载荷内容全部一致；用于服务端「只在实际变化时下发」的判断，因此必须比较载荷内容而不是引用。</summary>
+        /// <summary>状态等价：标识、类型、堆叠数、权威位置、占格尺寸与载荷内容全部一致；用于服务端「只在实际变化时下发」的判断，因此必须比较载荷内容而不是引用。</summary>
         public bool StateEquals(NetworkInventoryEntry other)
         {
             if (itemId != other.itemId) return false;
             if (stackCount != other.stackCount) return false;
+            if (upperLeftIndex != other.upperLeftIndex || width != other.width || height != other.height) return false;
             if (!string.Equals(itemType, other.itemType, StringComparison.Ordinal)) return false;
             return PayloadEquals(fragmentState, other.fragmentState);
         }
@@ -111,6 +126,9 @@ namespace RPG4.Backpack.Network
             {
                 int hash = itemId.GetHashCode();
                 hash = (hash * 397) ^ stackCount;
+                hash = (hash * 397) ^ upperLeftIndex;
+                hash = (hash * 397) ^ width;
+                hash = (hash * 397) ^ height;
                 hash = (hash * 397) ^ (itemType == null ? 0 : itemType.GetHashCode());
                 if (fragmentState != null)
                 {

@@ -94,7 +94,7 @@ namespace RPG4.Backpack.Inventory
         public bool CanSubmitTo(IBackpackView destination)
         {
             object destinationSource = destination == null ? commandSource : destination.EventSource;
-            if (commandSource == null || destinationSource == null) return false;
+            if (commandSource == null || destinationSource == null || (destination != null && !destination.IsReady)) return false;
             if (ReferenceEquals(commandSource, destinationSource))
                 return ResolveAuthority() ? Container != null : ForwardOperation != null;
             return ResolveAuthority() && Container != null
@@ -129,30 +129,44 @@ namespace RPG4.Backpack.Inventory
                     return new InventoryOperationResult(operation.RequestId, false, resultId, 0, "目标库存当前不支持此操作。");
             }
 
+            if (operation.UpperLeftIndex < InventoryPlacement.NoIndex)
+                return new InventoryOperationResult(operation.RequestId, false, resultId, 0, "目标索引非法。");
+
             switch (operation.Kind)
             {
                 case InventoryOperationKind.MergeStack:
                 case InventoryOperationKind.SwapStackCounts:
-                    if (!ReferenceEquals(destination, this))
-                    {
-                        error = "跨库存暂不支持合堆或交换数量。";
-                        break;
-                    }
-                    if (!TryResolveItem(operation.TargetItemId, out RuntimeItem target, out error)) break;
+                    if (!destination.TryResolveItem(operation.TargetItemId, out RuntimeItem target, out error)) break;
                     success = Container.TryChangeStackPair(source, target, operation.Count,
-                        operation.Kind == InventoryOperationKind.SwapStackCounts, CommitConfirm, out moved, out error);
+                        operation.Kind == InventoryOperationKind.SwapStackCounts, CommitConfirm, out moved, out error,
+                        destination.Container, destination.CommitConfirm);
                     resultId = target.ItemId;
                     break;
                 case InventoryOperationKind.SplitStack:
                     success = TrySplitStackToEmptySpace(source, operation.Count, destination.Container,
-                        out resultId, out error, destination.CommitConfirm);
+                        out resultId, out error, destination.CommitConfirm, operation.UpperLeftIndex);
                     moved = operation.Count;
                     break;
                 case InventoryOperationKind.TransferItem:
-                    success = Container.TryTransferItemToEmptySpace(source, destination.Container,
+                    moved = source.StackCount;
+                    success = Container.TryTransferItem(source, destination.Container, operation.UpperLeftIndex,
                         CommitConfirm, destination.CommitConfirm, out error);
                     resultId = source.ItemId;
-                    moved = source.StackCount;
+                    break;
+                case InventoryOperationKind.MoveItem:
+                    if (!ReferenceEquals(destination, this))
+                    {
+                        error = "跨库存移动须使用转移操作。";
+                        break;
+                    }
+                    success = Container.TryMoveItem(source, operation.UpperLeftIndex, CommitConfirm, out error);
+                    resultId = source.ItemId;
+                    break;
+                case InventoryOperationKind.SwapItems:
+                    if (!destination.TryResolveItem(operation.TargetItemId, out RuntimeItem swapTarget, out error)) break;
+                    success = Container.TrySwapItems(source, swapTarget, destination.Container,
+                        CommitConfirm, destination.CommitConfirm, out error);
+                    resultId = source.ItemId;
                     break;
                 default:
                     error = "未知的库存操作。";
@@ -208,18 +222,8 @@ namespace RPG4.Backpack.Inventory
                 return false;
             }
 
-            if (!Container.TryAddItem(item, out _, out error))
+            if (!Container.TryReceiveItem(item, CommitConfirm, out error))
             {
-                item = null;
-                return false;
-            }
-
-            // 全部并入已有堆叠时新标识没有成为库存条目，确认整体同步即可。
-            ItemId requiredItem = Container.Contains(item) ? issued : ItemId.None;
-            if (CommitConfirm != null && !CommitConfirm(requiredItem, out error))
-            {
-                Container.TryRemoveItem(item, out _);
-                CommitConfirm(ItemId.None, out _);
                 item = null;
                 return false;
             }
@@ -271,7 +275,7 @@ namespace RPG4.Backpack.Inventory
         }
 
         /// <summary>将指定数量拆成新实例并直接放入同一或另一容器的空位；源容器无需额外空位，数值继承源快照，确认失败时恢复双方状态。</summary>
-        public bool TrySplitStackToEmptySpace(RuntimeItem source, int splitCount, InventoryContainer destination, out ItemId newItemId, out string error, CommitConfirmHandler destinationConfirm = null)
+        public bool TrySplitStackToEmptySpace(RuntimeItem source, int splitCount, InventoryContainer destination, out ItemId newItemId, out string error, CommitConfirmHandler destinationConfirm = null, int upperLeftIndex = InventoryPlacement.NoIndex)
         {
             newItemId = ItemId.None;
             if (!ResolveAuthority()) return Reject("拆分堆叠", "只有权威端可以拆分库存物品。", out error);
@@ -294,10 +298,22 @@ namespace RPG4.Backpack.Inventory
 
             if (!TryBuildSplitInstance(manifest, snapshot, issued, splitCount, out RuntimeItem created, out string buildError))
                 return Reject("拆分堆叠", buildError, out error);
-            if (!Container.TrySplitStackToEmptySpace(source, created, destination, CommitConfirm, destinationConfirm, out error)) return false;
+            if (!Container.TrySplitStackToEmptySpace(source, created, destination, CommitConfirm, destinationConfirm, out error, upperLeftIndex)) return false;
 
             newItemId = issued;
             return true;
+        }
+
+        /// <summary>创建尚未入包的世界实例；共享单机标识，首次创建随机数值，接收失败后可保留同一实例重试。</summary>
+        public static bool TryCreateUnownedItem(ItemManifest manifest, int stackCount, out RuntimeItem item, out string error)
+        {
+            item = null;
+            if (manifest == null)
+            {
+                error = "物品模板为空。";
+                return false;
+            }
+            return manifest.TryCreateRuntimeItem(SharedGenerator.Next(), out item, out error, stackCount);
         }
 
         // 内部实现

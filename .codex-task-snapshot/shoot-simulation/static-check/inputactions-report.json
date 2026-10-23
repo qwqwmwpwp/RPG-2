@@ -1,0 +1,12 @@
+{
+  "result": "passed",
+  "checks": [
+    "InputActions.inputactions parses as JSON.",
+    "Generated wrapper embedded JSON matches the asset exactly.",
+    "player.fire is one Button action with one <Mouse>/leftButton binding.",
+    "Generated fire lookup, field, accessor, callback interface, and started/performed/canceled registration and removal are present once each.",
+    "PlayerInput exposes FirePressed and FireHeld and contains fireArmed/capture-frame gating declarations."
+  ],
+  "callbackDeclarationCount": 10,
+  "limitations": "Static text and JSON checks only; no Unity editor, project logic, tests, analyzers, or source generators were run."
+}

@@ -21,6 +21,7 @@ namespace RPG4.Backpack.UI
         [SerializeField, Min(0.05f)] private float bindingCheckInterval = 0.25f;
 
         [Header("双栏布局")]
+        [SerializeField] private bool usePrefabLayout;
         [SerializeField] private Vector2 padding = new Vector2(24f, 24f);
         [SerializeField, Min(0f)] private float paneSpacing = 48f;
         [SerializeField, Min(0f)] private float titleHeight = 40f;
@@ -39,7 +40,6 @@ namespace RPG4.Backpack.UI
         private bool configurationWarned;
         private float nextBindingCheck;
         private ChestInventory currentChest;
-        private EventSubscription openSubscription;
         private readonly InventoryInputScope inputScope = new InventoryInputScope();
         private object boundPlayerEventSource;
         private object boundChestEventSource;
@@ -54,16 +54,6 @@ namespace RPG4.Backpack.UI
         {
             base.Awake();
             EnsureInitialized();
-        }
-
-        protected override void OnEnable()
-        {
-            base.OnEnable();
-            openSubscription = EventBus.Global.Subscribe<ChestInventory>(
-                CmdChannels.OpenChestUI, EventBus.AnySource, this, OnOpenRequested);
-            nextBindingCheck = 0f;
-            if (!IsOpen) return;
-            RefreshBindings();
         }
 
         private void Update()
@@ -82,20 +72,17 @@ namespace RPG4.Backpack.UI
             if (IsOpen) ArrangeViews();
         }
 
-        protected override void OnDisable()
-        {
-            openSubscription.Dispose();
-            openSubscription = default;
-            base.OnDisable();
-        }
-
-        private void OnOpenRequested(ChestInventory chest) => Open(chest);
-
         /// <summary>显示指定箱子的双栏背包，仅在打开期间保留箱子引用；来源尚未初始化时显示占位格并等待就绪。</summary>
         public bool Open(ChestInventory chest)
         {
             if (chest == null || !EnsureInitialized()) return false;
-            Close();
+            if (IsOpen)
+            {
+                currentChest = chest;
+                RefreshBindings();
+                return true;
+            }
+
             currentChest = chest;
             if (base.Open()) return true;
             currentChest = null;
@@ -106,7 +93,7 @@ namespace RPG4.Backpack.UI
 
         protected override void OnOpened()
         {
-            nextBindingCheck = 0f;
+            nextBindingCheck = Time.unscaledTime + Mathf.Max(0.05f, bindingCheckInterval);
             ui.interaction.enabled = true;
             RefreshBindings();
             inputScope.Capture(PlayerInventory);
@@ -116,8 +103,11 @@ namespace RPG4.Backpack.UI
         /// <summary>显式指定玩家与箱子，左右来源不会随鼠标位置或其他背包窗口改变。</summary>
         public bool Open(BackpackInventory player, ChestInventory chest)
         {
+            BackpackInventory previousPlayer = playerInventory;
             playerInventory = player;
-            return Open(chest);
+            if (Open(chest)) return true;
+            playerInventory = previousPlayer;
+            return false;
         }
 
         /// <summary>隐藏窗口并释放双方显示订阅；保留格子配置，再次 Open 时重新获取与显示库存。</summary>
@@ -154,6 +144,11 @@ namespace RPG4.Backpack.UI
         public void RefreshBindings()
         {
             if (!IsOpen || !EnsureInitialized()) return;
+            if (currentChest == null)
+            {
+                Close();
+                return;
+            }
 
             IBackpackView player = ResolvePlayer();
             BackpackInventory chest = currentChest != null ? currentChest.Inventory : null;
@@ -176,6 +171,7 @@ namespace RPG4.Backpack.UI
             ui.chestView.SetPresentationVisible(true);
             ui.playerTitle.text = player != null ? playerTitleText : waitingPlayerTitleText;
             ui.chestTitle.text = chest != null ? chestTitleText : unboundChestTitleText;
+            inputScope.SetSource(PlayerInventory);
             layoutDirty = true;
         }
 
@@ -216,6 +212,7 @@ namespace RPG4.Backpack.UI
 
         private void ArrangeViews()
         {
+            if (usePrefabLayout) return;
             if (ui.playerView == null || ui.chestView == null || windowRect == null) return;
             RectTransform playerRect = ui.playerView.GetComponent<RectTransform>();
             RectTransform chestRect = ui.chestView.GetComponent<RectTransform>();

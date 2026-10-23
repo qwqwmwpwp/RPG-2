@@ -62,7 +62,7 @@ MonoBehaviour:
   slotLayer: {fileID: 7200000000000000101}
   itemLayer: {fileID: 7200000000000000111}
   overflowText: {fileID: 0}
-  uiFont: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  uiFont: {fileID: 11400000, guid: f12b676d56524a258bf2c7b19fee6454, type: 2}
   slotEmptyColor: {r: 0.059, g: 0.133, b: 0.176, a: 0.9}
   slotOccupiedColor: {r: 0.082, g: 0.184, b: 0.227, a: 0.96}
   slotAvailableColor: {r: 0.357, g: 0.89, b: 0.549, a: 0.55}

@@ -3,8 +3,7 @@
     "rootNamespace": "RPG4.PlayerMovement",
     "references": [
         "RPG4.Input",
-        "RPG4.UI",
-        "Unity.InputSystem",
+        "RPG4.StateMachine",
         "Cinemachine"
     ]
 }

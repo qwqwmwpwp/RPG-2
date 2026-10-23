@@ -2,7 +2,8 @@
     "name": "RPG4.Input",
     "rootNamespace": "RPG4.Input",
     "references": [
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "RPG4.UI"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

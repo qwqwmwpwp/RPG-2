@@ -14,7 +14,7 @@ namespace RPG4.Backpack.UI
             if (localIdentity != null)
             {
                 BackpackNetworkInventory network = localIdentity.GetComponent<BackpackNetworkInventory>();
-                if (network != null && network.EventSource != null) return network;
+                if (network != null) return network.IsReady ? network : null;
             }
 
             return BackpackRegistry.TryGetPrimary(out BackpackInventory backpack) && backpack.IsInitialized

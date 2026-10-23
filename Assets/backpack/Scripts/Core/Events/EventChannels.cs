@@ -19,7 +19,7 @@ namespace RPG4.Backpack.Core
     /// <summary>交互意图命令：发送方只声明意图，不关心谁处理；命令不保证成功，库存操作结果由 <see cref="InvChannels"/> 的状态广播回传。</summary>
     public static class CmdChannels
     {
-        public const string OpenChestUI = "Cmd.Chest.OpenUI"; // 请求打开箱子窗口。载荷 (ChestInventory)，source 为发起交互的箱子；窗口按通配来源订阅。
+        public const string OpenChestUI = "Cmd.Chest.OpenUI"; // 请求打开箱子窗口。载荷 (ChestInventory)，source 为发起交互的箱子；库存 UI 协调器按通配来源订阅。
 
         public const string InventoryOperation = "Cmd.Inventory.Operation"; // 完整库存意图。载荷 (InventoryOperation)。
 

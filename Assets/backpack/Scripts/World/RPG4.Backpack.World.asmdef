@@ -1,0 +1,12 @@
+{
+    "name": "RPG4.Backpack.World",
+    "rootNamespace": "RPG4.Backpack.World",
+    "references": [
+        "RPG4.Backpack.Core",
+        "RPG4.Backpack.Items",
+        "RPG4.Backpack.Runtime",
+        "RPG4.Backpack.Network",
+        "RPG4.Interaction",
+        "Mirror"
+    ]
+}

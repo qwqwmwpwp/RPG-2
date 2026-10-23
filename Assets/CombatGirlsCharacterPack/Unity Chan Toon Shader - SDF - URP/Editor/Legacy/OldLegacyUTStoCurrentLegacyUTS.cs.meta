@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 14a26061ea03a654f961464fac93c186
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 308250
+  packageName: CombatGirls_ShotgunCharacterPack
+  packageVersion: 1.0.2
+  assetPath: Assets/CombatGirlsCharacterPack/Unity Chan Toon Shader - SDF - URP/Editor/Legacy/OldLegacyUTStoCurrentLegacyUTS.cs
+  uploadId: 729879

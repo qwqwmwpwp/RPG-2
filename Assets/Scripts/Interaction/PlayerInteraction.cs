@@ -1,6 +1,5 @@
-using RPG4.UI;
+using RPG4.Input;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 namespace RPG4.Interaction
 {
@@ -9,6 +8,7 @@ namespace RPG4.Interaction
     [DefaultExecutionOrder(100)]
     public sealed class PlayerInteraction : MonoBehaviour
     {
+        [SerializeField] private PlayerInput playerInput;
         [Tooltip("留空时使用 Camera.main；仅在本机玩家上启用本组件。")]
         [SerializeField] private Camera interactionCamera;
         [Tooltip("玩家根节点到命中点的最大距离，支持相机位于玩家身后的第三人称视角。")]
@@ -19,23 +19,26 @@ namespace RPG4.Interaction
         [SerializeField] private CrosshairUI crosshairPrefab;
 
         private readonly RaycastHit[] hitBuffer = new RaycastHit[16];
-        private InputAction interactAction;
         private MonoBehaviour targetComponent;
         private CrosshairUI crosshairUI;
 
         public IInteractable CurrentTarget => targetComponent != null && targetComponent.isActiveAndEnabled
             ? targetComponent as IInteractable : null;
 
-        private bool CanUseInteraction => isActiveAndEnabled && Time.timeScale > 0f
-            && interactionCamera != null && interactionCamera.isActiveAndEnabled
-            && (UIManager.Instance == null || !UIManager.Instance.HasOpenWindows);
+        /// <summary>向本机玩家显示当前交互的结果；不创建额外 UI。</summary>
+        public void ShowInteractionFeedback(string message, bool success)
+        {
+            if (crosshairUI != null) crosshairUI.ShowFeedback(message, success);
+        }
+
+        private bool CanUseInteraction => isActiveAndEnabled
+            && playerInput != null && playerInput.isActiveAndEnabled && playerInput.CanReadGameplayInput
+            && interactionCamera != null && interactionCamera.isActiveAndEnabled;
 
         private void Awake()
         {
+            if (playerInput == null) playerInput = GetComponent<PlayerInput>();
             if (interactionCamera == null) interactionCamera = Camera.main;
-            interactAction = new InputAction("PlayerInteract", InputActionType.Button);
-            interactAction.AddBinding("<Keyboard>/e");
-            interactAction.AddBinding("<Gamepad>/buttonWest");
 
             if (crosshairPrefab != null)
             {
@@ -44,18 +47,19 @@ namespace RPG4.Interaction
             }
         }
 
-        private void OnEnable() => interactAction.Enable();
-
         private void LateUpdate()
         {
             if (interactionCamera == null) interactionCamera = Camera.main;
             targetComponent = CanUseInteraction ? FindTarget() : null;
 
             IInteractable target = CurrentTarget;
-            if (target != null && interactAction.WasPressedThisFrame()) target.Interact(this);
+            if (target != null && playerInput.InteractPressed) target.Interact(this);
 
             // 交互事件可能刚打开窗口或禁用了物品，显示状态在事件之后刷新。
-            if (crosshairUI != null) crosshairUI.SetState(CanUseInteraction, CurrentTarget != null);
+            if (!CanUseInteraction) targetComponent = null;
+            if (crosshairUI != null)
+                crosshairUI.SetState(CanUseInteraction, CurrentTarget != null,
+                    (CurrentTarget as IInteractionPrompt)?.InteractionPrompt);
         }
 
         private MonoBehaviour FindTarget()
@@ -96,14 +100,12 @@ namespace RPG4.Interaction
 
         private void OnDisable()
         {
-            interactAction.Disable();
             targetComponent = null;
             if (crosshairUI != null) crosshairUI.SetState(false, false);
         }
 
         private void OnDestroy()
         {
-            interactAction.Dispose();
             if (crosshairUI != null) Destroy(crosshairUI.gameObject);
         }
     }

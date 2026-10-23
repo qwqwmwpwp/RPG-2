@@ -6,13 +6,13 @@ using RPG4.UI;
 
 namespace RPG4.Backpack.UI
 {
-    /// <summary>库存界面的唯一输入入口，挂在 UIManager 上；窗口更新来源后，向当前会话转发本帧输入。</summary>
+    /// <summary>库存输入入口：采集输入，将开关键交给协调器，并向当前会话转发本帧输入。</summary>
     [DisallowMultipleComponent]
-    [RequireComponent(typeof(UIManager))]
+    [RequireComponent(typeof(InventoryUICoordinator))]
     [DefaultExecutionOrder(50)]
     public sealed class InventoryUIInputRouter : MonoBehaviour
     {
-        private UIManager manager;
+        private InventoryUICoordinator coordinator;
         private InputManager inputHost;
         private InputAction toggleAction;
         private InputAction primaryAction;
@@ -21,12 +21,13 @@ namespace RPG4.Backpack.UI
         private int clickSessionVersion;
         private bool primaryClick;
         private bool secondaryClick;
+        private bool quickTransferClick;
+        private bool chooseSplitQuantityClick;
         private bool inputWarningLogged;
-        private int lastToggleFrame = -1;
 
         public string ToggleKeyLabel => toggleAction != null ? toggleAction.GetBindingDisplayString() : "未设置";
 
-        private void Awake() => manager = GetComponent<UIManager>();
+        private void Awake() => coordinator = GetComponent<InventoryUICoordinator>();
 
         private void OnEnable() => BindInputActions();
 
@@ -39,18 +40,22 @@ namespace RPG4.Backpack.UI
             BindInputActions();
             bool left = primaryClick;
             bool right = secondaryClick;
+            bool quickTransfer = quickTransferClick;
+            bool chooseSplitQuantity = chooseSplitQuantityClick;
             UIBase clicked = clickWindow;
             int clickedSession = clickSessionVersion;
             primaryClick = secondaryClick = false;
+            quickTransferClick = chooseSplitQuantityClick = false;
             clickWindow = null;
-            if (inputHost == null || !TryGetActiveWindow(out UIBase window, out BackpackInteractionController interaction)) return;
+            if (inputHost == null || coordinator == null
+                || !coordinator.TryGetActiveSession(out UIBase window, out BackpackInteractionController interaction)) return;
             if (interaction == null) return;
             InputActions.BackpackActions actions = inputHost.backpackInput;
             interaction.ReceiveInput(new BackpackInteractionController.SessionInput(
                 actions.pointerPosition.ReadValue<Vector2>(), InputManager.HasPointer,
                 clicked == window && clickedSession == interaction.SessionVersion && left,
                 clicked == window && clickedSession == interaction.SessionVersion && right,
-                actions.cancel.WasPressedThisFrame()));
+                actions.cancel.WasPressedThisFrame(), quickTransfer, chooseSplitQuantity));
         }
 
         private void BindInputActions()
@@ -87,16 +92,16 @@ namespace RPG4.Backpack.UI
             toggleAction = primaryAction = secondaryAction = null;
             clickWindow = null;
             primaryClick = secondaryClick = false;
+            quickTransferClick = chooseSplitQuantityClick = false;
         }
 
         private void OnToggle(InputAction.CallbackContext context)
         {
-            if (manager == null || !manager.isActiveAndEnabled || lastToggleFrame == Time.frameCount) return;
-            lastToggleFrame = Time.frameCount;
+            if (coordinator == null || !coordinator.isActiveAndEnabled) return;
             clickWindow = null;
             primaryClick = secondaryClick = false;
-            if (TryGetActiveWindow(out UIBase window, out _)) window.Close();
-            else manager.Toggle<BackpackGridUI>();
+            quickTransferClick = chooseSplitQuantityClick = false;
+            coordinator.ToggleInventory();
         }
 
         private void OnPrimaryClick(InputAction.CallbackContext context) => QueueClick(true);
@@ -105,35 +110,26 @@ namespace RPG4.Backpack.UI
 
         private void QueueClick(bool primary)
         {
-            if (!TryGetActiveWindow(out UIBase window, out BackpackInteractionController interaction)
+            if (coordinator == null
+                || !coordinator.TryGetActiveSession(out UIBase window, out BackpackInteractionController interaction)
                 || interaction == null || !interaction.IsSessionActive) return;
             if (clickWindow != window || clickSessionVersion != interaction.SessionVersion)
             {
                 primaryClick = secondaryClick = false;
+                quickTransferClick = chooseSplitQuantityClick = false;
                 clickWindow = window;
                 clickSessionVersion = interaction.SessionVersion;
             }
-            if (primary) primaryClick = true;
-            else secondaryClick = true;
-        }
-
-        private bool TryGetActiveWindow(out UIBase window, out BackpackInteractionController interaction)
-        {
-            window = null;
-            interaction = null;
-            if (manager == null || !manager.isActiveAndEnabled) return false;
-            ChestBackpackUI chest = manager.Get<ChestBackpackUI>();
-            if (chest != null && chest.IsOpen)
+            if (primary)
             {
-                window = chest;
-                interaction = chest.Interaction;
-                return true;
+                primaryClick = true;
+                quickTransferClick = Keyboard.current != null && Keyboard.current.ctrlKey.isPressed;
             }
-            BackpackGridUI backpack = manager.Get<BackpackGridUI>();
-            if (backpack == null || !backpack.IsOpen) return false;
-            window = backpack;
-            interaction = backpack.Interaction;
-            return true;
+            else
+            {
+                secondaryClick = true;
+                chooseSplitQuantityClick = Keyboard.current != null && Keyboard.current.shiftKey.isPressed;
+            }
         }
     }
 }

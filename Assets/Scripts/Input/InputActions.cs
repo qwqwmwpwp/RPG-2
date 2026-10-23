@@ -228,6 +228,33 @@ namespace RPG4.Input
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": true
+                },
+                {
+                    ""name"": ""interact"",
+                    ""type"": ""Button"",
+                    ""id"": ""e858236d-5cb7-4f2a-88fe-f30729909cd8"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""aim"",
+                    ""type"": ""Button"",
+                    ""id"": ""a3f9c561-1b28-4e42-9f71-0b7ecf6385a2"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""fire"",
+                    ""type"": ""Button"",
+                    ""id"": ""64c226ca-54d1-4886-bfab-3f6374252bb2"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
                 }
             ],
             ""bindings"": [
@@ -307,6 +334,50 @@ namespace RPG4.Input
                     ""action"": ""zoom"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""a4c4c03c-9aca-4e13-b735-cef61fcbf7c5"",
+                    ""path"": ""<Keyboard>/e"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""interact"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""8d2f3ea0-31be-4847-9379-4379aad0cade"",
+                    ""path"": ""<Gamepad>/buttonWest"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""interact"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""6b31b2ed-e1d0-4d62-8d20-14e71bc8ab62"",
+                    ""path"": ""<Mouse>/rightButton"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""aim"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""0371dc6a-2df5-4fda-a600-1728fbc49cf0"",
+                    ""path"": ""<Mouse>/leftButton"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""fire"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
                 }
             ]
         }
@@ -325,6 +396,9 @@ namespace RPG4.Input
             m_player_move = m_player.FindAction("move", throwIfNotFound: true);
             m_player_look = m_player.FindAction("look", throwIfNotFound: true);
             m_player_zoom = m_player.FindAction("zoom", throwIfNotFound: true);
+            m_player_interact = m_player.FindAction("interact", throwIfNotFound: true);
+            m_player_aim = m_player.FindAction("aim", throwIfNotFound: true);
+            m_player_fire = m_player.FindAction("fire", throwIfNotFound: true);
         }
 
         ~@InputActions()
@@ -549,6 +623,9 @@ namespace RPG4.Input
         private readonly InputAction m_player_move;
         private readonly InputAction m_player_look;
         private readonly InputAction m_player_zoom;
+        private readonly InputAction m_player_interact;
+        private readonly InputAction m_player_aim;
+        private readonly InputAction m_player_fire;
         /// <summary>
         /// Provides access to input actions defined in input action map "player".
         /// </summary>
@@ -572,6 +649,18 @@ namespace RPG4.Input
             /// Provides access to the underlying input action "player/zoom".
             /// </summary>
             public InputAction @zoom => m_Wrapper.m_player_zoom;
+            /// <summary>
+            /// Provides access to the underlying input action "player/interact".
+            /// </summary>
+            public InputAction @interact => m_Wrapper.m_player_interact;
+            /// <summary>
+            /// Provides access to the underlying input action "player/aim".
+            /// </summary>
+            public InputAction @aim => m_Wrapper.m_player_aim;
+            /// <summary>
+            /// Provides access to the underlying input action "player/fire".
+            /// </summary>
+            public InputAction @fire => m_Wrapper.m_player_fire;
             /// <summary>
             /// Provides access to the underlying input action map instance.
             /// </summary>
@@ -607,6 +696,15 @@ namespace RPG4.Input
                 @zoom.started += instance.OnZoom;
                 @zoom.performed += instance.OnZoom;
                 @zoom.canceled += instance.OnZoom;
+                @interact.started += instance.OnInteract;
+                @interact.performed += instance.OnInteract;
+                @interact.canceled += instance.OnInteract;
+                @aim.started += instance.OnAim;
+                @aim.performed += instance.OnAim;
+                @aim.canceled += instance.OnAim;
+                @fire.started += instance.OnFire;
+                @fire.performed += instance.OnFire;
+                @fire.canceled += instance.OnFire;
             }
 
             /// <summary>
@@ -627,6 +725,15 @@ namespace RPG4.Input
                 @zoom.started -= instance.OnZoom;
                 @zoom.performed -= instance.OnZoom;
                 @zoom.canceled -= instance.OnZoom;
+                @interact.started -= instance.OnInteract;
+                @interact.performed -= instance.OnInteract;
+                @interact.canceled -= instance.OnInteract;
+                @aim.started -= instance.OnAim;
+                @aim.performed -= instance.OnAim;
+                @aim.canceled -= instance.OnAim;
+                @fire.started -= instance.OnFire;
+                @fire.performed -= instance.OnFire;
+                @fire.canceled -= instance.OnFire;
             }
 
             /// <summary>
@@ -731,6 +838,27 @@ namespace RPG4.Input
             /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
             /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
             void OnZoom(InputAction.CallbackContext context);
+            /// <summary>
+            /// Method invoked when associated input action "interact" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+            /// </summary>
+            /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+            /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+            /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+            void OnInteract(InputAction.CallbackContext context);
+            /// <summary>
+            /// Method invoked when associated input action "aim" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+            /// </summary>
+            /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+            /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+            /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+            void OnAim(InputAction.CallbackContext context);
+            /// <summary>
+            /// Method invoked when associated input action "fire" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+            /// </summary>
+            /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+            /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+            /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+            void OnFire(InputAction.CallbackContext context);
         }
     }
 }

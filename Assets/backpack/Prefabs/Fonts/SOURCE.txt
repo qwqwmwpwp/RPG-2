@@ -1,0 +1,7 @@
+Noto Sans SC, Regular (weight 400).
+Source: https://github.com/google/fonts/tree/main/ofl/notosanssc
+Downloaded: 2026-10-22
+Source file: NotoSansSC[wght].ttf
+Static weight generated with fontTools.varLib.instancer (wght=400); other design axes retained at defaults.
+License: SIL Open Font License 1.1; see OFL.txt.
+TMP asset: dynamic SDF with source font included and multiple atlases enabled.

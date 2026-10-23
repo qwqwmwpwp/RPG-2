@@ -1,0 +1,163 @@
+{
+  "verification_method": "Static text inspection of current files only; no Unity launch, project code execution, import, build, or tests.",
+  "resources": {
+    "Assets/player/player.controller": {
+      "sha256": "edc9c66c9308ec3f44d13303a08d4b1f48d701f399cc8b15838e48288e45f0de",
+      "object_count": 10,
+      "unique_object_ids": true,
+      "local_reference_count": 10,
+      "unresolved_local_references": []
+    },
+    "Assets/player/player.prefab": {
+      "sha256": "fdb78425d9475f4c0e0ce2ba1447b3fa2fc19f48fc7daa6f38cb813e0ec0a4e5",
+      "object_count": 367,
+      "unique_object_ids": true,
+      "local_reference_count": 367,
+      "unresolved_local_references": []
+    },
+    "Assets/player/UpperBodyShooting.mask": {
+      "guid": "206db03de8174df68bd28b139650251d",
+      "fileID": 31900000,
+      "unique_guid": true,
+      "humanoid_mask_values": [
+        0,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1
+      ],
+      "slot_order": [
+        "Root",
+        "Body",
+        "Head",
+        "LeftLeg",
+        "RightLeg",
+        "LeftArm",
+        "RightArm",
+        "LeftFingers",
+        "RightFingers",
+        "LeftFootIK",
+        "RightFootIK",
+        "LeftHandIK",
+        "RightHandIK"
+      ],
+      "encoding_reference": "https://github.com/Unity-Technologies/UnityCsReference/blob/master/Modules/Animation/ScriptBindings/AvatarMask.bindings.cs",
+      "transform_elements": []
+    }
+  },
+  "contracts": {
+    "shooting_component": {
+      "script": "Assets/Scripts/PlayerMovement/PlayerShootSimulation.cs",
+      "guid": "fd651b88b3b94e5c983ba447bf9c13b2",
+      "guid_unique": true,
+      "component_fileID": 710000012,
+      "root_game_object_fileID": 5963844012669126346,
+      "serialized_fields": {
+        "animator": 392520455371606196,
+        "shotClip": {
+          "guid": "c64081e16b2eb784285608f8182fac46",
+          "fileID": -319965354747890277
+        },
+        "shotInterval": 0.16,
+        "shotAnimationDuration": 0.24,
+        "layerFadeInDuration": 0.06,
+        "layerFadeOutDuration": 0.12
+      },
+      "fields_present_in_script_and_prefab": true
+    },
+    "animator": {
+      "fileID": 392520455371606196,
+      "controller_guid": "b583316d375e4584ab56b156933af3c9",
+      "layer_name": "UpperBody Shooting",
+      "layer_index": 1,
+      "layer_weight": 1,
+      "blend_mode": "Override",
+      "base_layer_ik_pass": false,
+      "shooting_layer_ik_pass": true,
+      "states": {
+        "Empty": {
+          "fileID": 710000013,
+          "motion": null,
+          "write_defaults": false
+        },
+        "HipFire": {
+          "fileID": 710000014,
+          "clip_guid": "c64081e16b2eb784285608f8182fac46",
+          "clip_fileID": -319965354747890277,
+          "write_defaults": false
+        },
+        "ADSFire": {
+          "fileID": 710000015,
+          "clip_guid": "c64081e16b2eb784285608f8182fac46",
+          "clip_fileID": -319965354747890277,
+          "write_defaults": false
+        }
+      },
+      "parameters": {
+        "ShotSpeed": {
+          "type": "float",
+          "default": 1,
+          "used_by": [
+            "HipFire",
+            "ADSFire"
+          ]
+        },
+        "AimLocomotionSpeed": {
+          "type": "float",
+          "default": 1,
+          "used_by": [
+            "Base Layer.AimLocomotion"
+          ]
+        }
+      }
+    },
+    "player_data": {
+      "component_fileID": 710000006,
+      "hipFire.moveSpeed": 6
+    },
+    "aim_pose": {
+      "component_fileID": 710000009,
+      "finalIkLayer": 1
+    },
+    "clip": {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_Shoot.fbx",
+      "guid": "c64081e16b2eb784285608f8182fac46",
+      "fileID": -319965354747890277,
+      "clip_name": "AimIdle_Shoot",
+      "loopTime": false,
+      "third_party_meta_modified": false,
+      "existing_event": "SwitchSocket(To_Hand_R_Socket) at time 0"
+    }
+  },
+  "scene_inheritance": {
+    "path": "Assets/Scenes/Main.unity",
+    "player_prefab_guid": "f2d4f027e36129f4e9c02cfb0488b20d",
+    "instance_fileID": 7331079584931666036,
+    "source_prefab_matches": true,
+    "removed_components": [],
+    "added_components": [],
+    "existing_camera_controller_override_fileID": 740000004,
+    "controller_override_present": false,
+    "component_enabled_override_present": false,
+    "new_component_inherited_from_prefab": true,
+    "scene_modified_for_this_task": false
+  },
+  "backups": [
+    ".codex-task-snapshot/shoot-simulation/before/Assets/player/player.controller",
+    ".codex-task-snapshot/shoot-simulation/before/Assets/player/player.prefab"
+  ],
+  "limitations": [
+    "No runtime verification performed; actual blend results and IK callbacks require manual Unity validation.",
+    "Always-weight-one shooting layer uses Empty with no Motion and Write Defaults off; the actual return to the underlying pose after firing needs manual verification.",
+    "Only the final UpperBody Shooting layer enables IKPass; OnAnimatorIK behavior during Empty needs manual verification.",
+    "Unity Humanoid Body includes Hips, Spine, and Chest. Root and leg channels are disabled, but Hips cannot be separated from Spine using Humanoid body-part slots."
+  ]
+}

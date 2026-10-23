@@ -175,6 +175,21 @@ namespace RPG4.Backpack.Network
                     continue;
                 }
 
+                if (!container.TryGetPlacement(item, out InventoryPlacement placement))
+                {
+                    rejected++;
+                    if (firstError == null) firstError = "物品缺少权威放置记录。";
+                    continue;
+                }
+                entry.upperLeftIndex = placement.UpperLeftIndex;
+                entry.width = placement.Dimensions.X;
+                entry.height = placement.Dimensions.Y;
+                if (!entry.TryValidate(out error))
+                {
+                    rejected++;
+                    if (firstError == null) firstError = error;
+                    continue;
+                }
                 itemsById[entry.itemId] = item;
                 liveIds.Add(entry.itemId);
 

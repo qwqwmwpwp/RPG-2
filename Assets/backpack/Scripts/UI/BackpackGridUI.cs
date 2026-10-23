@@ -14,9 +14,11 @@ namespace RPG4.Backpack.UI
         [SerializeField] private BackpackInteractionController interaction;
         [SerializeField] private TMP_Text hudHint;
         [SerializeField] private string openKeyHint;
+        [SerializeField] private bool usePrefabLayout;
         [SerializeField, Min(0.05f)] private float bindingCheckInterval = 0.25f;
 
         private readonly InventoryInputScope inputScope = new InventoryInputScope();
+        private IBackpackView preparedInventory;
         private IBackpackView boundInventory;
         private object boundEventSource;
         private RectTransform windowRect;
@@ -52,35 +54,33 @@ namespace RPG4.Backpack.UI
         private void Start()
         {
             if (EnsureDisplay()) SyncWindowSize();
-        }
-
-        protected override void OnEnable()
-        {
-            base.OnEnable();
-            nextBindingCheck = 0f;
+            RefreshClosedHint();
         }
 
         private void Update()
         {
+            // 关闭时只按需更新提示，不绑定库存或维护交互会话。
+            if (!IsOpen && hudHint == null) return;
             if (Time.unscaledTime >= nextBindingCheck)
             {
                 nextBindingCheck = Time.unscaledTime + Mathf.Max(0.05f, bindingCheckInterval);
-                BindInventory(LocalBackpackSourceResolver.Resolve());
+                if (!IsOpen)
+                {
+                    RefreshClosedHint();
+                    return;
+                }
+
+                IBackpackView source = LocalBackpackSourceResolver.Resolve();
+                if (source == null)
+                {
+                    Close();
+                    return;
+                }
+                BindInventory(source);
             }
-            if (IsOpen) inputScope.SetSource(Inventory);
+            if (!IsOpen) return;
+            inputScope.SetSource(Inventory);
             SyncWindowSize();
-        }
-
-        protected override void OnDisable()
-        {
-            base.OnDisable();
-            Unbind();
-        }
-
-        protected override void OnDestroy()
-        {
-            Unbind();
-            base.OnDestroy();
         }
 
         private bool EnsureDisplay()
@@ -96,53 +96,40 @@ namespace RPG4.Backpack.UI
 
         private void SyncWindowSize()
         {
+            if (usePrefabLayout) return;
             if (windowRect != null && containerRect != null) windowRect.sizeDelta = containerRect.sizeDelta;
         }
 
         private void BindInventory(IBackpackView source)
         {
-            if (!EnsureDisplay()) return;
             object eventSource = source?.EventSource;
-            if (ReferenceEquals(boundInventory, source))
-            {
-                if (ReferenceEquals(boundEventSource, eventSource)) return;
-                if (interaction != null) interaction.EndSession();
-                containerUI.BindInventory(source);
-                boundEventSource = eventSource;
-                if (IsOpen && interaction != null) interaction.BeginSession(containerUI);
-                return;
-            }
+            if (ReferenceEquals(boundInventory, source) && ReferenceEquals(boundEventSource, eventSource)) return;
 
-            Unbind();
-            if (source == null) return;
+            // 改绑只结束旧交互，不关闭窗口或释放当前输入状态。
+            if (interaction != null) interaction.EndSession();
             boundInventory = source;
             boundEventSource = eventSource;
             containerUI.BindInventory(source);
-            SetHint(OpenKeyLabel + "   /   打开背包");
-        }
-
-        private void Unbind()
-        {
-            Close();
-            if (interaction != null) interaction.EndSession();
-            inputScope.Release();
-            boundInventory = null;
-            boundEventSource = null;
-            if (containerUI != null) containerUI.UnbindInventory();
-            SetHint("等待本地玩家 · " + OpenKeyLabel + " 打开背包");
+            if (interaction != null) interaction.BeginSession(containerUI);
         }
 
         protected override bool CanOpen()
         {
-            BindInventory(LocalBackpackSourceResolver.Resolve());
-            return Inventory != null && EnsureDisplay() && containerUI.Columns > 0 && containerUI.Rows > 0;
+            preparedInventory = null;
+            IBackpackView source = LocalBackpackSourceResolver.Resolve();
+            if (source == null || !source.IsReady || source.EventSource == null || !EnsureDisplay()
+                || containerUI.Columns < 1 || containerUI.Rows < 1) return false;
+            preparedInventory = source;
+            return true;
         }
 
         protected override void OnOpened()
         {
-            containerUI.Redraw();
+            IBackpackView source = preparedInventory;
+            preparedInventory = null;
+            BindInventory(source);
+            nextBindingCheck = Time.unscaledTime + Mathf.Max(0.05f, bindingCheckInterval);
             SyncWindowSize();
-            if (interaction != null) interaction.BeginSession(containerUI);
             inputScope.Capture(Inventory);
             containerUI.SetPresentationVisible(true);
             if (hudHint != null) hudHint.gameObject.SetActive(false);
@@ -152,8 +139,23 @@ namespace RPG4.Backpack.UI
         {
             if (interaction != null) interaction.EndSession();
             inputScope.Release();
-            if (containerUI != null) containerUI.SetPresentationVisible(false);
-            if (hudHint != null) hudHint.gameObject.SetActive(true);
+            preparedInventory = boundInventory = null;
+            boundEventSource = null;
+            if (containerUI != null)
+            {
+                containerUI.UnbindInventory();
+                containerUI.SetPresentationVisible(false);
+            }
+            nextBindingCheck = 0f;
+            RefreshClosedHint();
+        }
+
+        private void RefreshClosedHint()
+        {
+            if (hudHint == null || IsOpen) return;
+            SetHint(LocalBackpackSourceResolver.Resolve() != null
+                ? OpenKeyLabel + "   /   打开背包"
+                : "等待本地玩家 · " + OpenKeyLabel + " 打开背包");
         }
 
         private void SetHint(string text)

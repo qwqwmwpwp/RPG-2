@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using RPG4.Backpack.Items;
+using RPG4.Backpack.Inventory;
 
 namespace RPG4.Backpack.UI
 {
@@ -37,14 +38,11 @@ namespace RPG4.Backpack.UI
         }
     }
 
-    /// <summary>仅用于本机 UI 的占位排布，不改变库存容器。</summary>
+    /// <summary>权威放置记录的只读 UI 投影；不自动寻位，也不保存独立位置。</summary>
     public sealed class InventoryGridLayout
     {
         private const int NoOwner = -1;
 
-        private readonly Dictionary<ItemId, GridDisplayPlacement> previous = new Dictionary<ItemId, GridDisplayPlacement>();
-        private readonly List<GridDisplayItem> sorted = new List<GridDisplayItem>();
-        private readonly HashSet<ItemId> seen = new HashSet<ItemId>();
         private bool[] occupied;
         private ItemId[] ownerIds;
         private int[] ownerUpperLefts;
@@ -70,7 +68,6 @@ namespace RPG4.Backpack.UI
         /// <summary>清空排布结果与占用标记。</summary>
         public void Clear()
         {
-            previous.Clear();
             Placed.Clear();
             Overflow.Clear();
             Array.Clear(occupied, 0, occupied.Length);
@@ -93,59 +90,26 @@ namespace RPG4.Backpack.UI
             return ownerId.IsValid;
         }
 
-        /// <summary>按「上次位置优先、其余行优先寻位」排布。</summary>
-        public void Arrange(IReadOnlyList<GridDisplayItem> items) => Arrange(items, null);
-
-        /// <summary>排布物品，显式指定位置优先于上次位置，放不下则回退到上次位置或自动寻位；位置是纯本地 UI 状态，不参与网络复制，也不改变库存容器。</summary>
-        public void Arrange(IReadOnlyList<GridDisplayItem> items, IReadOnlyDictionary<ItemId, Vector2Int> preferred)
+        /// <summary>逐项投影权威落点。缺失、越界或冲突记录只进入未显示列表，绝不猜测新位置。</summary>
+        public void Project(IReadOnlyList<GridDisplayItem> items, IBackpackView inventory)
         {
             if (items == null) throw new ArgumentNullException(nameof(items));
-            Placed.Clear();
-            Overflow.Clear();
-            sorted.Clear();
-            seen.Clear();
-            Array.Clear(occupied, 0, occupied.Length);
-            Array.Clear(ownerIds, 0, ownerIds.Length);
-            for (int i = 0; i < ownerUpperLefts.Length; i++) ownerUpperLefts[i] = NoOwner;
-            for (int i = 0; i < items.Count; i++)
+            Clear();
+            foreach (GridDisplayItem item in items)
             {
-                if (!seen.Add(items[i].Id)) throw new ArgumentException("物品标识重复。", nameof(items));
-                sorted.Add(items[i]);
-            }
-            sorted.Sort((a, b) => a.Id.CompareTo(b.Id));
-            var pending = new List<GridDisplayItem>();
-            foreach (GridDisplayItem item in sorted)
-            {
-                if (preferred != null
-                    && preferred.TryGetValue(item.Id, out Vector2Int pinned)
-                    && Fits(item, pinned))
+                if (inventory == null || !inventory.IsReady
+                    || !inventory.TryGetPlacement(item.Id, out InventoryPlacement placement)
+                    || placement.UpperLeftIndex < 0 || placement.UpperLeftIndex >= ownerIds.Length
+                    || placement.Dimensions.X < 1 || placement.Dimensions.Y < 1)
                 {
-                    Place(item, pinned);
+                    Overflow.Add(item);
                     continue;
                 }
-
-                if (previous.TryGetValue(item.Id, out GridDisplayPlacement old)
-                    && Fits(item, old.Position))
-                    Place(item, old.Position);
-                else
-                    pending.Add(item);
+                var projected = new GridDisplayItem(item.Id, placement.Dimensions.X, placement.Dimensions.Y);
+                var position = new Vector2Int(placement.UpperLeftIndex % Columns, placement.UpperLeftIndex / Columns);
+                if (Fits(projected, position)) Place(projected, position);
+                else Overflow.Add(projected);
             }
-            foreach (GridDisplayItem item in pending)
-            {
-                bool found = false;
-                for (int y = 0; y < Rows && !found; y++)
-                    for (int x = 0; x < Columns && !found; x++)
-                    {
-                        var position = new Vector2Int(x, y);
-                        if (!Fits(item, position)) continue;
-                        Place(item, position);
-                        found = true;
-                    }
-                if (!found) Overflow.Add(item);
-            }
-            previous.Clear();
-            foreach (GridDisplayPlacement placement in Placed) previous.Add(placement.Item.Id, placement);
-            Placed.Sort((a, b) => a.Item.Id.CompareTo(b.Item.Id));
         }
 
         /// <summary>判断物品能否放在指定落点（不越界且覆盖范围内无占用）。</summary>

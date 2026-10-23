@@ -13,6 +13,7 @@ namespace RPG4.UI
         [Tooltip("游戏开始时在窗口根节点下各生成一次，并注册到管理器。")]
         [SerializeField] private UIBase[] windowPrefabs = Array.Empty<UIBase>();
         private readonly List<UIBase> registeredWindows = new List<UIBase>();
+        private int lastWindowChangeFrame = -1;
 
         public static UIManager Instance { get; private set; }
 
@@ -26,6 +27,9 @@ namespace RPG4.UI
                 return false;
             }
         }
+
+        /// <summary>窗口开关当帧也占用游戏输入，避免关闭窗口的按键或点击继续传给角色和镜头。</summary>
+        public bool BlocksGameplayInput => HasOpenWindows || lastWindowChangeFrame == Time.frameCount;
 
         private void Awake()
         {
@@ -113,13 +117,16 @@ namespace RPG4.UI
             window.gameObject.SetActive(true);
             window.enabled = true;
             window.transform.SetAsLastSibling();
+            lastWindowChangeFrame = Time.frameCount;
             window.ApplyOpen();
             return true;
         }
 
         public void Close(UIBase window)
         {
-            if (window != null && window.Manager == this) window.ApplyClose();
+            if (window == null || window.Manager != this || !window.IsOpen) return;
+            lastWindowChangeFrame = Time.frameCount;
+            window.ApplyClose();
         }
 
         public void CloseAll()

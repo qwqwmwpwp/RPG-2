@@ -6,13 +6,14 @@ using RPG4.Backpack.Items;
 
 namespace RPG4.Backpack.UI
 {
-    /// <summary>单双栏共用的物品交互会话：由宿主开始、传入输入并结束。位置留在本机，库存变化以完整操作提交。</summary>
+    /// <summary>单双栏共用的物品交互会话：由宿主开始、传入输入并结束。位置与数量都由权威库存提供，操作以完整事务提交。</summary>
     [DisallowMultipleComponent]
     [DefaultExecutionOrder(100)]
     public sealed class BackpackInteractionController : MonoBehaviour
     {
         private const float OperationTimeout = 5f;
         [SerializeField] private RectTransform cursorLayer;
+        [SerializeField] private InventorySplitQuantityUI quantityDialog;
 
         public RectTransform CursorLayer => cursorLayer;
 
@@ -24,14 +25,18 @@ namespace RPG4.Backpack.UI
             public bool PrimaryClick { get; }
             public bool SecondaryClick { get; }
             public bool Cancel { get; }
+            public bool QuickTransfer { get; }
+            public bool ChooseSplitQuantity { get; }
 
-            public SessionInput(Vector2 pointerPosition, bool hasPointer, bool primaryClick, bool secondaryClick, bool cancel)
+            public SessionInput(Vector2 pointerPosition, bool hasPointer, bool primaryClick, bool secondaryClick, bool cancel, bool quickTransfer = false, bool chooseSplitQuantity = false)
             {
                 PointerPosition = pointerPosition;
                 HasPointer = hasPointer;
                 PrimaryClick = primaryClick;
                 SecondaryClick = secondaryClick;
                 Cancel = cancel;
+                QuickTransfer = quickTransfer;
+                ChooseSplitQuantity = chooseSplitQuantity;
             }
         }
 
@@ -44,7 +49,9 @@ namespace RPG4.Backpack.UI
             public RuntimeItem Item;
             public int SourceCount;
             public int Count;
-            public Vector2Int Origin;
+            public int OriginIndex;
+            public int Columns;
+            public int Rows;
             public Vector2Int GrabOffset;
             public GridCoord Dimensions;
             public bool IsPartial => Count < SourceCount;
@@ -55,8 +62,6 @@ namespace RPG4.Backpack.UI
             public int RequestId;
             public BackpackContainerUI Destination;
             public IBackpackView Inventory;
-            public Vector2Int Position;
-            public bool PlaceResult;
             public float Deadline;
             public InventoryOperationResult? Result;
             public EventSubscription Subscription;
@@ -132,6 +137,15 @@ namespace RPG4.Backpack.UI
         private readonly CarryPreview preview = new CarryPreview();
         private CarrySession carry;
         private PendingOperation pending;
+        private BackpackContainerUI splitSource;
+        private ItemId splitItemId;
+        private int splitSourceCount;
+        private int splitIndex;
+        private IBackpackView splitInventory;
+        private int splitOriginIndex;
+        private GridCoord splitDimensions;
+        private int splitColumns;
+        private int splitRows;
         private SessionInput pendingInput;
         private int receivedInputFrame = -1;
         private BackpackContainerUI hoveredView;
@@ -140,9 +154,26 @@ namespace RPG4.Backpack.UI
         private int highlightedIndex = -1;
         private GridCoord highlightedDimensions;
         private BackpackHoverState highlightedState;
+        private string operationFeedback = string.Empty;
+        private float feedbackExpiresAt;
+        private string contextHint = string.Empty;
+        private string cachedCarryHint;
+        private DropAction cachedHintAction;
+        private bool cachedHintPartial;
+        public Vector2 PointerPosition { get; private set; }
+        public bool HasPointer { get; private set; }
 
         public bool IsSessionActive => views.Length > 0;
         public int SessionVersion { get; private set; }
+        public bool IsWaitingForOperation => pending != null;
+        public bool IsCarrying => carry != null;
+        public bool IsChoosingSplitQuantity => quantityDialog != null && quantityDialog.IsOpen;
+        public bool HasMultipleContainers => views.Length > 1;
+        public RuntimeItem DisplayedItem => carry != null ? carry.Item
+            : hoveredView != null && hoveredView.TryGetItem(hoveredItemId, out RuntimeItem item) ? item : null;
+        public string ContextHint => contextHint;
+        public string OperationFeedback => pending != null ? "正在提交操作，请稍候…"
+            : Time.unscaledTime < feedbackExpiresAt ? operationFeedback : string.Empty;
 
         /// <summary>为一个或多个容器开始交互；已有会话会先完整结束。容器可等待数据源就绪。</summary>
         public void BeginSession(params BackpackContainerUI[] containers)
@@ -155,6 +186,7 @@ namespace RPG4.Backpack.UI
             }
             cursorLayer.SetAsLastSibling();
             views = containers ?? Array.Empty<BackpackContainerUI>();
+            contextHint = string.Empty;
             SessionVersion++;
         }
 
@@ -163,6 +195,8 @@ namespace RPG4.Backpack.UI
         {
             if (!IsSessionActive || !isActiveAndEnabled) return;
             pendingInput = input;
+            PointerPosition = input.PointerPosition;
+            HasPointer = input.HasPointer;
             receivedInputFrame = Time.frameCount;
         }
 
@@ -172,10 +206,17 @@ namespace RPG4.Backpack.UI
             CancelInteraction();
             preview.Dispose();
             views = Array.Empty<BackpackContainerUI>();
+            HasPointer = false;
+            operationFeedback = contextHint = string.Empty;
+            feedbackExpiresAt = 0f;
         }
 
         private void CancelInteraction()
         {
+            if (quantityDialog != null) quantityDialog.Close();
+            splitSource = null;
+            splitInventory = null;
+            splitItemId = ItemId.None;
             if (pending != null) pending.Subscription.Dispose();
             pending = null;
             pendingInput = default;
@@ -204,17 +245,35 @@ namespace RPG4.Backpack.UI
             if (!CanInteract())
             {
                 CancelInteraction();
+                contextHint = "等待库存就绪…";
                 return;
             }
             if (hasInput && input.Cancel)
             {
+                bool wasPending = pending != null;
                 CancelInteraction();
+                if (wasPending) SetOperationFeedback("已停止等待，库存以同步结果为准");
+                contextHint = "已取消拿取";
                 return;
             }
+            if (quantityDialog != null && quantityDialog.IsOpen)
+            {
+                if (!IsSplitSelectionCurrent())
+                {
+                    CancelInteraction();
+                    SetOperationFeedback("物品已变化，请重新选择拆分数量");
+                }
+                contextHint = "选择拆出数量 · 确认后选择落点 · Esc 取消";
+                return;
+            }
+            if (quantityDialog != null && quantityDialog.LastInteractionFrame == Time.frameCount) return;
             if (pending != null) return;
             if (carry != null && (!ReferenceEquals(carry.Source.Inventory, carry.Inventory)
                 || !carry.Source.TryGetItem(carry.Item.ItemId, out RuntimeItem current)
-                || current.StackCount != carry.SourceCount))
+                || current.StackCount != carry.SourceCount
+                || carry.Source.Columns != carry.Columns || carry.Source.Rows != carry.Rows
+                || !carry.Inventory.TryGetPlacement(carry.Item.ItemId, out InventoryPlacement currentPlacement)
+                || currentPlacement.UpperLeftIndex != carry.OriginIndex || currentPlacement.Dimensions != carry.Dimensions))
             {
                 CancelInteraction();
                 return;
@@ -223,6 +282,7 @@ namespace RPG4.Backpack.UI
             {
                 ClearFeedback();
                 preview.Hide();
+                contextHint = carry != null ? "移动鼠标选择落点 · Esc 取消" : "将鼠标移到物品上查看详情";
                 return;
             }
 
@@ -230,21 +290,25 @@ namespace RPG4.Backpack.UI
             BackpackContainerUI target = ResolveView(point, out TileParams tile);
             SetHoveredItem(target, tile.TileIndex);
             // 取消与右键先于放下，避免同一帧把取消解释成一次提交。
-            if (input.SecondaryClick) HandleSecondaryClick(target, tile.TileIndex);
+            if (input.SecondaryClick && input.ChooseSplitQuantity && carry == null) OpenQuantityDialog(target, tile.TileIndex);
+            else if (input.SecondaryClick) HandleSecondaryClick(target, tile.TileIndex);
             else if (input.PrimaryClick)
             {
-                if (carry == null) BeginCarry(target, tile.TileIndex, false);
+                if (carry == null && input.QuickTransfer && views.Length == 2) TryQuickTransfer(target, tile.TileIndex);
+                else if (carry == null) BeginCarry(target, tile.TileIndex, false);
                 else TryDrop(target, tile.TileIndex);
             }
             UpdateFeedback(target, tile.TileIndex, point);
+            UpdateContextHint(target, tile.TileIndex);
         }
 
-        // 视图先刷新数据，再用返回的确切 ID 放置结果；不依赖网络通知的到达顺序。
+        // 成功结果只结束等待；位置和数量始终由 Changed 驱动的权威投影刷新。
+        // 结果与同步任何先后顺序都不需要本地放置、猜测数量或回滚。
         private void LateUpdate()
         {
             if (pending == null) return;
             if (!IsViewReady(pending.Destination) || !ReferenceEquals(pending.Inventory, pending.Destination.Inventory)
-                || !ReferenceEquals(carry.Inventory, carry.Source.Inventory))
+                || carry == null || !ReferenceEquals(carry.Inventory, carry.Source.Inventory))
             {
                 CancelInteraction();
                 return;
@@ -252,30 +316,14 @@ namespace RPG4.Backpack.UI
             if (pending.Result.HasValue)
             {
                 InventoryOperationResult result = pending.Result.Value;
-                if (!result.Success)
-                {
-                    BackpackLog.Warn(LogModule.Interaction, result.Error);
-                    CancelInteraction();
-                    return;
-                }
-                bool sourceVisible = carry.Source.TryGetItem(carry.Item.ItemId, out RuntimeItem source);
-                bool sourceSynced = result.SourceStackCount == 0 ? !sourceVisible
-                    : sourceVisible && source.StackCount == result.SourceStackCount;
-                bool resultSynced = pending.Destination.TryGetItem(result.ResultItemId, out RuntimeItem resultItem)
-                    && resultItem.StackCount == result.ResultStackCount;
-                if (sourceSynced && resultSynced)
-                {
-                    BackpackContainerUI destination = pending.Destination;
-                    if (pending.PlaceResult) destination.SetManualPosition(result.ResultItemId, pending.Position);
-                    bool refreshDestination = destination != carry.Source;
-                    CancelInteraction();
-                    if (refreshDestination) destination.Redraw();
-                    return;
-                }
+                if (!result.Success) BackpackLog.Warn(LogModule.Interaction, result.Error);
+                CancelInteraction();
+                SetOperationFeedback(result.Success ? "操作完成" : "操作未完成，请重试");
+                return;
             }
             if (Time.unscaledTime < pending.Deadline) return;
-            BackpackLog.Warn(LogModule.Interaction, "库存操作结果等待超时，显示已恢复。库存以实际返回的数据为准。");
             CancelInteraction();
+            SetOperationFeedback("等待超时，库存以同步结果为准");
         }
 
         private bool CanInteract()
@@ -306,12 +354,6 @@ namespace RPG4.Backpack.UI
             return canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
         }
 
-        private static GridCoord GetDimensions(RuntimeItem item)
-        {
-            GridFragment fragment = item.GetFragment<GridFragment>();
-            return new GridCoord(Mathf.Max(1, fragment?.Width ?? 1), Mathf.Max(1, fragment?.Height ?? 1));
-        }
-
         private void BeginCarry(BackpackContainerUI source, int index, bool partial)
         {
             if (source == null || !source.TryGetCellOwner(index, out ItemId id, out _)
@@ -325,10 +367,75 @@ namespace RPG4.Backpack.UI
                 Item = item,
                 SourceCount = item.StackCount,
                 Count = partial ? 1 : item.StackCount,
-                Origin = placement.Position,
+                OriginIndex = placement.Position.y * source.Columns + placement.Position.x,
+                Columns = source.Columns,
+                Rows = source.Rows,
                 GrabOffset = new Vector2Int(clicked.X - placement.Position.x, clicked.Y - placement.Position.y),
-                Dimensions = GetDimensions(item)
+                Dimensions = new GridCoord(placement.Item.Width, placement.Item.Height)
             };
+            UpdateSourceDisplay();
+        }
+
+        private void TryQuickTransfer(BackpackContainerUI source, int index)
+        {
+            if (views.Length != 2 || source == null) return;
+            BackpackContainerUI destination = views[0] == source ? views[1] : views[0];
+            if (destination == source || !IsViewReady(destination)
+                || ReferenceEquals(source.Inventory, destination.Inventory)) return;
+            BeginCarry(source, index, false);
+            if (carry == null) return;
+            Submit(InventoryOperationKind.TransferItem, destination, -1, ItemId.None);
+        }
+
+        private void OpenQuantityDialog(BackpackContainerUI source, int index)
+        {
+            if (quantityDialog == null)
+            {
+                SetOperationFeedback("拆分数量面板未配置");
+                return;
+            }
+            if (source == null || !source.TryGetCellOwner(index, out ItemId id, out _)
+                || !source.TryGetItem(id, out RuntimeItem item) || !item.IsStackable || item.StackCount <= 1
+                || !source.Inventory.TryGetPlacement(id, out InventoryPlacement placement)) return;
+            splitSource = source;
+            splitItemId = id;
+            splitSourceCount = item.StackCount;
+            splitIndex = index;
+            splitInventory = source.Inventory;
+            splitOriginIndex = placement.UpperLeftIndex;
+            splitDimensions = placement.Dimensions;
+            splitColumns = source.Columns;
+            splitRows = source.Rows;
+            ClearFeedback();
+            quantityDialog.Open(item.StackCount - 1, ConfirmSplitQuantity);
+        }
+
+        private bool IsSplitSelectionCurrent() => splitSource != null
+            && ReferenceEquals(splitSource.Inventory, splitInventory)
+            && splitSource.Columns == splitColumns && splitSource.Rows == splitRows
+            && splitSource.TryGetItem(splitItemId, out RuntimeItem item) && item.StackCount == splitSourceCount
+            && splitInventory.TryGetPlacement(splitItemId, out InventoryPlacement placement)
+            && placement.UpperLeftIndex == splitOriginIndex && placement.Dimensions == splitDimensions
+            && splitSource.TryGetCellOwner(splitIndex, out ItemId owner, out _) && owner == splitItemId;
+
+        private void ConfirmSplitQuantity(int count)
+        {
+            if (!IsSplitSelectionCurrent())
+            {
+                splitSource = null;
+                splitInventory = null;
+                splitItemId = ItemId.None;
+                SetOperationFeedback("物品已变化，请重新选择拆分数量");
+                return;
+            }
+            BackpackContainerUI source = splitSource;
+            int index = splitIndex;
+            splitSource = null;
+            splitInventory = null;
+            splitItemId = ItemId.None;
+            BeginCarry(source, index, true);
+            if (carry == null) return;
+            carry.Count = Mathf.Clamp(count, 1, carry.SourceCount - 1);
             UpdateSourceDisplay();
         }
 
@@ -345,6 +452,7 @@ namespace RPG4.Backpack.UI
                 return;
             }
             if (target != carry.Source || !target.TryGetCellOwner(index, out ItemId id, out _) || id != carry.Item.ItemId) return;
+            if (carry.Count >= carry.SourceCount) return;
             carry.Count++;
             UpdateSourceDisplay();
         }
@@ -374,12 +482,12 @@ namespace RPG4.Backpack.UI
             if (region.HasSpace || (!carry.IsPartial && sameInventory && region.ValidItem?.ItemId == carry.Item.ItemId))
             {
                 if (!carry.IsPartial && sameInventory) return DropAction.Place;
-                if (!(carry.Inventory is IInventoryOperations source) || !source.CanSubmitTo(target.Inventory)
-                    || !(target.Inventory is IInventoryOperations destination) || !destination.HasEmptySpace(carry.Dimensions)) return DropAction.Blocked;
+                if (!(carry.Inventory is IInventoryOperations source) || !source.CanSubmitTo(target.Inventory)) return DropAction.Blocked;
                 return carry.IsPartial ? DropAction.Split : DropAction.Transfer;
             }
-            // 双栏保留空位转移规则；合并和交换只用于单栏。
-            if (views.Length != 1 || !sameInventory || region.ValidItem == null) return DropAction.Blocked;
+            // 合并和交换也由库存事务校验，跨库存手动落点使用命中的确切物品。
+            if (region.ValidItem == null || !(carry.Inventory is IInventoryOperations writer)
+                || !writer.CanSubmitTo(target.Inventory)) return DropAction.Blocked;
             RuntimeItem other = region.ValidItem;
             if (!carry.Item.IsStackable || !other.IsStackable || !carry.Item.ItemType.MatchesTagExact(other.ItemType))
                 return carry.IsPartial ? DropAction.Blocked : DropAction.SwapPosition;
@@ -398,33 +506,34 @@ namespace RPG4.Backpack.UI
                     CancelInteraction();
                     return;
                 case DropAction.Place:
-                    target.SetManualPosition(carry.Item.ItemId, new Vector2Int(index % target.Columns, index / target.Columns));
-                    CancelInteraction();
-                    target.Redraw();
+                    Submit(InventoryOperationKind.MoveItem, target, index, ItemId.None);
                     return;
                 case DropAction.SwapPosition:
-                    target.SetManualPosition(carry.Item.ItemId, new Vector2Int(region.UpperLeftIndex % target.Columns, region.UpperLeftIndex / target.Columns));
-                    target.SetManualPosition(region.ValidItem.ItemId, carry.Origin);
-                    CancelInteraction();
+                    Submit(InventoryOperationKind.SwapItems, target, index, region.ValidItem.ItemId);
                     return;
                 case DropAction.Merge:
-                    Submit(InventoryOperationKind.MergeStack, target, index, region.ValidItem.ItemId, false);
+                    Submit(InventoryOperationKind.MergeStack, target, index, region.ValidItem.ItemId);
                     return;
                 case DropAction.SwapStackCounts:
-                    Submit(InventoryOperationKind.SwapStackCounts, target, index, region.ValidItem.ItemId, false);
+                    Submit(InventoryOperationKind.SwapStackCounts, target, index, region.ValidItem.ItemId);
                     return;
                 case DropAction.Split:
-                    Submit(InventoryOperationKind.SplitStack, target, index, ItemId.None, true);
+                    Submit(InventoryOperationKind.SplitStack, target, index, ItemId.None);
                     return;
                 case DropAction.Transfer:
-                    Submit(InventoryOperationKind.TransferItem, target, index, ItemId.None, true);
+                    Submit(InventoryOperationKind.TransferItem, target, index, ItemId.None);
                     return;
             }
+            SetOperationFeedback("此处无法放置，请选择可用位置");
         }
 
-        private void Submit(InventoryOperationKind kind, BackpackContainerUI target, int index, ItemId other, bool placeResult)
+        private void Submit(InventoryOperationKind kind, BackpackContainerUI target, int index, ItemId other)
         {
-            if (!(carry.Inventory is IInventoryOperations operations) || !operations.CanSubmitTo(target.Inventory)) return;
+            if (!(carry.Inventory is IInventoryOperations operations) || !operations.CanSubmitTo(target.Inventory))
+            {
+                SetOperationFeedback("当前无法操作该库存");
+                return;
+            }
             int requestId = unchecked(++nextRequestId);
             if (requestId == 0) requestId = unchecked(++nextRequestId);
             pending = new PendingOperation
@@ -432,21 +541,57 @@ namespace RPG4.Backpack.UI
                 RequestId = requestId,
                 Destination = target,
                 Inventory = target.Inventory,
-                Position = new Vector2Int(index % target.Columns, index / target.Columns),
-                PlaceResult = placeResult,
                 Deadline = Time.unscaledTime + OperationTimeout
             };
             pending.Subscription = EventBus.Global.Subscribe<InventoryOperationResult>(
                 InvChannels.OperationCompleted, carry.Inventory.EventSource, this, OnOperationCompleted);
             preview.Hide();
+            carry.Source.ClearStackDisplay(carry.Item.ItemId);
+            carry.Source.ClearHiddenItem();
+            carry.Source.Redraw();
             ClearFeedback();
             EventBus.Global.Publish(CmdChannels.InventoryOperation, carry.Inventory.EventSource,
-                new InventoryOperation(requestId, kind, carry.Item.ItemId, other, carry.Count, target.Inventory));
+                new InventoryOperation(requestId, kind, carry.Item.ItemId, other, carry.Count, target.Inventory, upperLeftIndex: index));
         }
 
         private void OnOperationCompleted(InventoryOperationResult result)
         {
             if (pending != null && pending.RequestId == result.RequestId) pending.Result = result;
+        }
+
+        private void SetOperationFeedback(string message)
+        {
+            operationFeedback = message;
+            feedbackExpiresAt = Time.unscaledTime + 4f;
+        }
+
+        private void UpdateContextHint(BackpackContainerUI target, int index)
+        {
+            if (quantityDialog != null && quantityDialog.IsOpen) { contextHint = "选择拆出数量 · 确认后选择落点 · Esc 取消"; return; }
+            if (pending != null) { contextHint = "等待库存确认…"; return; }
+            if (carry != null)
+            {
+                DropAction action = ResolveDrop(target, index, out _, out _);
+                bool partial = carry.IsPartial;
+                if (cachedCarryHint == null || cachedHintAction != action || cachedHintPartial != partial)
+                {
+                    cachedHintAction = action;
+                    cachedHintPartial = partial;
+                    string cancel = partial ? " · 右键原堆增加数量 · Esc 取消" : " · 右键 / Esc 取消";
+                    cachedCarryHint = (action == DropAction.Blocked ? "无法放置" : action == DropAction.Merge ? "左键合并堆叠"
+                        : action == DropAction.SwapPosition || action == DropAction.SwapStackCounts ? "左键交换"
+                        : action == DropAction.Return ? "左键放回原堆" : action == DropAction.Transfer ? "左键转移"
+                        : action == DropAction.Split ? "左键拆出并放置" : "左键放置") + cancel;
+                }
+                contextHint = cachedCarryHint;
+                return;
+            }
+            RuntimeItem item = DisplayedItem;
+            if (item == null) { contextHint = "将鼠标移到物品上查看详情"; return; }
+            bool canSplit = item.IsStackable && item.StackCount > 1;
+            contextHint = views.Length == 2
+                ? canSplit ? "左键拿取 · 右键逐个拆分 · Shift + 右键选择数量 · Ctrl + 左键自动转移" : "左键拿取 · Ctrl + 左键自动转移"
+                : canSplit ? "左键拿取 · 右键逐个拆分 · Shift + 右键选择数量" : "左键拿取";
         }
 
         private void SetHoveredItem(BackpackContainerUI target, int index)
@@ -467,7 +612,9 @@ namespace RPG4.Backpack.UI
             bool swap = action == DropAction.Merge || action == DropAction.SwapPosition || action == DropAction.SwapStackCounts;
             BackpackHoverState state = action == DropAction.Blocked ? BackpackHoverState.Blocked
                 : swap ? BackpackHoverState.Swap : BackpackHoverState.Available;
-            GridCoord dimensions = swap ? GetDimensions(region.ValidItem) : carry.Dimensions;
+            GridCoord dimensions = carry.Dimensions;
+            if (swap && target.TryGetPlacement(region.ValidItem.ItemId, out GridDisplayPlacement placement))
+                dimensions = new GridCoord(placement.Item.Width, placement.Item.Height);
             int highlightIndex = swap ? region.UpperLeftIndex : index;
             if (highlightedView != target || highlightedIndex != highlightIndex || highlightedState != state || highlightedDimensions != dimensions)
             {

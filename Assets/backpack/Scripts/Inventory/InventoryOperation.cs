@@ -8,14 +8,16 @@ namespace RPG4.Backpack.Inventory
         MergeStack,
         SwapStackCounts,
         SplitStack,
-        TransferItem
+        TransferItem,
+        MoveItem,
+        SwapItems
     }
 
     /// <summary>一次完整的库存意图；Destination 留空表示来源库存。</summary>
     public readonly struct InventoryOperation
     {
         public InventoryOperation(int requestId, InventoryOperationKind kind, ItemId sourceItemId,
-            ItemId targetItemId = default, int count = 0, IBackpackView destination = null)
+            ItemId targetItemId = default, int count = 0, IBackpackView destination = null, int upperLeftIndex = InventoryPlacement.NoIndex)
         {
             RequestId = requestId;
             Kind = kind;
@@ -23,6 +25,7 @@ namespace RPG4.Backpack.Inventory
             TargetItemId = targetItemId;
             Count = count;
             Destination = destination;
+            UpperLeftIndex = upperLeftIndex;
         }
 
         public int RequestId { get; }
@@ -31,6 +34,7 @@ namespace RPG4.Backpack.Inventory
         public ItemId TargetItemId { get; }
         public int Count { get; }
         public IBackpackView Destination { get; }
+        public int UpperLeftIndex { get; }
     }
 
     public readonly struct InventoryOperationResult

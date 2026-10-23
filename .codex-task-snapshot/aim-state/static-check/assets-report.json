@@ -1,0 +1,20 @@
+{
+  "yaml_files_checked": 4,
+  "input_asset_matches_wrapper": true,
+  "existing_input_maps_preserved": true,
+  "aim_clips_verified": [
+    "R_AimIdle.fbx",
+    "R_AimWalk_F.fbx",
+    "R_AimWalk_B.fbx",
+    "R_AimWalk_FL.fbx",
+    "R_AimWalk_FR.fbx",
+    "R_AimWalk_BL.fbx",
+    "R_AimWalk_BR.fbx"
+  ],
+  "local_references_valid": true,
+  "root_motion_disabled": true,
+  "ik_pass_enabled": true,
+  "current_scene_local_references_valid": true,
+  "concurrent_camera_scene_overrides_preserved": true,
+  "new_diff_whitespace_valid": true
+}

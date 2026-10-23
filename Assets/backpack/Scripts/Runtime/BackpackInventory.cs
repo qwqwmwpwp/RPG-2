@@ -50,6 +50,8 @@ namespace RPG4.Backpack.Runtime
 
         public InventoryContainer Container => core != null ? core.Container : null; // 权威容器；Awake 创建后不变。
 
+        public bool IsReady => Container != null;
+
         public bool IsInitialized => Container != null; // 核心与权威容器是否已创建。
 
         public int Rows => Container?.Rows ?? 0; // 实际行数；尚未初始化时为 0。
@@ -173,6 +175,12 @@ namespace RPG4.Backpack.Runtime
 
         #region 物品占位查询
 
+        public bool TryGetPlacement(ItemId itemId, out InventoryPlacement placement)
+        {
+            placement = InventoryPlacement.Invalid;
+            return TryGetItem(itemId, out RuntimeItem item) && Container.TryGetPlacement(item, out placement);
+        }
+
         public bool TryGetPlacement(RuntimeItem item, out InventoryPlacement placement)
         {
             placement = InventoryPlacement.Invalid;
@@ -236,6 +244,9 @@ namespace RPG4.Backpack.Runtime
             return Container.TryPlaceItem(item, startIndex, out error);
         }
 
+        public static bool TryCreateUnownedItem(ItemManifest manifest, int stackCount, out RuntimeItem item, out string error)
+            => InventoryHostCore.TryCreateUnownedItem(manifest, stackCount, out item, out error);
+
         /// <summary>将现有实例整批收进背包，先合并同类堆叠再落空格；失败时不改变状态。</summary>
         public bool TryAddItem(RuntimeItem item, out int remainder, out string error)
         {
@@ -266,7 +277,7 @@ namespace RPG4.Backpack.Runtime
             return Container.TryTransferItem(item, destination.Container, out error);
         }
 
-        /// <summary>将本背包中的物品整件或整堆转入目标首个合法空白矩形，不合并已有堆叠；失败双方不变。UI 成功后可另行设置本地展示位置。</summary>
+        /// <summary>将本背包中的物品整件或整堆转入目标首个合法空白矩形，不合并已有堆叠；失败双方不变。落点由权威容器决定。</summary>
         public bool TryTransferItemToEmptySpace(RuntimeItem item, BackpackInventory destination, out string error)
         {
             if (!EnsureContainer(out error)) return false;

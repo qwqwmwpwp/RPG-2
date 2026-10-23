@@ -26,6 +26,7 @@ namespace RPG4.Backpack.UI
         [SerializeField] private Vector2 slotSpacing;
         [SerializeField] private RectTransform slotLayer;
         [SerializeField] private RectTransform itemLayer;
+        [SerializeField] private RectTransform viewport;
 
         [Header("显示")]
         [SerializeField] private TMP_Text overflowText;
@@ -121,27 +122,14 @@ namespace RPG4.Backpack.UI
             }
         }
 
-        /// <summary>本机显示状态（不上网）：本地位置表、显示数量覆盖、携带隐藏物与悬停物，含跨帧复用的清理缓冲。</summary>
+        /// <summary>本机预览状态（不上网）：显示数量覆盖、携带隐藏物与悬停物，含跨帧复用的清理缓冲。</summary>
         private sealed class LocalDisplayState
         {
-            private readonly Dictionary<ItemId, Vector2Int> manualPositions = new Dictionary<ItemId, Vector2Int>(); // 本地位置表：物品 → 落点（列、行）。
             private readonly Dictionary<ItemId, int> stackDisplayOverrides = new Dictionary<ItemId, int>(); // 显示数量覆盖：物品 → 期望显示数量（虚拟部分携带时源物品显示「总数 − 已取」），不改变库存数据。
             private readonly List<ItemId> pruneBuffer = new List<ItemId>(); // 清理位置表与显示覆盖的复用缓冲。
 
             public ItemId HiddenItemId { get; private set; } = ItemId.None; // 携带期间从网格隐藏的物品（仍占格，避免其它物品回流造成抖动）。
             public ItemId HoveredItemId { get; private set; } = ItemId.None; // 当前悬停高亮的物品（重绘后需要补一次着色）。
-
-            public IReadOnlyDictionary<ItemId, Vector2Int> ManualPositions => manualPositions; // 供排布读取的本地位置表。
-
-            /// <summary>写入物品的本地位置（列、行）；越界位置在排布时会被忽略并自动寻位。</summary>
-            public void SetManualPosition(ItemId id, Vector2Int position)
-            {
-                if (!id.IsValid) return;
-                manualPositions[id] = position;
-            }
-
-            /// <summary>清除某物品的本地位置记录；返回是否确有记录。</summary>
-            public bool ClearManualPosition(ItemId id) => manualPositions.Remove(id);
 
             /// <summary>写入某物品的显示数量覆盖。</summary>
             public void SetStackDisplay(ItemId id, int displayStack)
@@ -167,20 +155,6 @@ namespace RPG4.Backpack.UI
             {
                 if (hovered) HoveredItemId = id;
                 else if (HoveredItemId == id) HoveredItemId = ItemId.None;
-            }
-
-            /// <summary>丢弃位置表中已不在库存里的物品，避免长期挂留失效标识。</summary>
-            public void PruneManualPositions(IReadOnlyDictionary<ItemId, RuntimeItem> itemsById)
-            {
-                if (manualPositions.Count == 0) return;
-                pruneBuffer.Clear();
-                foreach (KeyValuePair<ItemId, Vector2Int> pair in manualPositions)
-                {
-                    if (!itemsById.ContainsKey(pair.Key)) pruneBuffer.Add(pair.Key);
-                }
-
-                foreach (ItemId id in pruneBuffer) manualPositions.Remove(id);
-                pruneBuffer.Clear();
             }
 
             /// <summary>丢弃失效或已自愈的显示覆盖：物品已消失，或真实堆叠数已降到覆盖值（说明主端已生效），都改用真值显示。</summary>
@@ -210,7 +184,6 @@ namespace RPG4.Backpack.UI
             /// <summary>清空全部本机显示状态（解绑时调用）。</summary>
             public void Clear()
             {
-                manualPositions.Clear();
                 stackDisplayOverrides.Clear();
                 HiddenItemId = ItemId.None;
                 HoveredItemId = ItemId.None;
@@ -266,7 +239,11 @@ namespace RPG4.Backpack.UI
         public int Columns { get; private set; }
         public int Rows { get; private set; }
         public IBackpackView Inventory { get; private set; }
-        public bool IsReady => Inventory != null && Inventory.EventSource != null && itemLayer != null && Columns > 0 && Rows > 0;
+        public bool IsReady => Inventory != null && Inventory.IsReady && Inventory.EventSource != null && itemLayer != null && Columns > 0 && Rows > 0;
+        public int ItemStackCount => render.itemsById.Count;
+        public long TotalItemCount { get; private set; }
+        public int OccupiedCellCount { get; private set; }
+        public int OverflowItemCount => layout != null ? layout.Overflow.Count : 0;
         private GridMetrics Metrics => new GridMetrics(cellSize, slotSpacing);
 
         #endregion
@@ -408,9 +385,8 @@ namespace RPG4.Backpack.UI
         private bool SyncGridSize(IBackpackView source)
         {
             if (source == null) return false;
-            InventoryContainer container = source.EventSource as InventoryContainer;
-            int columns = container != null ? container.Columns : source.ConfiguredColumns;
-            int rows = container != null ? container.Rows : source.ConfiguredRows;
+            int columns = source.Columns;
+            int rows = source.Rows;
             if (columns < 1 || rows < 1 || (long)columns * rows > 65536) return false;
             if (columns == Columns && rows == Rows) return false;
             BuildGrid(columns, rows);
@@ -503,7 +479,7 @@ namespace RPG4.Backpack.UI
 
         #region 重绘管线
 
-        /// <summary>本机状态（本地位置表、隐藏物、悬停态）变化后重绘一次；数据层变化经 Inv.Changed 广播置脏、帧末合并，不经过此方法。</summary>
+        /// <summary>本机预览状态（隐藏物、悬停态）变化后重绘一次；数据层变化经 Inv.Changed 广播置脏、帧末合并，不经过此方法。</summary>
         public void Redraw()
         {
             if (!EnsureInitialized()) return;
@@ -519,22 +495,26 @@ namespace RPG4.Backpack.UI
             if (layout == null || layout.Columns != Columns || layout.Rows != Rows) layout = new InventoryGridLayout(Columns, Rows);
 
             // 每次重绘都重取物品列表：堆叠数是活引用会自更新，但增删物品（拆分出的新实例、被移除的源物品）必须重读列表才可见。
-            if (Inventory != null) Inventory.CopyItems(render.snapshot);
+            if (Inventory != null && Inventory.IsReady) Inventory.CopyItems(render.snapshot);
             else render.snapshot.Clear();
 
             render.ClearIndex();
+            TotalItemCount = 0;
             foreach (RuntimeItem item in render.snapshot)
             {
                 if (item == null) continue;
+                TotalItemCount += item.StackCount;
                 GridFragment grid = item.GetFragment<GridFragment>();
                 render.displayItems.Add(new GridDisplayItem(item.ItemId, Mathf.Max(1, grid?.Width ?? 1), Mathf.Max(1, grid?.Height ?? 1)));
                 render.itemsById[item.ItemId] = item;
             }
 
-            // 本地位置表优先于自动寻位；已消失的物品同步清掉位置记录。
-            local.PruneManualPositions(render.itemsById);
+            // 数量覆盖只服务携带预览；所有落点直接投影权威库存。
             local.PruneStackDisplayOverrides(render.itemsById);
-            layout.Arrange(render.displayItems, local.ManualPositions);
+            layout.Project(render.displayItems, Inventory);
+            OccupiedCellCount = 0;
+            for (int i = 0; i < layout.Occupied.Count; i++)
+                if (layout.Occupied[i]) OccupiedCellCount++;
 
             // 格子底色：悬停反馈态优先，其次空闲 / 占用两态。
             ApplySlotColors();
@@ -658,12 +638,6 @@ namespace RPG4.Backpack.UI
 
         #region 本机显示状态
 
-        /// <summary>写入物品的本地位置（列、行）；越界位置在排布时会被忽略并自动寻位。</summary>
-        public void SetManualPosition(ItemId id, Vector2Int position) => local.SetManualPosition(id, position);
-
-        /// <summary>清除某物品的本地位置记录；返回是否确有记录。</summary>
-        public bool ClearManualPosition(ItemId id) => local.ClearManualPosition(id);
-
         /// <summary>写入某物品的显示数量覆盖（右键拆分时源物品显示「总数 − 已取数量」）；只影响本机显示，不改动库存数据。调用方随后自行 <see cref="Redraw"/>。</summary>
         public void SetStackDisplay(ItemId id, int displayStack) => local.SetStackDisplay(id, displayStack);
 
@@ -714,7 +688,7 @@ namespace RPG4.Backpack.UI
         /// <summary>按标识取本帧快照中的物品数据。</summary>
         public bool TryGetItem(ItemId id, out RuntimeItem item) => render.itemsById.TryGetValue(id, out item);
 
-        /// <summary>取物品当前的本机排布（落点 + 占位尺寸）。</summary>
+        /// <summary>取物品当前的权威落点投影（落点 + 占位尺寸）。</summary>
         public bool TryGetPlacement(ItemId id, out GridDisplayPlacement placement)
         {
             if (layout != null)
@@ -761,7 +735,7 @@ namespace RPG4.Backpack.UI
             return layout.TryGetCellOwner(index, out ownerId, out upperLeftIndex);
         }
 
-        /// <summary>基于本地排布做落点空间查询：语义与 InventoryContainer.QuerySpace 一致但以本机显示位置为准，是本交互层同一帧内唯一的落点判定来源。</summary>
+        /// <summary>基于权威落点投影预览空间；实际可写性由库存事务最终校验。</summary>
         public SpaceQueryResult<RuntimeItem> QuerySpace(int startIndex, GridCoord dimensions)
         {
             if (layout == null || dimensions.X < 1 || dimensions.Y < 1) return SpaceQueryResult<RuntimeItem>.Empty;
@@ -807,6 +781,7 @@ namespace RPG4.Backpack.UI
         public bool TryResolveTile(Vector2 screenPoint, Camera uiCamera, out TileParams tile)
         {
             tile = TileParams.Empty;
+            if (viewport != null && !RectTransformUtility.RectangleContainsScreenPoint(viewport, screenPoint, uiCamera)) return false;
             if (itemLayer == null || Columns < 1 || Rows < 1 || cellSize <= 0f) return false;
             if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(itemLayer, screenPoint, uiCamera, out Vector2 local)) return false;
 
