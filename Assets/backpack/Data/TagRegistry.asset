@@ -18,9 +18,15 @@ MonoBehaviour:
   - FragmentTags.Default.StackableFragment
   - FragmentTags.Consumable.ConsumableFragment
   - FragmentTags.Equip.EquipmentFragment
+  - FragmentTags.Equip.WeaponDefinition
   - GameItems.Equipment.Weapons.Sword
   - GameItems.Equipment.Cloaks.RedCloak
   - GameItems.Consumables.Potions.Red.Small
   - GameItems.Craftables.FireFernFruit
   - GameItems.Equipment.Armors.IronArmor
   - GameItems.Equipment.Weapons.Greatsword
+  - GameItems.Equipment.Weapons.Rifle.StyleWood
+  - GameItems.Equipment.Weapons.Rifle.StyleMetal
+  - GameItems.Equipment.Weapons.Rifle.RealWood
+  - GameItems.Equipment.Weapons.Rifle.RealMetal
+  - FragmentTags.Default.Description

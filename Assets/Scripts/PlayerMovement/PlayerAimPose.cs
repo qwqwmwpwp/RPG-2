@@ -1,104 +1,128 @@
+using RPG4.PlayerIntent;
 using UnityEngine;
+using UnityEngine.Animations.Rigging;
 
 namespace RPG4.PlayerMovement
 {
-    /// <summary>在 Humanoid IK Pass 中叠加上半身俯仰；手部 IK 仍由武器组件负责。</summary>
+    /// <summary>将共享意图提交给 BodyAim、Weapon、SupportHand 三段 Rig。</summary>
     [DisallowMultipleComponent]
-    [DefaultExecutionOrder(-50)]
-    [RequireComponent(typeof(Animator))]
+    [RequireComponent(typeof(Animator), typeof(RigBuilder))]
     public sealed class PlayerAimPose : MonoBehaviour
     {
+        [SerializeField] private RigBuilder rigBuilder;
+        [SerializeField] private PlayerBodyAimConstraint bodyAim;
+        [SerializeField] private PlayerShotPoseConstraint shotPose;
+        [SerializeField] private PlayerWeaponRig weaponRig;
         [Tooltip("上半身总俯仰范围；负数向上，正数向下。")]
         [SerializeField] private Vector2 pitchRange = new Vector2(-30f, 45f);
         [SerializeField, Min(0f)] private float pitchSmoothTime = 0.1f;
-        [Tooltip("只在最终上半身层做一次俯仰；该层与武器手 IK 共用唯一 IK Pass。")]
-        [SerializeField, Min(0)] private int finalIkLayer = 1;
+        [SerializeField, Range(0f, 1f)] private float waistFraction = 0.8f;
 
-        private Player player;
-        private PlayerCameraController cameraController;
+        private PlayerBlackboard blackboard;
+        private PlayerIntentManager intents;
         private Animator animator;
-        private Transform spine;
-        private Transform chest;
-        private Quaternion spineAnimationRotation;
-        private Quaternion chestAnimationRotation;
-        private bool aiming;
-        private bool poseApplied;
         private float pitch;
         private float pitchVelocity;
+        private int preparedFrame = -1;
+        private bool wasPosing;
+        private bool shotAiming;
 
-        internal void Initialize(Player owner, PlayerCameraController camera)
+        internal bool HasActivePose => shotPose != null && shotPose.data.activeWeight > 0f || bodyAim != null
+            && (bodyAim.data.followWeight > 0f || bodyAim.data.pitchWeight > 0f)
+            || weaponRig != null && weaponRig.HasGrip;
+
+        internal void Initialize(Transform ownerRoot, PlayerBlackboard sharedBlackboard, PlayerIntentManager intentManager)
         {
-            player = owner;
-            cameraController = camera;
+            blackboard = sharedBlackboard;
+            intents = intentManager;
             animator = GetComponent<Animator>();
-            if (animator.avatar == null || !animator.avatar.isValid || !animator.isHuman) return;
-            spine = animator.GetBoneTransform(HumanBodyBones.Spine);
-            chest = animator.GetBoneTransform(HumanBodyBones.Chest);
-        }
-
-        internal void SetAiming(bool value)
-        {
-            if (aiming == value) return;
-            aiming = value;
-            if (!aiming)
+            if (rigBuilder == null) rigBuilder = GetComponent<RigBuilder>();
+            if (shotPose == null) shotPose = GetComponentInChildren<PlayerShotPoseConstraint>(true);
+            if (bodyAim == null || !bodyAim.IsValid() || weaponRig == null || rigBuilder == null
+                || bodyAim.data.characterRoot != ownerRoot)
             {
-                pitch = 0f;
-                pitchVelocity = 0f;
-                RestorePose();
-            }
-        }
-
-        private void OnAnimatorIK(int layerIndex)
-        {
-            if (layerIndex != finalIkLayer) return;
-            // 此时 Animator 已给出本帧基础姿态，不能再恢复上一帧的基础旋转。
-            poseApplied = false;
-            if (!aiming || player == null || !player.isActiveAndEnabled || player.Input == null
-                || !player.Input.CanReadGameplayInput || Cursor.lockState != CursorLockMode.Locked
-                || cameraController == null || !cameraController.isActiveAndEnabled
-                || animator == null || !animator.isActiveAndEnabled || spine == null || !isActiveAndEnabled)
-            {
-                pitch = 0f;
-                pitchVelocity = 0f;
+                Debug.LogError("PlayerAimPose 需要完整的 BodyAim、Weapon、SupportHand Rig 和角色引用。", this);
+                enabled = false;
                 return;
             }
-
-            float deltaTime = Time.deltaTime;
-            if (deltaTime <= 0f) return;
-            float targetPitch = Mathf.Clamp(cameraController.ViewPitch, pitchRange.x, pitchRange.y);
-            pitch = pitchSmoothTime <= 0f ? targetPitch : Mathf.SmoothDamp(pitch, targetPitch,
-                ref pitchVelocity, pitchSmoothTime, Mathf.Infinity, deltaTime);
-            pitch = Mathf.Clamp(pitch, pitchRange.x, pitchRange.y);
-
-            spineAnimationRotation = spine.localRotation;
-            if (chest != null) chestAnimationRotation = chest.localRotation;
-            float spinePitch = chest != null ? pitch * 0.5f : pitch;
-            ApplyPitch(HumanBodyBones.Spine, spine, spinePitch);
-            if (chest != null) ApplyPitch(HumanBodyBones.Chest, chest, pitch * 0.5f);
-            poseApplied = true;
+            weaponRig.Initialize(blackboard);
+            ApplyPresentation();
         }
 
-        private void ApplyPitch(HumanBodyBones boneId, Transform bone, float angle)
+        internal void ApplyPresentation()
         {
-            // 使用角色横轴转到骨骼父空间，不假定导入骨骼的局部 X 轴方向。
-            Vector3 localAxis = bone.parent.InverseTransformDirection(player.transform.right);
-            animator.SetBoneLocalRotation(boneId,
-                Quaternion.AngleAxis(angle, localAxis) * bone.localRotation);
+            if (blackboard == null || bodyAim == null || rigBuilder == null) return;
+            bool posing = isActiveAndEnabled && blackboard.AimPoseEnabled;
+            if (!posing)
+            {
+                pitch = pitchVelocity = 0f;
+            }
+            else if (preparedFrame != Time.frameCount || !wasPosing)
+            {
+                intents.ProcessPose(pitchRange);
+                float target = blackboard.AimPosePitch;
+                pitch = pitchSmoothTime <= 0f ? target : Mathf.SmoothDamp(pitch, target,
+                    ref pitchVelocity, pitchSmoothTime, Mathf.Infinity, Mathf.Max(0f, Time.deltaTime));
+                pitch = Mathf.Clamp(pitch, pitchRange.x, pitchRange.y);
+            }
+            preparedFrame = Time.frameCount;
+            wasPosing = posing;
+            bodyAim.data.viewYaw = blackboard.ViewYaw;
+            bodyAim.data.pitch = pitch;
+            bodyAim.data.waistFraction = waistFraction;
+            bool shooting = posing && blackboard.WeaponDemand.ShotPose;
+            // 动画只在射击活动期间切换普通/瞄准；淡出继续沿用该次射击的模式。
+            if (!shooting || blackboard.WeaponAction.ShotActive) shotAiming = blackboard.IsAiming;
+            bool aiming = shooting ? shotAiming : blackboard.IsAiming;
+            bool automatic = shooting && blackboard.WeaponAction.IsAutomatic && intents.HasAutomaticShotClip;
+            ShootingPresentationData settings = intents.ShotPresentation;
+            ShotPresentationData presentation = settings.Get(aiming, automatic);
+            bodyAim.data.yawOffset = posing ? settings.YawOffset + presentation.YawOffset : 0f;
+            bodyAim.data.waistPitchOffset = posing ? settings.WaistPitchOffset + presentation.WaistPitchOffset : 0f;
+            bodyAim.data.followWeight = isActiveAndEnabled && blackboard.FollowView && blackboard.CanLook ? 1f : 0f;
+            bodyAim.data.pitchWeight = posing ? 1f : 0f;
+            // A disabled Animator layer can retain its last generic reference value.
+            if (shotPose != null) shotPose.data.activeWeight = isActiveAndEnabled
+                ? blackboard.UpperBodyLayerWeight : 0f;
+            if (weaponRig != null)
+            {
+                if (isActiveAndEnabled) weaponRig.ApplyPresentation();
+                else weaponRig.ReleaseGrip();
+            }
+            // Player.Update 晚于 RigBuilder.Update，显式提交本帧权重，避免沿用上一帧输入。
+            rigBuilder.SyncLayers();
         }
 
-        private void RestorePose()
+        internal void Reevaluate()
         {
-            // 暂停或禁用时 Animator 可能不再求值，立即撤销最后一次上半身补偿。
-            if (!poseApplied) return;
-            if (spine != null) spine.localRotation = spineAnimationRotation;
-            if (chest != null) chest.localRotation = chestAnimationRotation;
-            poseApplied = false;
+            if (rigBuilder != null && rigBuilder.graph.IsValid() && animator != null
+                && animator.isActiveAndEnabled && gameObject.activeInHierarchy)
+                rigBuilder.Evaluate(0f);
+        }
+
+        internal void ResetPose()
+        {
+            bool hadPose = HasActivePose;
+            pitch = pitchVelocity = 0f;
+            preparedFrame = -1;
+            wasPosing = false;
+            shotAiming = false;
+            if (shotPose != null) shotPose.data.activeWeight = 0f;
+            if (bodyAim != null)
+            {
+                bodyAim.data.followWeight = bodyAim.data.pitchWeight = 0f;
+                bodyAim.data.pitch = 0f;
+                bodyAim.data.yawOffset = bodyAim.data.waistPitchOffset = 0f;
+            }
+            weaponRig?.ReleaseGrip();
+            if (rigBuilder != null) rigBuilder.SyncLayers();
+            // 暂停或同帧打开界面时也撤销已经求值的 Rig 姿态，不推进动画时间。
+            if (hadPose) Reevaluate();
         }
 
         private void OnDisable()
         {
-            SetAiming(false);
-            RestorePose();
+            ResetPose();
         }
 
         private void OnValidate()
@@ -106,6 +130,7 @@ namespace RPG4.PlayerMovement
             pitchRange.x = Mathf.Clamp(pitchRange.x, -60f, 0f);
             pitchRange.y = Mathf.Clamp(pitchRange.y, 0f, 60f);
             pitchSmoothTime = Mathf.Max(0f, pitchSmoothTime);
+            waistFraction = Mathf.Clamp01(waistFraction);
         }
     }
 }

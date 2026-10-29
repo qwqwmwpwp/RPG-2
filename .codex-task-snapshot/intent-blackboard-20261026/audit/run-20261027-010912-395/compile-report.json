@@ -1,0 +1,123 @@
+{
+  "purpose": "Pure Roslyn compilation to unloaded DLLs; no Unity, MSBuild, project code, analyzers, generators, tests, or output assemblies executed.",
+  "compiler": "E:\\ue\\2022\\2022.3.62f3\\Editor\\Data\\DotNetSdkRoslyn\\csc.dll",
+  "editorSymbols": true,
+  "sourceRoot": "E:\\github\\RPG-2\\Assets\\Scripts",
+  "outputRoot": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\out",
+  "externalReferences": "Existing Library/ScriptAssemblies package DLLs are read only as compiler metadata; not rebuilt or loaded.",
+  "limitation": "This checks all Assets/Scripts asmdefs plus the weapon controller in isolation; not the entire project/default assembly, scene binding, serialized assets, or runtime behavior.",
+  "assemblies": [
+    {
+      "assembly": "RPG4.UI",
+      "asmdef": "E:\\github\\RPG-2\\Assets\\Scripts\\UI\\RPG4.UI.asmdef",
+      "sourceCount": 2,
+      "sources": [
+        "E:\\github\\RPG-2\\Assets\\Scripts\\UI\\UIBase.cs",
+        "E:\\github\\RPG-2\\Assets\\Scripts\\UI\\UIManager.cs"
+      ],
+      "referenceCount": 208,
+      "output": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\out\\RPG4.UI.dll",
+      "response": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\RPG4.UI.rsp",
+      "log": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\RPG4.UI.log",
+      "exitCode": 0
+    },
+    {
+      "assembly": "RPG4.PlayerIntent",
+      "asmdef": "E:\\github\\RPG-2\\Assets\\Scripts\\PlayerIntent\\RPG4.PlayerIntent.asmdef",
+      "sourceCount": 1,
+      "sources": [
+        "E:\\github\\RPG-2\\Assets\\Scripts\\PlayerIntent\\PlayerBlackboard.cs"
+      ],
+      "referenceCount": 208,
+      "output": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\out\\RPG4.PlayerIntent.dll",
+      "response": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\RPG4.PlayerIntent.rsp",
+      "log": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\RPG4.PlayerIntent.log",
+      "exitCode": 0
+    },
+    {
+      "assembly": "RPG4.Input",
+      "asmdef": "E:\\github\\RPG-2\\Assets\\Scripts\\Input\\RPG4.Input.asmdef",
+      "sourceCount": 3,
+      "sources": [
+        "E:\\github\\RPG-2\\Assets\\Scripts\\Input\\InputActions.cs",
+        "E:\\github\\RPG-2\\Assets\\Scripts\\Input\\InputManager.cs",
+        "E:\\github\\RPG-2\\Assets\\Scripts\\Input\\PlayerInput.cs"
+      ],
+      "referenceCount": 211,
+      "output": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\out\\RPG4.Input.dll",
+      "response": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\RPG4.Input.rsp",
+      "log": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\RPG4.Input.log",
+      "exitCode": 0
+    },
+    {
+      "assembly": "RPG4.Interaction",
+      "asmdef": "E:\\github\\RPG-2\\Assets\\Scripts\\Interaction\\RPG4.Interaction.asmdef",
+      "sourceCount": 4,
+      "sources": [
+        "E:\\github\\RPG-2\\Assets\\Scripts\\Interaction\\CrosshairUI.cs",
+        "E:\\github\\RPG-2\\Assets\\Scripts\\Interaction\\IInteractable.cs",
+        "E:\\github\\RPG-2\\Assets\\Scripts\\Interaction\\ItemInteractable.cs",
+        "E:\\github\\RPG-2\\Assets\\Scripts\\Interaction\\PlayerInteraction.cs"
+      ],
+      "referenceCount": 212,
+      "output": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\out\\RPG4.Interaction.dll",
+      "response": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\RPG4.Interaction.rsp",
+      "log": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\RPG4.Interaction.log",
+      "exitCode": 0
+    },
+    {
+      "assembly": "RPG4.StateMachine",
+      "asmdef": "E:\\github\\RPG-2\\Assets\\Scripts\\StateMachine\\RPG4.StateMachine.asmdef",
+      "sourceCount": 2,
+      "sources": [
+        "E:\\github\\RPG-2\\Assets\\Scripts\\StateMachine\\State.cs",
+        "E:\\github\\RPG-2\\Assets\\Scripts\\StateMachine\\StateMachine.cs"
+      ],
+      "referenceCount": 104,
+      "output": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\out\\RPG4.StateMachine.dll",
+      "response": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\RPG4.StateMachine.rsp",
+      "log": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\RPG4.StateMachine.log",
+      "exitCode": 0
+    },
+    {
+      "assembly": "RPG4.PlayerMovement",
+      "asmdef": "E:\\github\\RPG-2\\Assets\\Scripts\\PlayerMovement\\RPG4.PlayerMovement.asmdef",
+      "sourceCount": 14,
+      "sources": [
+        "E:\\github\\RPG-2\\Assets\\Scripts\\PlayerMovement\\Player.cs",
+        "E:\\github\\RPG-2\\Assets\\Scripts\\PlayerMovement\\PlayerAimPose.cs",
+        "E:\\github\\RPG-2\\Assets\\Scripts\\PlayerMovement\\PlayerBodyAimConstraint.cs",
+        "E:\\github\\RPG-2\\Assets\\Scripts\\PlayerMovement\\PlayerCameraController.cs",
+        "E:\\github\\RPG-2\\Assets\\Scripts\\PlayerMovement\\PlayerContext.cs",
+        "E:\\github\\RPG-2\\Assets\\Scripts\\PlayerMovement\\PlayerFireAction.cs",
+        "E:\\github\\RPG-2\\Assets\\Scripts\\PlayerMovement\\PlayerIntentManager.cs",
+        "E:\\github\\RPG-2\\Assets\\Scripts\\PlayerMovement\\PlayerLocomotion.cs",
+        "E:\\github\\RPG-2\\Assets\\Scripts\\PlayerMovement\\PlayerStateData.cs",
+        "E:\\github\\RPG-2\\Assets\\Scripts\\PlayerMovement\\PlayerViewController.cs",
+        "E:\\github\\RPG-2\\Assets\\Scripts\\PlayerMovement\\PlayerWeaponPresentation.cs",
+        "E:\\github\\RPG-2\\Assets\\Scripts\\PlayerMovement\\PlayerWeaponRig.cs",
+        "E:\\github\\RPG-2\\Assets\\Scripts\\PlayerMovement\\States\\LowerBodyRootState.cs",
+        "E:\\github\\RPG-2\\Assets\\Scripts\\PlayerMovement\\States\\UpperBodyRootState.cs"
+      ],
+      "referenceCount": 213,
+      "output": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\out\\RPG4.PlayerMovement.dll",
+      "response": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\RPG4.PlayerMovement.rsp",
+      "log": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\RPG4.PlayerMovement.log",
+      "exitCode": 0
+    },
+    {
+      "assembly": "WeaponControllerAudit",
+      "asmdef": "Synthetic compile of this default-assembly consumer only; not the full Assembly-CSharp",
+      "sourceCount": 1,
+      "sources": [
+        "E:\\github\\RPG-2\\Assets\\CombatGirlsCharacterPack\\Biperworks_Tools\\CombatGirls_Weapon_Control\\Character_Weapon_Controller.cs"
+      ],
+      "referenceCount": 214,
+      "output": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\out\\WeaponControllerAudit.dll",
+      "response": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\WeaponControllerAudit.rsp",
+      "log": "E:\\github\\RPG-2\\.codex-task-snapshot\\intent-blackboard-20261026\\audit\\run-20261027-010912-395\\WeaponControllerAudit.log",
+      "exitCode": 0
+    }
+  ],
+  "failure": null
+}

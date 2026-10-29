@@ -31,7 +31,8 @@ namespace RPG4.Backpack.Inventory
         }
 
         /// <summary>权威端构造：创建指定行列的容器；行列非正或乘积超过上限时回退默认尺寸并记警告。</summary>
-        public InventoryHostCore(int rows, int columns, LogModule logModule, string ownerName)
+        public InventoryHostCore(int rows, int columns, LogModule logModule, string ownerName,
+            bool singleCellItems = false, ItemAdmissionHandler admission = null)
             : this(logModule, ownerName)
         {
             int safeRows = rows;
@@ -45,7 +46,7 @@ namespace RPG4.Backpack.Inventory
                 safeColumns = DefaultColumns;
             }
 
-            Container = new InventoryContainer(safeRows, safeColumns);
+            Container = new InventoryContainer(safeRows, safeColumns, singleCellItems, admission);
         }
 
         public InventoryContainer Container { get; } // 权威容器；纯客户端为 null。
@@ -55,6 +56,8 @@ namespace RPG4.Backpack.Inventory
         public Func<ItemIdGenerator> IdGeneratorProvider { get; set; } // 标识生成器提供者（联机注入服务端生成器）；留空时使用共享默认生成器。
 
         public Func<bool> IsAuthority { get; set; } // 自己是否为主端；留空恒为 true。
+
+        public bool SupportsSingleCellTransfers { get; set; } = true;
 
         public Action<InventoryOperation> ForwardOperation { get; set; }
 
@@ -99,7 +102,9 @@ namespace RPG4.Backpack.Inventory
                 return ResolveAuthority() ? Container != null : ForwardOperation != null;
             return ResolveAuthority() && Container != null
                 && CommandHosts.TryGetValue(destinationSource, out InventoryHostCore target)
-                && target.ResolveAuthority() && target.Container != null;
+                && target.ResolveAuthority() && target.Container != null
+                && !((Container.SingleCellItems || target.Container.SingleCellItems)
+                    && (!SupportsSingleCellTransfers || !target.SupportsSingleCellTransfers));
         }
 
         public bool HasEmptySpace(GridCoord dimensions) => Container == null

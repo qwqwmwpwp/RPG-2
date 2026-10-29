@@ -1,0 +1,236 @@
+{
+  "scope": "Static YAML/resource audit only; no Unity startup, import, project execution or tests",
+  "files": {
+    "Assets/player/player.controller": {
+      "document_count": 18,
+      "unique_document_ids": true,
+      "yaml_parsed_documents": 18,
+      "missing_local_references": []
+    },
+    "Assets/player/player.prefab": {
+      "document_count": 366,
+      "unique_document_ids": true,
+      "yaml_parsed_documents": 366,
+      "missing_local_references": []
+    }
+  },
+  "checks": {
+    "existing_aim_tree_and_five_upper_body_states_unchanged": true,
+    "layer_names_mask_weights_blend_modes_and_unique_upper_IK_pass_unchanged": true,
+    "upper_body_mask_reference_valid": true,
+    "prefab_component_ids_and_all_existing_configuration_preserved": true,
+    "new_prefab_configuration": {
+      "crouch": {
+        "moveSpeed": 2,
+        "height": 1.2
+      },
+      "reload": {
+        "duration": 1.6,
+        "moveSpeed": 2,
+        "reloadClip": {
+          "fileID": 5714656323464922859,
+          "guid": "0cca85e4195c278438de2c6dc0070788",
+          "type": 3
+        },
+        "crouchReloadClip": {
+          "fileID": -6602412621051750717,
+          "guid": "bac5ede3f395a424d8f81ec498611f5d",
+          "type": 3
+        }
+      }
+    },
+    "all_controller_clip_GUIDs_and_fileIDs_match_meta": true,
+    "all_locomotion_clips_already_looping_no_meta_edits_required": true,
+    "reload_clips_non_looping_existing_events_and_trims_unchanged": true
+  },
+  "clips": [
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_Shoot.fbx.meta",
+      "guid": "c64081e16b2eb784285608f8182fac46",
+      "fileID": "-319965354747890277",
+      "loopTime": [
+        "0"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_Crouch_AimWalk_FR.fbx.meta",
+      "guid": "915a7c54a4028ec4d92da2c72581a33d",
+      "fileID": "-4167891483669781554",
+      "loopTime": [
+        "1"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Normal/R_Idle.fbx.meta",
+      "guid": "3787889f507548045abba6b87370b07d",
+      "fileID": "-5109575877556825824",
+      "loopTime": [
+        "1"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_Crouch_AimIdle.fbx.meta",
+      "guid": "c0609b7c907988443ad4b19984e93963",
+      "fileID": "-595616424952459445",
+      "loopTime": [
+        "1"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_Crouch_AimWalk_FL.fbx.meta",
+      "guid": "0731ddaca6a8b8341b1f9d255237795e",
+      "fileID": "-6265346231284765993",
+      "loopTime": [
+        "1"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_Crouch_Reload.fbx.meta",
+      "guid": "bac5ede3f395a424d8f81ec498611f5d",
+      "fileID": "-6602412621051750717",
+      "loopTime": [
+        "0"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimWalk_FL.fbx.meta",
+      "guid": "16f033bb1bde357438bd3c0511a51ede",
+      "fileID": "-6634934411699340864",
+      "loopTime": [
+        "1"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimWalk_FR.fbx.meta",
+      "guid": "8a5d4be37c7e8bd48b415ca308632efe",
+      "fileID": "-7036691193190048577",
+      "loopTime": [
+        "1"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimWalk_BR.fbx.meta",
+      "guid": "11942bbdd60292f4190e900f211eb2f1",
+      "fileID": "-7383578122819572745",
+      "loopTime": [
+        "1"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Normal/R_Run.fbx.meta",
+      "guid": "711a2af0b4d844b47ad8942d0114c502",
+      "fileID": "-7614703449353396500",
+      "loopTime": [
+        "1"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimWalk_F.fbx.meta",
+      "guid": "5c39511cfd8e963449dc97205030eb51",
+      "fileID": "-8694474364745777521",
+      "loopTime": [
+        "1"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Normal/R_Crouch_Walk.fbx.meta",
+      "guid": "e28ccbe717c12894a9fc0b68b701403d",
+      "fileID": "1271380791048328025",
+      "loopTime": [
+        "1"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimIdle.fbx.meta",
+      "guid": "5b0c2c871074d4742bf7150dca39c436",
+      "fileID": "145786180134763700",
+      "loopTime": [
+        "1"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimWalk_BL.fbx.meta",
+      "guid": "b513f8bb11977514d95addd82df6fff5",
+      "fileID": "1982008771778853863",
+      "loopTime": [
+        "1"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_Crouch_AimWalk_F.fbx.meta",
+      "guid": "c3285db8284ef68448bbae7e0a8e3d9b",
+      "fileID": "2077707881950928216",
+      "loopTime": [
+        "1"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_Crouch_AimWalk_B.fbx.meta",
+      "guid": "712a753f5e8303247954174ca7f16668",
+      "fileID": "3418815282884303396",
+      "loopTime": [
+        "1"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_Crouch_AimWalk_BR.fbx.meta",
+      "guid": "e9dd62f51d9e1884b8a24cca9f0b3cbb",
+      "fileID": "5183732281669676300",
+      "loopTime": [
+        "1"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Normal/R_Crouch_Jog.fbx.meta",
+      "guid": "68ff0f9c97ce77d4e88487924474b482",
+      "fileID": "5656398705936316957",
+      "loopTime": [
+        "1"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_Reload.fbx.meta",
+      "guid": "0cca85e4195c278438de2c6dc0070788",
+      "fileID": "5714656323464922859",
+      "loopTime": [
+        "0"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimWalk_B.fbx.meta",
+      "guid": "fe28bbe24969b434fa8729aa88ae7445",
+      "fileID": "6147688166201776650",
+      "loopTime": [
+        "1"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_Crouch_AimWalk_BL.fbx.meta",
+      "guid": "cd46d5c21d2e3b94da18b6fa13218cd0",
+      "fileID": "7003460124356273496",
+      "loopTime": [
+        "1"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimIdle_AutoShoot.fbx.meta",
+      "guid": "350d849f350ac944f911df61ffa830c0",
+      "fileID": "7853932406585560401",
+      "loopTime": [
+        "1"
+      ]
+    },
+    {
+      "path": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Normal/R_Crouch_Idle.fbx.meta",
+      "guid": "f844e01ec11e33d44a3e231176cf8b76",
+      "fileID": "8550655282779565432",
+      "loopTime": [
+        "1"
+      ]
+    }
+  ],
+  "manual_validation_remaining": [
+    "Visually inspect standing/crouching free and directional locomotion blends.",
+    "Confirm upper-body reload keeps lower-body motion, changes posture with continuous normalized phase, and completes with correct socket and IK restoration."
+  ]
+}

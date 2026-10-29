@@ -1,4 +1,5 @@
 using RPG4.Input;
+using RPG4.PlayerIntent;
 using UnityEngine;
 
 namespace RPG4.Interaction
@@ -18,6 +19,7 @@ namespace RPG4.Interaction
         [Tooltip("已配置好层级和引用的准心预制体，每个玩家只创建一次。")]
         [SerializeField] private CrosshairUI crosshairPrefab;
 
+        private PlayerBlackboard blackboard;
         private readonly RaycastHit[] hitBuffer = new RaycastHit[16];
         private MonoBehaviour targetComponent;
         private CrosshairUI crosshairUI;
@@ -32,12 +34,13 @@ namespace RPG4.Interaction
         }
 
         private bool CanUseInteraction => isActiveAndEnabled
-            && playerInput != null && playerInput.isActiveAndEnabled && playerInput.CanReadGameplayInput
+            && blackboard != null && blackboard.CanInteract
             && interactionCamera != null && interactionCamera.isActiveAndEnabled;
 
         private void Awake()
         {
             if (playerInput == null) playerInput = GetComponent<PlayerInput>();
+            if (playerInput != null) blackboard = playerInput.Blackboard;
             if (interactionCamera == null) interactionCamera = Camera.main;
 
             if (crosshairPrefab != null)
@@ -50,13 +53,17 @@ namespace RPG4.Interaction
         private void LateUpdate()
         {
             if (interactionCamera == null) interactionCamera = Camera.main;
+            if (playerInput != null) playerInput.RefreshIntentPermissions();
             targetComponent = CanUseInteraction ? FindTarget() : null;
 
             IInteractable target = CurrentTarget;
-            if (target != null && playerInput.InteractPressed) target.Interact(this);
+            if (playerInput != null) playerInput.RefreshIntentPermissions();
+            if (target != null && CanUseInteraction && blackboard.InteractPressed) target.Interact(this);
 
-            // 交互事件可能刚打开窗口或禁用了物品，显示状态在事件之后刷新。
+            // 交互事件可能刚打开窗口或禁用了物品，立即刷新共享许可并撤销姿态。
+            if (playerInput != null) playerInput.RefreshIntentPermissions();
             if (!CanUseInteraction) targetComponent = null;
+            if (playerInput != null) playerInput.ReportInteraction(targetComponent);
             if (crosshairUI != null)
                 crosshairUI.SetState(CanUseInteraction, CurrentTarget != null,
                     (CurrentTarget as IInteractionPrompt)?.InteractionPrompt);
@@ -101,6 +108,7 @@ namespace RPG4.Interaction
         private void OnDisable()
         {
             targetComponent = null;
+            if (playerInput != null) playerInput.ReportInteraction(null);
             if (crosshairUI != null) crosshairUI.SetState(false, false);
         }
 

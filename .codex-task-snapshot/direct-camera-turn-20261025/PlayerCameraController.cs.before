@@ -1,0 +1,247 @@
+using Cinemachine;
+using RPG4.Input;
+using UnityEngine;
+using UnityEngine.Rendering;
+
+namespace RPG4.PlayerMovement
+{
+    /// <summary>维护观察角和距离，统一调度上身俯仰与相机跟随；构图与避障由 Cinemachine 完成。</summary>
+    [DisallowMultipleComponent]
+    [RequireComponent(typeof(CinemachineVirtualCamera))]
+    [DefaultExecutionOrder(-100)] // 输入先于角色移动，LateUpdate 先于 Brain（100）。
+    public sealed class PlayerCameraController : MonoBehaviour
+    {
+        [SerializeField] private CinemachineVirtualCamera virtualCamera;
+        [SerializeField] private PlayerInput playerInput;
+        [SerializeField] private Transform cameraTarget;
+        [SerializeField] private Transform cameraPivot;
+        [SerializeField, Min(0.1f)] private float initialDistance = 4f;
+        [SerializeField] private float initialYaw;
+        [SerializeField] private float initialPitch = 12f;
+        [Tooltip("鼠标位移到观察角度的倍率，不乘 deltaTime。")]
+        [SerializeField] private Vector2 lookSensitivity = new Vector2(0.15f, 0.12f);
+        [Tooltip("俯仰角范围；负数向上看，正数向下看。")]
+        [SerializeField] private Vector2 pitchRange = new Vector2(-35f, 65f);
+        [SerializeField, Min(0.1f)] private float minimumDistance = 2f;
+        [SerializeField, Min(0.1f)] private float maximumDistance = 6f;
+        [Tooltip("每个滚轮刻度改变的相机距离（米），不改变肩部偏移或 FOV。")]
+        [SerializeField, Min(0.01f)] private float zoomSpeed = 0.5f;
+        [SerializeField, Min(0f)] private float zoomSmoothTime = 0.1f;
+        [SerializeField, Min(0.1f)] private float aimDistance = 1.5f;
+        [SerializeField, Range(1f, 179f)] private float aimFieldOfView = 45f;
+        [SerializeField, Min(0f)] private float aimSensitivityMultiplier = 0.65f;
+        [SerializeField, Min(0f)] private float aimTransitionTime = 0.15f;
+
+        private Cinemachine3rdPersonFollow follow;
+        private PlayerAimPose aimPose;
+        private float viewYaw;
+        private float viewPitch;
+        private float targetDistance;
+        private float currentDistance;
+        private float explorationFieldOfView;
+        private float fieldOfViewVelocity;
+        private float zoomVelocity;
+        private bool aiming;
+        private bool restoringAim;
+        private bool initialized;
+        private Camera rotationLogCamera;
+        private Vector2 rotationLogLook;
+        private float rotationLogSensitivity = 1f;
+        private int rotationLogFrame = -1;
+        private double rotationLogTime;
+        private Vector2 rotationLogView;
+        private Vector3 rotationLogAngles;
+        private Vector3 rotationLogPosition;
+
+        /// <summary>角色移动只读取逻辑观察角，不读取受避障或视觉反馈影响的实际相机。</summary>
+        public float ViewYaw => viewYaw;
+        public float ViewPitch => viewPitch;
+
+        private void OnEnable()
+        {
+            rotationLogCamera = null;
+            rotationLogFrame = -1;
+            RenderPipelineManager.beginCameraRendering += LogCameraRotation;
+        }
+
+        internal void BindAimPose(PlayerAimPose pose)
+        {
+            aimPose = pose;
+        }
+
+        public void SetAiming(bool value)
+        {
+            if (value && (!initialized || !isActiveAndEnabled)) return;
+            if (aiming == value) return;
+            aiming = value;
+            restoringAim = !value;
+        }
+
+        private void Awake()
+        {
+            if (virtualCamera == null) virtualCamera = GetComponent<CinemachineVirtualCamera>();
+            follow = virtualCamera.GetCinemachineComponent<Cinemachine3rdPersonFollow>();
+            if (cameraTarget == null || cameraPivot == null || follow == null)
+            {
+                Debug.LogError("PlayerCameraController 需要配置 CameraTarget、CameraPivot 和 3rd Person Follow。", this);
+                enabled = false;
+                return;
+            }
+
+            viewYaw = Mathf.DeltaAngle(0f, initialYaw);
+            viewPitch = Mathf.Clamp(initialPitch, pitchRange.x, pitchRange.y);
+            targetDistance = Mathf.Clamp(initialDistance, minimumDistance, maximumDistance);
+            currentDistance = targetDistance;
+            explorationFieldOfView = virtualCamera.m_Lens.FieldOfView;
+            follow.CameraDistance = targetDistance;
+            virtualCamera.Follow = cameraPivot;
+            virtualCamera.LookAt = null;
+            UpdatePivot();
+            virtualCamera.PreviousStateIsValid = false;
+            initialized = true;
+        }
+
+        private void Update()
+        {
+            rotationLogLook = Vector2.zero;
+            rotationLogSensitivity = 1f;
+            // 先撤销上一帧视觉补偿，再采样本帧观察角，供角色逻辑与动画使用。
+            if (aimPose != null) aimPose.BeginFrame();
+            if (!CanKeepAiming()) SetAiming(false);
+            if (playerInput == null || !playerInput.isActiveAndEnabled || !playerInput.CanReadGameplayInput) return;
+
+            Vector2 look = playerInput.Look;
+            float sensitivity = aiming ? aimSensitivityMultiplier : 1f;
+            rotationLogLook = look;
+            rotationLogSensitivity = sensitivity;
+            viewYaw = Mathf.DeltaAngle(0f, viewYaw + look.x * lookSensitivity.x * sensitivity);
+            viewPitch = Mathf.Clamp(viewPitch - look.y * lookSensitivity.y * sensitivity, pitchRange.x, pitchRange.y);
+            // 鼠标滚轮已在输入资产中换算为刻度，不再乘 deltaTime。
+            if (aiming) return;
+            float scroll = playerInput.Zoom;
+            targetDistance = Mathf.Clamp(targetDistance - scroll * zoomSpeed, minimumDistance, maximumDistance);
+        }
+
+        private void LateUpdate()
+        {
+            if (!initialized || cameraTarget == null) return;
+            // Animator / IK 已完成：先处理本帧上身姿态，再更新跟随节点，最后由 Brain 输出相机。
+            if (aimPose != null) aimPose.ApplyPose(viewPitch);
+            // 即使 UI 正在占用输入，也继续跟随角色位置。
+            UpdatePivot();
+            if (!CanKeepAiming()) SetAiming(false);
+            float deltaTime = Time.unscaledDeltaTime;
+            if (deltaTime <= 0f) return;
+            float distance = aiming ? aimDistance : targetDistance;
+            float smoothTime = aiming || restoringAim ? aimTransitionTime : zoomSmoothTime;
+            // 仅平滑逻辑距离，绝不从 Cinemachine 的实际避障位置回写目标距离。
+            currentDistance = smoothTime <= 0f ? distance : Mathf.SmoothDamp(
+                currentDistance, distance, ref zoomVelocity, smoothTime, Mathf.Infinity, deltaTime);
+            follow.CameraDistance = currentDistance;
+            float fieldOfView = aiming ? aimFieldOfView : explorationFieldOfView;
+            virtualCamera.m_Lens.FieldOfView = aimTransitionTime <= 0f ? fieldOfView : Mathf.SmoothDamp(
+                virtualCamera.m_Lens.FieldOfView, fieldOfView, ref fieldOfViewVelocity,
+                aimTransitionTime, Mathf.Infinity, deltaTime);
+            if (restoringAim && Mathf.Abs(currentDistance - targetDistance) < 0.001f
+                && Mathf.Abs(virtualCamera.m_Lens.FieldOfView - explorationFieldOfView) < 0.001f)
+                restoringAim = false;
+        }
+
+        private bool CanKeepAiming()
+        {
+            return playerInput != null && playerInput.isActiveAndEnabled && playerInput.CanReadGameplayInput
+                && Cursor.lockState == CursorLockMode.Locked;
+        }
+
+        private void OnApplicationFocus(bool focused)
+        {
+            if (!focused) SetAiming(false);
+        }
+
+        private void OnDisable()
+        {
+            RenderPipelineManager.beginCameraRendering -= LogCameraRotation;
+            rotationLogFrame = -1;
+            if (aimPose != null) aimPose.ResetPose();
+            aiming = false;
+            restoringAim = false;
+            zoomVelocity = 0f;
+            fieldOfViewVelocity = 0f;
+            if (!initialized) return;
+            currentDistance = targetDistance;
+            follow.CameraDistance = currentDistance;
+            virtualCamera.m_Lens.FieldOfView = explorationFieldOfView;
+            virtualCamera.PreviousStateIsValid = false;
+        }
+
+        private void UpdatePivot()
+        {
+            cameraPivot.SetPositionAndRotation(cameraTarget.position, Quaternion.Euler(viewPitch, viewYaw, 0f));
+        }
+
+        private void LogCameraRotation(ScriptableRenderContext renderContext, Camera renderedCamera)
+        {
+            if (!Application.isPlaying || !initialized || cameraPivot == null) return;
+            if (rotationLogCamera == null) rotationLogCamera = Camera.main;
+            if (renderedCamera != rotationLogCamera || rotationLogFrame == Time.frameCount) return;
+
+            // 在 Brain 输出之后、主相机渲染之前采样；Scene 相机和同帧重复回调不打印。
+            double now = Time.realtimeSinceStartupAsDouble;
+            bool hasPrevious = rotationLogFrame >= 0;
+            float sampleDeltaTime = hasPrevious ? (float)(now - rotationLogTime) : 0f;
+            Vector3 angles = renderedCamera.transform.eulerAngles;
+            Vector3 cameraAngles = new Vector3(angles.y, Mathf.DeltaAngle(0f, angles.x), Mathf.DeltaAngle(0f, angles.z));
+            Vector3 pivotAngles = cameraPivot.eulerAngles;
+            Vector3 cameraPosition = renderedCamera.transform.position;
+            float viewYawStep = hasPrevious ? Mathf.DeltaAngle(rotationLogView.x, viewYaw) : 0f;
+            float viewPitchStep = hasPrevious ? viewPitch - rotationLogView.y : 0f;
+            float cameraYawStep = hasPrevious ? Mathf.DeltaAngle(rotationLogAngles.x, cameraAngles.x) : 0f;
+            float cameraPitchStep = hasPrevious ? Mathf.DeltaAngle(rotationLogAngles.y, cameraAngles.y) : 0f;
+            float cameraRollStep = hasPrevious ? Mathf.DeltaAngle(rotationLogAngles.z, cameraAngles.z) : 0f;
+            float yawSpeed = sampleDeltaTime > 0f ? cameraYawStep / sampleDeltaTime : 0f;
+            float pitchSpeed = sampleDeltaTime > 0f ? cameraPitchStep / sampleDeltaTime : 0f;
+            float cameraMove = hasPrevious ? Vector3.Distance(rotationLogPosition, cameraPosition) : 0f;
+
+            const float rotationThreshold = 0.0001f;
+            if (hasPrevious && (Mathf.Abs(cameraYawStep) > rotationThreshold
+                || Mathf.Abs(cameraPitchStep) > rotationThreshold || Mathf.Abs(cameraRollStep) > rotationThreshold))
+            {
+                Debug.LogFormat(LogType.Log, LogOption.NoStacktrace, renderedCamera,
+                    $"[CameraRotation] frame={Time.frameCount} frameGap={(hasPrevious ? Time.frameCount - rotationLogFrame : 0)} "
+                    + $"dt={Time.unscaledDeltaTime:F6} sampleDt={sampleDeltaTime:F6} "
+                    + $"lookX={rotationLogLook.x:F4} lookY={rotationLogLook.y:F4} sensitivity={rotationLogSensitivity:F3} "
+                    + $"viewYaw={viewYaw:F4} viewPitch={viewPitch:F4} "
+                    + $"pivotYaw={pivotAngles.y:F4} pivotPitch={Mathf.DeltaAngle(0f, pivotAngles.x):F4} "
+                    + $"cameraYaw={cameraAngles.x:F4} cameraPitch={cameraAngles.y:F4} cameraRoll={cameraAngles.z:F4} "
+                    + $"viewYawStep={viewYawStep:F4} viewPitchStep={viewPitchStep:F4} "
+                    + $"cameraYawStep={cameraYawStep:F4} cameraPitchStep={cameraPitchStep:F4} cameraRollStep={cameraRollStep:F4} "
+                    + $"yawSpeed={yawSpeed:F3} pitchSpeed={pitchSpeed:F3} "
+                    + $"yawError={Mathf.DeltaAngle(viewYaw, cameraAngles.x):F4} pitchError={Mathf.DeltaAngle(viewPitch, cameraAngles.y):F4} "
+                    + $"cameraPos={cameraPosition.ToString("F4")} pivotPos={cameraPivot.position.ToString("F4")} cameraMove={cameraMove:F5}");
+            }
+
+            // 静止帧仍更新采样基准，下一次转动继续比较相邻渲染帧。
+            rotationLogFrame = Time.frameCount;
+            rotationLogTime = now;
+            rotationLogView = new Vector2(viewYaw, viewPitch);
+            rotationLogAngles = cameraAngles;
+            rotationLogPosition = cameraPosition;
+        }
+
+        private void OnValidate()
+        {
+            minimumDistance = Mathf.Max(0.1f, minimumDistance);
+            maximumDistance = Mathf.Max(minimumDistance, maximumDistance);
+            initialDistance = Mathf.Clamp(initialDistance, minimumDistance, maximumDistance);
+            pitchRange.x = Mathf.Clamp(pitchRange.x, -89f, 89f);
+            pitchRange.y = Mathf.Clamp(pitchRange.y, pitchRange.x, 89f);
+            initialPitch = Mathf.Clamp(initialPitch, pitchRange.x, pitchRange.y);
+            lookSensitivity.x = Mathf.Max(0f, lookSensitivity.x);
+            lookSensitivity.y = Mathf.Max(0f, lookSensitivity.y);
+            aimDistance = Mathf.Max(0.1f, aimDistance);
+            aimFieldOfView = Mathf.Clamp(aimFieldOfView, 1f, 179f);
+            aimSensitivityMultiplier = Mathf.Max(0f, aimSensitivityMultiplier);
+            aimTransitionTime = Mathf.Max(0f, aimTransitionTime);
+        }
+    }
+}

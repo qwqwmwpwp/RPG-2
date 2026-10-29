@@ -1,55 +1,27 @@
-using RPG4.Input;
-using UnityEngine;
+using RPG4.PlayerIntent;
+using RPG4.Backpack.Equipment;
 
 namespace RPG4.PlayerMovement
 {
-    /// <summary>每个角色独立的运行时引用集合；输入和配置由各自的数据源维护。</summary>
+    /// <summary>状态机的结构引用；行为数据统一从该角色黑板读取。</summary>
     internal sealed class PlayerContext
     {
-        internal PlayerInput Input { get; }
-        internal PlayerContentData Content { get; }
-        internal ExplorationState.Data Exploration { get; }
-        internal AimState.Data Aim { get; }
-        internal HipFireState.Data HipFire { get; }
-        internal PlayerShootSimulation Shooting { get; }
-
+        internal PlayerBlackboard Blackboard { get; }
+        internal PlayerStateData Data { get; }
+        internal PlayerContentData Content => Data.Content;
+        internal PlayerIntentManager Intents { get; set; }
+        internal PlayerEquipment Equipment { get; set; }
+        internal Weapon Weapon => Equipment != null ? Equipment.CurrentWeapon : null;
+        internal UpperBodyDemand WeaponDemand => Blackboard.WeaponDemand;
+        internal LocomotionPlan Plan => Blackboard.Plan;
         internal bool AnimatorIsAvailable => Content.Animator != null
             && Content.Animator.runtimeAnimatorController != null && Content.Animator.isActiveAndEnabled;
-
-        internal bool CanControl => Input != null && Input.CanReadGameplayInput
-            && Content.Body != null && !Content.Body.isKinematic
-            && Content.CameraController != null && Content.CameraController.isActiveAndEnabled;
-
-        internal bool CanUseWeapon => CanControl && AnimatorIsAvailable
-            && Cursor.lockState == CursorLockMode.Locked;
-        internal bool WantsAim => CanUseWeapon && Input.AimHeld;
-        internal bool WantsHipFire => CanUseWeapon && Shooting != null
-            && Shooting.isActiveAndEnabled && Shooting.HasShotPresentation;
-
-        internal PlayerContext(PlayerInput input, PlayerContentData content,
-            ExplorationState.Data exploration, AimState.Data aim, HipFireState.Data hipFire,
-            PlayerShootSimulation shooting)
+        internal bool CanControl => Blackboard.CanMove;
+        internal bool CanUseWeapon => Blackboard.CanUseWeapon && Weapon != null;
+        internal PlayerContext(PlayerBlackboard blackboard, PlayerStateData data)
         {
-            Input = input;
-            Content = content;
-            Exploration = exploration;
-            Aim = aim;
-            HipFire = hipFire;
-            Shooting = shooting;
-        }
-
-        internal void SetPlanarVelocity(Vector3 velocity)
-        {
-            Rigidbody body = Content.Body;
-            if (body == null || body.isKinematic) return;
-            body.velocity = new Vector3(velocity.x, body.velocity.y, velocity.z);
-            body.angularVelocity = Vector3.zero;
-        }
-
-        internal void SetWeaponMode(bool aiming, bool weaponPose)
-        {
-            if (Content.CameraController != null) Content.CameraController.SetAiming(aiming);
-            if (Content.AimPose != null) Content.AimPose.SetAiming(weaponPose);
+            Blackboard = blackboard;
+            Data = data;
         }
     }
 }

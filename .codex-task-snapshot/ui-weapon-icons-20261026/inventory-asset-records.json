@@ -1,0 +1,78 @@
+[
+  {
+    "name": "木质步枪_卡通",
+    "item_type": "GameItems.Equipment.Weapons.Rifle.StyleWood",
+    "item": "Assets/backpack/Data/Items/枪械/木质步枪_卡通.asset",
+    "item_guid": "d7b9e095cbe34d9a8a2991609dfd0d38",
+    "icon": "Assets/UI素材/枪械/Icon_Rifle_Style_Wood.png",
+    "icon_guid": "a6be3d79691c4a82bbcc85d56b89fac1",
+    "prefab": "Assets/backpack/Prefabs/Weapons/Weapon_Rifle_Style_Wood.prefab",
+    "prefab_guid": "be2dced8be2644ba9d2b5b8b5d9eb3a6",
+    "material_guid": "c03d6f01ed2b01e45a25498e1e7cdae3",
+    "grid": [
+      4,
+      2
+    ],
+    "pixels": [
+      1024,
+      512
+    ]
+  },
+  {
+    "name": "金属步枪_卡通",
+    "item_type": "GameItems.Equipment.Weapons.Rifle.StyleMetal",
+    "item": "Assets/backpack/Data/Items/枪械/金属步枪_卡通.asset",
+    "item_guid": "415c00e1f9d94233bfaae8e37eb05746",
+    "icon": "Assets/UI素材/枪械/Icon_Rifle_Style_Metal.png",
+    "icon_guid": "a5bb6db614194eb2b5810ecd13a091e0",
+    "prefab": "Assets/backpack/Prefabs/Weapons/Weapon_Rifle_Style_Metal.prefab",
+    "prefab_guid": "c684509302cd443e8b06edd346a89887",
+    "material_guid": "b2dff137aebbc8141ac9e01c7da5d4c0",
+    "grid": [
+      4,
+      2
+    ],
+    "pixels": [
+      1024,
+      512
+    ]
+  },
+  {
+    "name": "木质步枪_写实",
+    "item_type": "GameItems.Equipment.Weapons.Rifle.RealWood",
+    "item": "Assets/backpack/Data/Items/枪械/木质步枪_写实.asset",
+    "item_guid": "96e8dd9af2f349158be8fe9b33f96d0e",
+    "icon": "Assets/UI素材/枪械/Icon_Rifle_Real_Wood.png",
+    "icon_guid": "2324990750894db295a038bc894b8fe9",
+    "prefab": "Assets/backpack/Prefabs/Weapons/Weapon_Rifle_Real_Wood.prefab",
+    "prefab_guid": "2ca0e8c2811c471380084b4c152dab58",
+    "material_guid": "811c3be33116f6b42bb7408799b2f051",
+    "grid": [
+      4,
+      2
+    ],
+    "pixels": [
+      1024,
+      512
+    ]
+  },
+  {
+    "name": "金属步枪_写实",
+    "item_type": "GameItems.Equipment.Weapons.Rifle.RealMetal",
+    "item": "Assets/backpack/Data/Items/枪械/金属步枪_写实.asset",
+    "item_guid": "42c885270a814363b41bac417923d007",
+    "icon": "Assets/UI素材/枪械/Icon_Rifle_Real_Metal.png",
+    "icon_guid": "8caa1d574ec14eb7b758d28c85bd934d",
+    "prefab": "Assets/backpack/Prefabs/Weapons/Weapon_Rifle_Real_Metal.prefab",
+    "prefab_guid": "4ff6180b6e4a4829ade68749ba51797c",
+    "material_guid": "c924a070fea01ad4e865d07a125deeef",
+    "grid": [
+      4,
+      2
+    ],
+    "pixels": [
+      1024,
+      512
+    ]
+  }
+]

@@ -255,6 +255,24 @@ namespace RPG4.Input
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""crouch"",
+                    ""type"": ""Button"",
+                    ""id"": ""bf2f6ba6-726a-4c0f-8ee3-04f6a5ab5320"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""reload"",
+                    ""type"": ""Button"",
+                    ""id"": ""61ed4b3a-01a7-4a21-a441-9eaf368cdca8"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
                 }
             ],
             ""bindings"": [
@@ -378,6 +396,28 @@ namespace RPG4.Input
                     ""action"": ""fire"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""2d95f8a8-60aa-4f6d-bb5f-45db7ec5a638"",
+                    ""path"": ""<Keyboard>/leftCtrl"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""crouch"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""77c89337-5aa7-4fa0-b8a8-51e78f1e30b9"",
+                    ""path"": ""<Keyboard>/r"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""reload"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
                 }
             ]
         }
@@ -399,6 +439,8 @@ namespace RPG4.Input
             m_player_interact = m_player.FindAction("interact", throwIfNotFound: true);
             m_player_aim = m_player.FindAction("aim", throwIfNotFound: true);
             m_player_fire = m_player.FindAction("fire", throwIfNotFound: true);
+            m_player_crouch = m_player.FindAction("crouch", throwIfNotFound: true);
+            m_player_reload = m_player.FindAction("reload", throwIfNotFound: true);
         }
 
         ~@InputActions()
@@ -626,6 +668,8 @@ namespace RPG4.Input
         private readonly InputAction m_player_interact;
         private readonly InputAction m_player_aim;
         private readonly InputAction m_player_fire;
+        private readonly InputAction m_player_crouch;
+        private readonly InputAction m_player_reload;
         /// <summary>
         /// Provides access to input actions defined in input action map "player".
         /// </summary>
@@ -661,6 +705,14 @@ namespace RPG4.Input
             /// Provides access to the underlying input action "player/fire".
             /// </summary>
             public InputAction @fire => m_Wrapper.m_player_fire;
+            /// <summary>
+            /// Provides access to the underlying input action "player/crouch".
+            /// </summary>
+            public InputAction @crouch => m_Wrapper.m_player_crouch;
+            /// <summary>
+            /// Provides access to the underlying input action "player/reload".
+            /// </summary>
+            public InputAction @reload => m_Wrapper.m_player_reload;
             /// <summary>
             /// Provides access to the underlying input action map instance.
             /// </summary>
@@ -705,6 +757,12 @@ namespace RPG4.Input
                 @fire.started += instance.OnFire;
                 @fire.performed += instance.OnFire;
                 @fire.canceled += instance.OnFire;
+                @crouch.started += instance.OnCrouch;
+                @crouch.performed += instance.OnCrouch;
+                @crouch.canceled += instance.OnCrouch;
+                @reload.started += instance.OnReload;
+                @reload.performed += instance.OnReload;
+                @reload.canceled += instance.OnReload;
             }
 
             /// <summary>
@@ -734,6 +792,12 @@ namespace RPG4.Input
                 @fire.started -= instance.OnFire;
                 @fire.performed -= instance.OnFire;
                 @fire.canceled -= instance.OnFire;
+                @crouch.started -= instance.OnCrouch;
+                @crouch.performed -= instance.OnCrouch;
+                @crouch.canceled -= instance.OnCrouch;
+                @reload.started -= instance.OnReload;
+                @reload.performed -= instance.OnReload;
+                @reload.canceled -= instance.OnReload;
             }
 
             /// <summary>
@@ -859,6 +923,20 @@ namespace RPG4.Input
             /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
             /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
             void OnFire(InputAction.CallbackContext context);
+            /// <summary>
+            /// Method invoked when associated input action "crouch" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+            /// </summary>
+            /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+            /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+            /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+            void OnCrouch(InputAction.CallbackContext context);
+            /// <summary>
+            /// Method invoked when associated input action "reload" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+            /// </summary>
+            /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+            /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+            /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+            void OnReload(InputAction.CallbackContext context);
         }
     }
 }

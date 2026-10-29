@@ -56,5 +56,7 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "RPG-2.sln"
+    "dotnet.defaultSolution": "RPG-2.sln",
+    "dotnet.preferCSharpExtension": true,
+    "git.ignoreLimitWarning": true
 }

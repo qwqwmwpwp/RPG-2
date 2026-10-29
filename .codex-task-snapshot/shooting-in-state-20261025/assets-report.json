@@ -1,0 +1,22 @@
+{
+  "purpose": "Static serialized-reference and baseline comparison only; no Unity/project execution.",
+  "prefabDocumentsBefore": 367,
+  "prefabDocumentsAfter": 366,
+  "removedDocument": "710000012",
+  "changedDocuments": [
+    "5963844012669126346",
+    "710000006"
+  ],
+  "originalClipsAndFourParametersPreserved": true,
+  "otherPrefabDocumentsUnchanged": true,
+  "missingLocalFileIDs": [],
+  "oldScriptAndMetaRemoved": true,
+  "unchangedFiles": {
+    "Assets/player/player.controller": true,
+    "Assets/Scenes/Main.unity": true,
+    "Assets/CombatGirlsCharacterPack/Biperworks_Tools/CombatGirls_Weapon_Control/Character_Weapon_Controller.cs": true,
+    "Assets/Scripts/PlayerMovement/PlayerFireAction.cs": true,
+    "Assets/Scripts/PlayerMovement/PlayerFireAction.cs.meta": true,
+    "Assets/Scripts/PlayerMovement/States/AttackState.cs.meta": true
+  }
+}

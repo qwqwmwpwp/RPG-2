@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using RPG4.Backpack.Core;
 using RPG4.Backpack.Items;
 
 namespace RPG4.Backpack.Inventory
@@ -11,6 +12,9 @@ namespace RPG4.Backpack.Inventory
 
         int Rows { get; }
         int Columns { get; }
+
+        GridCoord ResolveItemDimensions(RuntimeItem item);
+        bool CanAcceptItem(RuntimeItem item, out string error);
 
         /// <summary>按持久标识读取权威放置记录。</summary>
         bool TryGetPlacement(ItemId itemId, out InventoryPlacement placement);

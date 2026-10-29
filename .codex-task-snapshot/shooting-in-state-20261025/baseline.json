@@ -1,0 +1,62 @@
+{
+  "Assets/Scripts/PlayerMovement/Player.cs": {
+    "sha256": "7e5f5611ba77066a46c1cf9e8b1d16738cbe626c21db28c7e3732d94e6a20bfa",
+    "bytes": 4685
+  },
+  "Assets/Scripts/PlayerMovement/PlayerContext.cs": {
+    "sha256": "583162b88762c40126791a035f1687d86f202be6446fc02f431fa235312417a4",
+    "bytes": 2909
+  },
+  "Assets/Scripts/PlayerMovement/PlayerStateData.cs": {
+    "sha256": "be5302f3cd8a16f25834c4f01c7812084f06e6b8a7283de1dfaa33a54df99927",
+    "bytes": 1841
+  },
+  "Assets/Scripts/PlayerMovement/PlayerFireAction.cs": {
+    "sha256": "35878afe55b782da18bd45b634b737688d9a5455c473e4b91ce27be42e5c7471",
+    "bytes": 3662
+  },
+  "Assets/Scripts/PlayerMovement/PlayerFireAction.cs.meta": {
+    "sha256": "ca97973eac640788066a0cd2740ec7876eba9ce2e7e1fd4ce326db5221c426db",
+    "bytes": 240
+  },
+  "Assets/Scripts/PlayerMovement/PlayerShootSimulation.cs": {
+    "sha256": "967ba021251bd9c8bbe58a6d601d433accccbc52620dc3ced84353bacbf3db00",
+    "bytes": 7097
+  },
+  "Assets/Scripts/PlayerMovement/PlayerShootSimulation.cs.meta": {
+    "sha256": "2124323f7eefca7c08937e95cc1aff4f7d9fdd176c07cd83809d4d6b1ce1a44a",
+    "bytes": 240
+  },
+  "Assets/Scripts/PlayerMovement/States/AttackState.cs": {
+    "sha256": "0d18209ebf99b761eac4a0d4b3f734f6b9874cb6cfe2155fcb905d2550ed2839",
+    "bytes": 5014
+  },
+  "Assets/Scripts/PlayerMovement/States/AttackState.cs.meta": {
+    "sha256": "8a00860d05be6efa6f432271303bf966981bd26e54fdfc31a9861245a7c76523",
+    "bytes": 240
+  },
+  "Assets/Scripts/PlayerMovement/States/PlayerRootState.cs": {
+    "sha256": "780f40f6cd6573d86354bae3863aa3fa36cf208ed1322cb09cb86782557edb72",
+    "bytes": 1456
+  },
+  "Assets/Scripts/PlayerMovement/README.md": {
+    "sha256": "c8f3a43e1abb0f2dc97b6f6c25304677a250f7f55bba24d6c1d012eedc54a84d",
+    "bytes": 30926
+  },
+  "Assets/player/player.prefab": {
+    "sha256": "4f68449f6e1e230c5893f3c5a8ea4e082e4dfaccfe16c48d3399288b23467cdb",
+    "bytes": 259260
+  },
+  "Assets/player/player.controller": {
+    "sha256": "e8320954272db70fd6111cb3e7f0d2bb5437a54d4178f2c215a7e86c586b54a4",
+    "bytes": 11289
+  },
+  "Assets/Scenes/Main.unity": {
+    "sha256": "625cd972769bd773e072549d9528a58e5b6459ebf52520e335404be66eccdfda",
+    "bytes": 34262
+  },
+  "Assets/CombatGirlsCharacterPack/Biperworks_Tools/CombatGirls_Weapon_Control/Character_Weapon_Controller.cs": {
+    "sha256": "64dd4e780ea343d3b3ff1f71e7e6e77b452d2bf8300d930965b195715a007947",
+    "bytes": 25615
+  }
+}

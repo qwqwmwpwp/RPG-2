@@ -1,0 +1,1430 @@
+diff --git a/.codex-task-snapshot/shoot-simulation/static-check/assets-report.json b/.codex-task-snapshot/shoot-simulation/static-check/assets-report.json
+index c9509a3..7b8a359 100644
+--- a/.codex-task-snapshot/shoot-simulation/static-check/assets-report.json
++++ b/.codex-task-snapshot/shoot-simulation/static-check/assets-report.json
+@@ -2,7 +2,7 @@
+   "verification_method": "Static text inspection of current files only; no Unity launch, project code execution, import, build, or tests.",
+   "resources": {
+     "Assets/player/player.controller": {
+-      "sha256": "edc9c66c9308ec3f44d13303a08d4b1f48d701f399cc8b15838e48288e45f0de",
++      "sha256": "793a96740cd27f93277253183627229fddfb396fe1e748e0ae20333b4f37bf85",
+       "object_count": 10,
+       "unique_object_ids": true,
+       "local_reference_count": 10,
+@@ -50,7 +50,8 @@
+         "RightHandIK"
+       ],
+       "encoding_reference": "https://github.com/Unity-Technologies/UnityCsReference/blob/master/Modules/Animation/ScriptBindings/AvatarMask.bindings.cs",
+-      "transform_elements": []
++      "transform_elements": [],
++      "sha256": "eee42299f3e7e956afe68fae1fabc696d65f809166aa568026a6aa012d0e4200"
+     }
+   },
+   "contracts": {
+@@ -159,5 +160,97 @@
+     "Always-weight-one shooting layer uses Empty with no Motion and Write Defaults off; the actual return to the underlying pose after firing needs manual verification.",
+     "Only the final UpperBody Shooting layer enables IKPass; OnAnimatorIK behavior during Empty needs manual verification.",
+     "Unity Humanoid Body includes Hips, Spine, and Chest. Root and leg channels are disabled, but Hips cannot be separated from Spine using Humanoid body-part slots."
+-  ]
++  ],
++  "recheck": {
++    "checked_at_utc": "2026-10-23T18:17:47.876038+00:00",
++    "result": "passed_static_reference_and_contract_checks",
++    "controller_resaved_externally_after_previous_report": true,
++    "external_save_note": "The controller was saved externally after the earlier report. Current AimLocomotion editor node position is x=460 (before snapshot x=456); empty-field whitespace and YAML wrapping also changed. These are preserved. Current shooting states, parameters, mask, weight, and IK contracts match the implemented contract.",
++    "assets_modified_during_recheck": false,
++    "source_hashes": {
++      "Assets/player/player.controller": "793a96740cd27f93277253183627229fddfb396fe1e748e0ae20333b4f37bf85",
++      "Assets/player/player.controller.meta": "7d29f571699fa1f47cdb1f400a914b1ac222dd03a4d82c5fe7d1e29a21b32b22",
++      "Assets/player/player.prefab": "fdb78425d9475f4c0e0ce2ba1447b3fa2fc19f48fc7daa6f38cb813e0ec0a4e5",
++      "Assets/player/player.prefab.meta": "9a901074143bc90739d4a35f621c877a265262250d5ca08cf67d3a4fd62cbbb8",
++      "Assets/player/UpperBodyShooting.mask": "eee42299f3e7e956afe68fae1fabc696d65f809166aa568026a6aa012d0e4200",
++      "Assets/player/UpperBodyShooting.mask.meta": "d5c2347a94ee68fabd5cd5fc048893d58b4013c871ce0b9bdad75dd59fcda9eb",
++      "Assets/Scenes/Main.unity": "3c5a19cd7de2711923ea7e2c6227ba8062e31bbc70ef344c819b84c3aec9f3ba",
++      "Assets/Scripts/PlayerMovement/PlayerShootSimulation.cs": "ce2984b25e9b4a84c5712ca6c3b2dbbdd75678cd73e28b7f164a13ac03157996",
++      "Assets/Scripts/PlayerMovement/PlayerShootSimulation.cs.meta": "2124323f7eefca7c08937e95cc1aff4f7d9fdd176c07cd83809d4d6b1ce1a44a",
++      "Assets/Scripts/PlayerMovement/PlayerAimPose.cs": "4837fec4191e801ac62b76457c097b58b38b7b0daf461d0ac68711530a16a1c0",
++      "Assets/Scripts/PlayerMovement/PlayerStateData.cs": "be5302f3cd8a16f25834c4f01c7812084f06e6b8a7283de1dfaa33a54df99927"
++    },
++    "controller_external_references": [
++      {
++        "guid": "711a2af0b4d844b47ad8942d0114c502",
++        "fileID": -7614703449353396500,
++        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Normal/R_Run.fbx.meta"
++      },
++      {
++        "guid": "3787889f507548045abba6b87370b07d",
++        "fileID": -5109575877556825824,
++        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Normal/R_Idle.fbx.meta"
++      },
++      {
++        "guid": "206db03de8174df68bd28b139650251d",
++        "fileID": 31900000,
++        "meta": "Assets/player/UpperBodyShooting.mask.meta"
++      },
++      {
++        "guid": "5b0c2c871074d4742bf7150dca39c436",
++        "fileID": 145786180134763700,
++        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimIdle.fbx.meta"
++      },
++      {
++        "guid": "5c39511cfd8e963449dc97205030eb51",
++        "fileID": -8694474364745777521,
++        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimWalk_F.fbx.meta"
++      },
++      {
++        "guid": "fe28bbe24969b434fa8729aa88ae7445",
++        "fileID": 6147688166201776650,
++        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimWalk_B.fbx.meta"
++      },
++      {
++        "guid": "16f033bb1bde357438bd3c0511a51ede",
++        "fileID": -6634934411699340864,
++        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimWalk_FL.fbx.meta"
++      },
++      {
++        "guid": "8a5d4be37c7e8bd48b415ca308632efe",
++        "fileID": -7036691193190048577,
++        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimWalk_FR.fbx.meta"
++      },
++      {
++        "guid": "b513f8bb11977514d95addd82df6fff5",
++        "fileID": 1982008771778853863,
++        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimWalk_BL.fbx.meta"
++      },
++      {
++        "guid": "11942bbdd60292f4190e900f211eb2f1",
++        "fileID": -7383578122819572745,
++        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimWalk_BR.fbx.meta"
++      },
++      {
++        "guid": "c64081e16b2eb784285608f8182fac46",
++        "fileID": -319965354747890277,
++        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_Shoot.fbx.meta"
++      },
++      {
++        "guid": "c64081e16b2eb784285608f8182fac46",
++        "fileID": -319965354747890277,
++        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_Shoot.fbx.meta"
++      }
++    ],
++    "checked_contracts": [
++      "Controller and prefab object IDs unique; all local fileID references resolve",
++      "All controller external GUIDs resolve uniquely; FBX animation fileIDs exist in their importer metadata",
++      "UpperBody Shooting remains layer 1, Override, weight 1, masked; only final layer enables IKPass",
++      "Empty, HipFire, ADSFire states and ShotSpeed/AimLocomotionSpeed match runtime paths and parameters",
++      "Prefab shooting component GUID, root attachment, Animator/clip references and serialized fields match scripts",
++      "AimPose finalIkLayer=1 and Player hipFire.moveSpeed=6 remain valid",
++      "Main scene inherits the player prefab and new component, with existing cameraController override intact"
++    ],
++    "runtime_validation_performed": false
++  }
+ }
+diff --git a/.vscode/settings.json b/.vscode/settings.json
+index 14f98d9..0a226bc 100644
+--- a/.vscode/settings.json
++++ b/.vscode/settings.json
+@@ -56,5 +56,6 @@
+         "temp/": true,
+         "Temp/": true
+     },
+-    "dotnet.defaultSolution": "RPG-2.sln"
++    "dotnet.defaultSolution": "RPG-2.sln",
++    "dotnet.preferCSharpExtension": true
+ }
+\ No newline at end of file
+diff --git a/Assets/CombatGirlsCharacterPack/Biperworks_Tools/CombatGirls_Weapon_Control/Character_Weapon_Controller.cs b/Assets/CombatGirlsCharacterPack/Biperworks_Tools/CombatGirls_Weapon_Control/Character_Weapon_Controller.cs
+index e86c519..a97dcdf 100644
+--- a/Assets/CombatGirlsCharacterPack/Biperworks_Tools/CombatGirls_Weapon_Control/Character_Weapon_Controller.cs
++++ b/Assets/CombatGirlsCharacterPack/Biperworks_Tools/CombatGirls_Weapon_Control/Character_Weapon_Controller.cs
+@@ -1,6 +1,7 @@
+ using UnityEngine;
+ using UnityEngine.Animations;
+ using System.Collections.Generic;
++using RPG4.PlayerMovement;
+ 
+ #if UNITY_EDITOR
+ using UnityEditor;
+@@ -344,11 +345,13 @@ public class Character_Weapon_Controller : MonoBehaviour
+ 
+     // Internal Variables
+     private Animator animator;
++    private Player player;
+     private int[] lastStateHashes;
+ 
+     private void Awake()
+     {
+         animator = GetComponent<Animator>();
++        player = GetComponentInParent<Player>();
+ 
+         if (weaponSlots != null)
+         {
+@@ -430,6 +433,13 @@ public class Character_Weapon_Controller : MonoBehaviour
+ 
+     private void Update()
+     {
++        // A zero-weight layer may skip IK callbacks; discard the old blend even then.
++        if (player != null && !player.WeaponIKEnabled)
++        {
++            foreach (var ik in supportIKSettings)
++                ik.currentWeight = 0f;
++        }
++
+         if (defaultEventSetting == null || !defaultEventSetting.enabled || string.IsNullOrEmpty(defaultEventSetting.eventName) || animator == null) return;
+ 
+         int layerCount = animator.layerCount;
+@@ -641,6 +651,17 @@ public class Character_Weapon_Controller : MonoBehaviour
+     {
+         if (animator == null) return;
+ 
++        if (player != null && !player.WeaponIKEnabled)
++        {
++            foreach (var ik in supportIKSettings)
++            {
++                ik.currentWeight = 0f;
++                animator.SetIKPositionWeight(ik.ikHand, 0f);
++                animator.SetIKRotationWeight(ik.ikHand, 0f);
++            }
++            return;
++        }
++
+         // Iterate through all tracked IK modules for individual smooth lerp transitioning.
+         foreach (var ik in supportIKSettings)
+         {
+diff --git a/Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimIdle_AutoShoot.fbx.meta b/Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimIdle_AutoShoot.fbx.meta
+index 8f911ac..b862178 100644
+--- a/Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimIdle_AutoShoot.fbx.meta
++++ b/Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimIdle_AutoShoot.fbx.meta
+@@ -1,7 +1,7 @@
+ fileFormatVersion: 2
+ guid: 350d849f350ac944f911df61ffa830c0
+ ModelImporter:
+-  serializedVersion: 21300
++  serializedVersion: 22200
+   internalIDToNameTable: []
+   externalObjects: {}
+   materials:
+@@ -37,14 +37,14 @@ ModelImporter:
+       takeName: R_AimIdle_AutoShoot
+       internalID: 7853932406585560401
+       firstFrame: 15
+-      lastFrame: 44
++      lastFrame: 36
+       wrapMode: 0
+       orientationOffsetY: 0
+       level: 0
+       cycleOffset: 0
+       loop: 0
+       hasAdditiveReferencePose: 0
+-      loopTime: 0
++      loopTime: 1
+       loopBlend: 0
+       loopBlendOrientation: 0
+       loopBlendPositionY: 0
+@@ -212,6 +212,7 @@ ModelImporter:
+     addColliders: 0
+     useSRGBMaterialColor: 1
+     sortHierarchyByName: 1
++    importPhysicalCameras: 1
+     importVisibility: 1
+     importBlendShapes: 1
+     importCameras: 0
+@@ -239,6 +240,7 @@ ModelImporter:
+     secondaryUVMinObjectScale: 1
+     secondaryUVPackMargin: 4
+     useFileScale: 1
++    strictVertexDataChecks: 0
+   tangentSpace:
+     normalSmoothAngle: 60
+     normalImportMode: 0
+@@ -806,7 +808,8 @@ ModelImporter:
+     - name: ring_02_l
+       parentName: ring_01_l
+       position: {x: -0.030027313, y: 0, z: 0.000000009536743}
+-      rotation: {x: -0.000000052154057, y: -0.0000000074505797, z: -0.0018370822, w: 0.9999984}
++      rotation: {x: -0.000000052154057, y: -0.0000000074505797, z: -0.0018370822,
++        w: 0.9999984}
+       scale: {x: 1, y: 1, z: 1.0000001}
+     - name: ring_03_l
+       parentName: ring_02_l
+@@ -951,7 +954,8 @@ ModelImporter:
+     - name: thigh_twist_01_r
+       parentName: thigh_r
+       position: {x: -0.22478583, y: 2.9802322e-10, z: -0.0000000047683715}
+-      rotation: {x: -0.0000000028812783, y: -0.000000005587935, z: 0.00000004586763, w: 1}
++      rotation: {x: -0.0000000028812783, y: -0.000000005587935, z: 0.00000004586763,
++        w: 1}
+       scale: {x: 1, y: 1, z: 1}
+     - name: calf_r
+       parentName: thigh_r
+@@ -990,12 +994,14 @@ ModelImporter:
+     hasTranslationDoF: 0
+     hasExtraRoot: 1
+     skeletonHasParents: 1
+-  lastHumanDescriptionAvatarSource: {fileID: 9000000, guid: b02f7765ace5dff4a866b767512e4a05, type: 3}
++  lastHumanDescriptionAvatarSource: {fileID: 9000000, guid: b02f7765ace5dff4a866b767512e4a05,
++    type: 3}
+   autoGenerateAvatarMappingIfUnspecified: 1
+   animationType: 3
+   humanoidOversampling: 1
+   avatarSetup: 2
+   addHumanoidExtraRootOnlyWhenUsingAvatar: 1
++  importBlendShapeDeformPercent: 0
+   remapMaterialsIfMaterialImportModeIsNone: 0
+   additionalBone: 0
+   userData: 
+diff --git a/Assets/Scenes/Main.unity b/Assets/Scenes/Main.unity
+index 09aa61f..1ffc6c4 100644
+--- a/Assets/Scenes/Main.unity
++++ b/Assets/Scenes/Main.unity
+@@ -883,7 +883,7 @@ PrefabInstance:
+       objectReference: {fileID: 0}
+     - target: {fileID: 330585545, guid: 3a3cc0360af447918940eb53044c927f, type: 3}
+       propertyPath: field of view
+-      value: 59.99992
++      value: 59.99974
+       objectReference: {fileID: 0}
+     - target: {fileID: 330585546, guid: 3a3cc0360af447918940eb53044c927f, type: 3}
+       propertyPath: m_LocalPosition.y
+@@ -895,7 +895,7 @@ PrefabInstance:
+       objectReference: {fileID: 0}
+     - target: {fileID: 1956070572, guid: 3a3cc0360af447918940eb53044c927f, type: 3}
+       propertyPath: m_Lens.FieldOfView
+-      value: 59.99992
++      value: 59.99974
+       objectReference: {fileID: 0}
+     - target: {fileID: 1956070573, guid: 3a3cc0360af447918940eb53044c927f, type: 3}
+       propertyPath: m_LocalPosition.y
+@@ -915,7 +915,7 @@ PrefabInstance:
+       objectReference: {fileID: 740000003}
+     - target: {fileID: 1956070584, guid: 3a3cc0360af447918940eb53044c927f, type: 3}
+       propertyPath: CameraDistance
+-      value: 2.000001
++      value: 2
+       objectReference: {fileID: 0}
+     m_RemovedComponents: []
+     m_RemovedGameObjects: []
+@@ -932,7 +932,7 @@ PrefabInstance:
+     m_Modifications:
+     - target: {fileID: 710000002, guid: f2d4f027e36129f4e9c02cfb0488b20d, type: 3}
+       propertyPath: m_LocalPosition.y
+-      value: 1.3
++      value: 1
+       objectReference: {fileID: 0}
+     - target: {fileID: 710000002, guid: f2d4f027e36129f4e9c02cfb0488b20d, type: 3}
+       propertyPath: m_LocalPosition.z
+@@ -1007,6 +1007,31 @@ PrefabInstance:
+       propertyPath: m_Name
+       value: player
+       objectReference: {fileID: 0}
++    - target: {fileID: 6154778328145528361, guid: f2d4f027e36129f4e9c02cfb0488b20d,
++        type: 3}
++      propertyPath: m_LocalPosition.x
++      value: -0.00000004662717
++      objectReference: {fileID: 0}
++    - target: {fileID: 6154778328145528361, guid: f2d4f027e36129f4e9c02cfb0488b20d,
++        type: 3}
++      propertyPath: m_LocalPosition.y
++      value: 0.000000009275995
++      objectReference: {fileID: 0}
++    - target: {fileID: 6154778328145528361, guid: f2d4f027e36129f4e9c02cfb0488b20d,
++        type: 3}
++      propertyPath: m_LocalPosition.z
++      value: -0.000000015020872
++      objectReference: {fileID: 0}
++    - target: {fileID: 9113369961250505187, guid: f2d4f027e36129f4e9c02cfb0488b20d,
++        type: 3}
++      propertyPath: m_Radius
++      value: 0.3
++      objectReference: {fileID: 0}
++    - target: {fileID: 9113369961250505187, guid: f2d4f027e36129f4e9c02cfb0488b20d,
++        type: 3}
++      propertyPath: m_Center.y
++      value: 0.9
++      objectReference: {fileID: 0}
+     m_RemovedComponents: []
+     m_RemovedGameObjects: []
+     m_AddedGameObjects: []
+diff --git a/Assets/Scripts/Input/PlayerInput.cs b/Assets/Scripts/Input/PlayerInput.cs
+index 9006c06..f3c3beb 100644
+--- a/Assets/Scripts/Input/PlayerInput.cs
++++ b/Assets/Scripts/Input/PlayerInput.cs
+@@ -155,10 +155,16 @@ namespace RPG4.Input
+             look = Vector2.zero;
+             zoom = 0f;
+             interactPressed = false;
++            ClearWeaponInput();
++            lookReady = false;
++        }
++
++        /// <summary>取消左右键并要求松开再按；保留移动、观察与交互快照。</summary>
++        public void ClearWeaponInput()
++        {
+             aimHeld = false;
+             aimArmed = false;
+             ClearFire();
+-            lookReady = false;
+         }
+ 
+         private void ClearFire()
+diff --git a/Assets/Scripts/PlayerMovement/Player.cs b/Assets/Scripts/PlayerMovement/Player.cs
+index 370217e..94631d7 100644
+--- a/Assets/Scripts/PlayerMovement/Player.cs
++++ b/Assets/Scripts/PlayerMovement/Player.cs
+@@ -16,9 +16,14 @@ namespace RPG4.PlayerMovement
+         private HierarchicalStateMachine stateMachine;
+         private PlayerContext context;
+         private PlayerShootSimulation shooting;
++        private readonly PlayerFireAction fireAction = new PlayerFireAction();
+ 
+         public PlayerInput Input => playerInput;
+ 
++        /// <summary>仅在可操作的实际射击动作中启用武器手部 IK，包含末发与淡出收尾。</summary>
++        public bool WeaponIKEnabled => isActiveAndEnabled && context != null
++            && context.ShotPoseActive;
++
+         private void Awake()
+         {
+             if (playerInput == null) playerInput = GetComponent<PlayerInput>();
+@@ -27,7 +32,8 @@ namespace RPG4.PlayerMovement
+             shooting = GetComponent<PlayerShootSimulation>();
+             if (shooting != null) shooting.Initialize(this, stateData.Content.Animator);
+             context = new PlayerContext(playerInput, stateData.Content, stateData.Exploration,
+-                stateData.Aim, stateData.HipFire, shooting);
++                stateData.Aim, stateData.HipFire, fireAction);
++            context.SetWeaponMode(false, false);
+             stateMachine = new HierarchicalStateMachine();
+             stateMachine.Initialize(new PlayerRootState(stateMachine, context));
+         }
+@@ -35,10 +41,19 @@ namespace RPG4.PlayerMovement
+         private void Update()
+         {
+             float deltaTime = Mathf.Max(0f, Time.deltaTime);
+-            // 明确的输入→射击请求→模式→动画顺序，不依赖独立组件的 Update 顺序。
+-            if (shooting != null) shooting.PrepareInput(context.CanUseWeapon, deltaTime);
++            // 输入与时间由宿主传入逻辑动作；模式和动画只消费本帧结果。
++            bool canUseWeapon = context.CanUseWeapon && deltaTime > 0f;
++            PlayerFireAction.Frame frame = default;
++            if (!canUseWeapon)
++                CancelWeaponInput();
++            else if (shooting != null && shooting.isActiveAndEnabled)
++                frame = fireAction.Tick(playerInput.FirePressed, playerInput.FireHeld, Time.timeAsDouble,
++                    shooting.ShotInterval, shooting.ShotAnimationDuration, shooting.LayerFadeOutDuration);
++            else
++                fireAction.Cancel();
++            context.ResolveMode(canUseWeapon, canUseWeapon && playerInput.AimHeld);
+             stateMachine.Tick(deltaTime);
+-            if (shooting != null) shooting.TickAnimation();
++            if (shooting != null) shooting.TickAnimation(frame, context.Mode == PlayerMode.Aim);
+         }
+ 
+         private void OnEnable()
+@@ -49,11 +64,9 @@ namespace RPG4.PlayerMovement
+ 
+         private void LateUpdate()
+         {
+-            // 交互窗口可在 LateUpdate 打开；补充取消后续射击并恢复持枪姿态。
+-            if (context.CanUseWeapon) return;
+-            if (shooting != null) shooting.Stop();
+-            context.SetWeaponMode(false, false);
+-            if (!context.CanControl) context.SetPlanarVelocity(Vector3.zero);
++            // 交互窗口可在 LateUpdate 打开；只取消和同步模式，不再消费本帧开火。
++            if (context.CanUseWeapon && Time.deltaTime > 0f) return;
++            CancelWeaponAction();
+         }
+ 
+         private void FixedUpdate()
+@@ -71,9 +84,38 @@ namespace RPG4.PlayerMovement
+ 
+         internal void Stop()
+         {
+-            if (shooting != null) shooting.Stop();
++            CancelWeaponInput();
++            if (context != null) context.ResolveMode(false, false);
+             if (stateMachine != null) stateMachine.Stop();
+             if (playerInput != null) playerInput.Clear();
+         }
++
++        private void CancelWeaponInput()
++        {
++            fireAction.Cancel();
++            if (shooting != null) shooting.ClearPresentation();
++            if (playerInput != null) playerInput.ClearWeaponInput();
++        }
++
++        internal void CancelWeaponAction()
++        {
++            CancelWeaponInput();
++            if (context == null) return;
++            context.ResolveMode(false, false);
++            // 只同步已活动的 HSM；清理不能重新启动停机或尚未启动的状态链。
++            if (isActiveAndEnabled && stateMachine != null && stateMachine.ActiveLeaf != null)
++                stateMachine.Tick(0f);
++            else context.SetWeaponMode(false, false);
++        }
++
++        private void OnApplicationFocus(bool focused)
++        {
++            if (!focused) Stop();
++        }
++
++        private void OnApplicationPause(bool paused)
++        {
++            if (paused) Stop();
++        }
+     }
+ }
+diff --git a/Assets/Scripts/PlayerMovement/PlayerAimPose.cs b/Assets/Scripts/PlayerMovement/PlayerAimPose.cs
+index db5c2c2..cbad2f1 100644
+--- a/Assets/Scripts/PlayerMovement/PlayerAimPose.cs
++++ b/Assets/Scripts/PlayerMovement/PlayerAimPose.cs
+@@ -2,7 +2,7 @@ using UnityEngine;
+ 
+ namespace RPG4.PlayerMovement
+ {
+-    /// <summary>在 Humanoid IK Pass 中叠加上半身俯仰；手部 IK 仍由武器组件负责。</summary>
++    /// <summary>在动画与手部 IK 完成后，整体叠加上半身俯仰。</summary>
+     [DisallowMultipleComponent]
+     [DefaultExecutionOrder(-50)]
+     [RequireComponent(typeof(Animator))]
+@@ -11,7 +11,7 @@ namespace RPG4.PlayerMovement
+         [Tooltip("上半身总俯仰范围；负数向上，正数向下。")]
+         [SerializeField] private Vector2 pitchRange = new Vector2(-30f, 45f);
+         [SerializeField, Min(0f)] private float pitchSmoothTime = 0.1f;
+-        [Tooltip("只在最终上半身层做一次俯仰；该层与武器手 IK 共用唯一 IK Pass。")]
++        [Tooltip("仅在本帧最终上半身层完成 IK Pass 后叠加俯仰。")]
+         [SerializeField, Min(0)] private int finalIkLayer = 1;
+ 
+         private Player player;
+@@ -23,6 +23,7 @@ namespace RPG4.PlayerMovement
+         private Quaternion chestAnimationRotation;
+         private bool aiming;
+         private bool poseApplied;
++        private int finalIkFrame = -1;
+         private float pitch;
+         private float pitchVelocity;
+ 
+@@ -48,11 +49,20 @@ namespace RPG4.PlayerMovement
+             }
+         }
+ 
++        private void Update()
++        {
++            // 在下一次动画求值前还原，避免 IK 目标带着上一帧的俯仰或重复叠加。
++            RestorePose();
++            finalIkFrame = -1;
++        }
++
+         private void OnAnimatorIK(int layerIndex)
+         {
+-            if (layerIndex != finalIkLayer) return;
+-            // 此时 Animator 已给出本帧基础姿态，不能再恢复上一帧的基础旋转。
+-            poseApplied = false;
++            if (layerIndex == finalIkLayer) finalIkFrame = Time.frameCount;
++        }
++
++        private void LateUpdate()
++        {
+             if (!aiming || player == null || !player.isActiveAndEnabled || player.Input == null
+                 || !player.Input.CanReadGameplayInput || Cursor.lockState != CursorLockMode.Locked
+                 || cameraController == null || !cameraController.isActiveAndEnabled
+@@ -65,6 +75,7 @@ namespace RPG4.PlayerMovement
+ 
+             float deltaTime = Time.deltaTime;
+             if (deltaTime <= 0f) return;
++            if (finalIkFrame != Time.frameCount) return;
+             float targetPitch = Mathf.Clamp(cameraController.ViewPitch, pitchRange.x, pitchRange.y);
+             pitch = pitchSmoothTime <= 0f ? targetPitch : Mathf.SmoothDamp(pitch, targetPitch,
+                 ref pitchVelocity, pitchSmoothTime, Mathf.Infinity, deltaTime);
+@@ -73,17 +84,17 @@ namespace RPG4.PlayerMovement
+             spineAnimationRotation = spine.localRotation;
+             if (chest != null) chestAnimationRotation = chest.localRotation;
+             float spinePitch = chest != null ? pitch * 0.5f : pitch;
+-            ApplyPitch(HumanBodyBones.Spine, spine, spinePitch);
+-            if (chest != null) ApplyPitch(HumanBodyBones.Chest, chest, pitch * 0.5f);
++            // 两臂和挂在右手的枪已完成本帧求值；共同父骨骼的俯仰保持握持相对关系。
++            ApplyPitch(spine, spinePitch);
++            if (chest != null) ApplyPitch(chest, pitch * 0.5f);
+             poseApplied = true;
+         }
+ 
+-        private void ApplyPitch(HumanBodyBones boneId, Transform bone, float angle)
++        private void ApplyPitch(Transform bone, float angle)
+         {
+             // 使用角色横轴转到骨骼父空间，不假定导入骨骼的局部 X 轴方向。
+             Vector3 localAxis = bone.parent.InverseTransformDirection(player.transform.right);
+-            animator.SetBoneLocalRotation(boneId,
+-                Quaternion.AngleAxis(angle, localAxis) * bone.localRotation);
++            bone.localRotation = Quaternion.AngleAxis(angle, localAxis) * bone.localRotation;
+         }
+ 
+         private void RestorePose()
+diff --git a/Assets/Scripts/PlayerMovement/PlayerContext.cs b/Assets/Scripts/PlayerMovement/PlayerContext.cs
+index 17b3890..02567be 100644
+--- a/Assets/Scripts/PlayerMovement/PlayerContext.cs
++++ b/Assets/Scripts/PlayerMovement/PlayerContext.cs
+@@ -3,6 +3,8 @@ using UnityEngine;
+ 
+ namespace RPG4.PlayerMovement
+ {
++    internal enum PlayerMode { Exploration, Aim, HipFire }
++
+     /// <summary>每个角色独立的运行时引用集合；输入和配置由各自的数据源维护。</summary>
+     internal sealed class PlayerContext
+     {
+@@ -11,7 +13,8 @@ namespace RPG4.PlayerMovement
+         internal ExplorationState.Data Exploration { get; }
+         internal AimState.Data Aim { get; }
+         internal HipFireState.Data HipFire { get; }
+-        internal PlayerShootSimulation Shooting { get; }
++        internal PlayerMode Mode { get; private set; }
++        private readonly PlayerFireAction fireAction;
+ 
+         internal bool AnimatorIsAvailable => Content.Animator != null
+             && Content.Animator.runtimeAnimatorController != null && Content.Animator.isActiveAndEnabled;
+@@ -20,22 +23,27 @@ namespace RPG4.PlayerMovement
+             && Content.Body != null && !Content.Body.isKinematic
+             && Content.CameraController != null && Content.CameraController.isActiveAndEnabled;
+ 
+-        internal bool CanUseWeapon => CanControl && AnimatorIsAvailable
+-            && Cursor.lockState == CursorLockMode.Locked;
+-        internal bool WantsAim => CanUseWeapon && Input.AimHeld;
+-        internal bool WantsHipFire => CanUseWeapon && Shooting != null
+-            && Shooting.isActiveAndEnabled && Shooting.HasShotPresentation;
++        internal bool CanUseWeapon => CanControl && Cursor.lockState == CursorLockMode.Locked;
++
++        internal bool ShotPoseActive => Mode != PlayerMode.Exploration && fireAction.HasShotAction
++            && CanUseWeapon && Time.deltaTime > 0f;
+ 
+         internal PlayerContext(PlayerInput input, PlayerContentData content,
+             ExplorationState.Data exploration, AimState.Data aim, HipFireState.Data hipFire,
+-            PlayerShootSimulation shooting)
++            PlayerFireAction fireAction)
+         {
+             Input = input;
+             Content = content;
+             Exploration = exploration;
+             Aim = aim;
+             HipFire = hipFire;
+-            Shooting = shooting;
++            this.fireAction = fireAction;
++        }
++
++        internal void ResolveMode(bool canUseWeapon, bool aimHeld)
++        {
++            Mode = !canUseWeapon ? PlayerMode.Exploration : aimHeld ? PlayerMode.Aim
++                : fireAction.HasWeaponAction ? PlayerMode.HipFire : PlayerMode.Exploration;
+         }
+ 
+         internal void SetPlanarVelocity(Vector3 velocity)
+@@ -46,10 +54,14 @@ namespace RPG4.PlayerMovement
+             body.angularVelocity = Vector3.zero;
+         }
+ 
+-        internal void SetWeaponMode(bool aiming, bool weaponPose)
++        internal void SetWeaponMode(bool aiming, bool shotPose)
+         {
+             if (Content.CameraController != null) Content.CameraController.SetAiming(aiming);
+-            if (Content.AimPose != null) Content.AimPose.SetAiming(weaponPose);
++            if (Content.AimPose != null) Content.AimPose.SetAiming(shotPose);
++            // 禁用期间也清理旧层权重；恢复求值后不能沿用上次射击表现。
++            Animator animator = Content.Animator;
++            if (animator != null && animator.runtimeAnimatorController != null && animator.layerCount > 1)
++                animator.SetLayerWeight(1, shotPose ? 1f : 0f);
+         }
+     }
+ }
+diff --git a/Assets/Scripts/PlayerMovement/PlayerShootSimulation.cs b/Assets/Scripts/PlayerMovement/PlayerShootSimulation.cs
+index 67b2b18..4eb385b 100644
+--- a/Assets/Scripts/PlayerMovement/PlayerShootSimulation.cs
++++ b/Assets/Scripts/PlayerMovement/PlayerShootSimulation.cs
+@@ -2,13 +2,14 @@ using UnityEngine;
+ 
+ namespace RPG4.PlayerMovement
+ {
+-    /// <summary>纯射击动画：共享腰射/ADS节拍，由 Player 按输入→模式→动画顺序驱动。</summary>
++    /// <summary>射击动画配置与投影；开火节拍和动作生命周期由 PlayerFireAction 维护。</summary>
+     [DisallowMultipleComponent]
+     [RequireComponent(typeof(Player))]
+     public sealed class PlayerShootSimulation : MonoBehaviour
+     {
+         [SerializeField] private Animator animator;
+         [SerializeField] private AnimationClip shotClip;
++        [SerializeField] private AnimationClip autoShotClip;
+         [SerializeField, Min(0.01f)] private float shotInterval = 0.16f;
+         [SerializeField, Min(0.01f)] private float shotAnimationDuration = 0.24f;
+         [Tooltip("首发进入上半身射击状态的过渡时间。")]
+@@ -19,104 +20,114 @@ namespace RPG4.PlayerMovement
+         private static readonly int ShotSpeed = Animator.StringToHash("ShotSpeed");
+         private static readonly int HipFire = Animator.StringToHash("UpperBody Shooting.HipFire");
+         private static readonly int ADSFire = Animator.StringToHash("UpperBody Shooting.ADSFire");
++        private static readonly int HipAutoFire = Animator.StringToHash("UpperBody Shooting.HipAutoFire");
++        private static readonly int ADSAutoFire = Animator.StringToHash("UpperBody Shooting.ADSAutoFire");
+         private static readonly int Empty = Animator.StringToHash("UpperBody Shooting.Empty");
+         private const int ShootingLayer = 1;
+ 
+         private Player player;
+-        private double nextShotTime;
+-        private double lastShotTime;
+-        private double presentationEndTime;
+-        private bool fireHeld;
+-        private bool playShot;
+-        private bool animationActive;
+-        private bool fadingOut;
++        private bool hasShotProjection;
+         private bool ads;
++        private bool automatic;
++        private bool fadingProjection;
+         private bool resetAnimator = true;
+ 
+-        internal bool HasShotPresentation => fireHeld || playShot || animationActive || fadingOut;
++        internal float ShotInterval => shotInterval;
++        internal float ShotAnimationDuration => shotAnimationDuration;
++        internal float LayerFadeOutDuration => layerFadeOutDuration;
+ 
+         internal void Initialize(Player owner, Animator fallbackAnimator)
+         {
+             player = owner;
+             if (animator == null) animator = fallbackAnimator;
+-            Stop();
++            ClearPresentation();
+         }
+ 
+         private bool AnimatorAvailable => animator != null && animator.isActiveAndEnabled
+             && animator.runtimeAnimatorController != null && animator.layerCount > ShootingLayer;
+ 
+-        internal void PrepareInput(bool canUseWeapon, float deltaTime)
++        internal void TickAnimation(PlayerFireAction.Frame frame, bool wantsAds)
+         {
+-            if (!isActiveAndEnabled || !canUseWeapon || deltaTime <= 0f || shotClip == null
+-                || !AnimatorAvailable)
++            if (!isActiveAndEnabled || !AnimatorAvailable || shotClip == null)
+             {
+-                Stop();
++                // 表现不可用不反馈给逻辑；恢复时清空旧画面，只响应恢复当帧的新发。
++                if (!AnimatorAvailable) resetAnimator = true;
++                ClearPresentation();
+                 return;
+             }
+ 
+-            double now = Time.timeAsDouble;
+-            if (resetAnimator) Stop();
+-            // 点按与松开可落在同一帧，不能只依靠 FireHeld；不跨帧缓存点按。
+-            fireHeld = player.Input.FireHeld;
+-            playShot = (player.Input.FirePressed || fireHeld) && now >= nextShotTime;
+-            if (playShot)
++            if (resetAnimator) ClearPresentation();
++            if (hasShotProjection && automatic && autoShotClip == null) ClearPresentation();
++            bool wantsAutomatic = frame.IsAutomatic && autoShotClip != null;
++            int state = wantsAutomatic ? (wantsAds ? ADSAutoFire : HipAutoFire)
++                : (wantsAds ? ADSFire : HipFire);
++            if (frame.ShotStarted)
+             {
+-                lastShotTime = now;
+-                nextShotTime = now + Mathf.Max(0.01f, shotInterval);
+-                presentationEndTime = now + Mathf.Max(0.01f, shotAnimationDuration);
++                if (wantsAutomatic)
++                {
++                    // 连射循环只在进入时过渡，后续每发不重播动画。
++                    if (!hasShotProjection || !automatic || fadingProjection)
++                        animator.CrossFadeInFixedTime(state, layerFadeInDuration, ShootingLayer, 0f);
++                    else if (ads != wantsAds)
++                        SwitchAutomaticState(state);
++                }
++                else
++                {
++                    animator.SetFloat(ShotSpeed, shotClip.length / Mathf.Max(0.01f, shotAnimationDuration));
++                    if (!hasShotProjection || automatic)
++                        animator.CrossFadeInFixedTime(state, layerFadeInDuration, ShootingLayer, 0f);
++                    else
++                        animator.Play(state, ShootingLayer, 0f);
++                }
++                hasShotProjection = true;
++                ads = wantsAds;
++                automatic = wantsAutomatic;
++                fadingProjection = false;
+             }
+-            else if (animationActive && now >= presentationEndTime)
++            else if (frame.FadeStarted && hasShotProjection)
+             {
+-                animationActive = false;
+-                fadingOut = true;
+-                presentationEndTime = now + layerFadeOutDuration;
+                 animator.CrossFadeInFixedTime(Empty, layerFadeOutDuration, ShootingLayer, 0f);
++                fadingProjection = true;
++            }
++            else if (frame.ShotActive && hasShotProjection && ads != wantsAds)
++            {
++                // 模式切换只延续已有投影，不生成新发或补播缺失期间的动作。
++                if (automatic)
++                    SwitchAutomaticState(wantsAds ? ADSAutoFire : HipAutoFire);
++                else
++                    animator.Play(wantsAds ? ADSFire : HipFire, ShootingLayer, frame.ShotPhase);
++                ads = wantsAds;
+             }
+-            else if (fadingOut && now >= presentationEndTime)
++            if (!frame.ShotActive && !frame.FadingOut)
+             {
+-                fadingOut = false;
++                hasShotProjection = false;
++                automatic = false;
++                fadingProjection = false;
+             }
+         }
+ 
+-        internal void TickAnimation()
++        private void SwitchAutomaticState(int state)
+         {
+-            if (!isActiveAndEnabled || !AnimatorAvailable) return;
+-            bool wantsAds = player.Input.AimHeld;
+-            int state = wantsAds ? ADSFire : HipFire;
+-            if (playShot)
++            AnimatorStateInfo source = animator.GetCurrentAnimatorStateInfo(ShootingLayer);
++            if (animator.IsInTransition(ShootingLayer))
+             {
+-                animator.SetFloat(ShotSpeed, shotClip.length / Mathf.Max(0.01f, shotAnimationDuration));
+-                if (!animationActive && !fadingOut)
+-                    animator.CrossFadeInFixedTime(state, layerFadeInDuration, ShootingLayer, 0f);
+-                else
+-                    animator.Play(state, ShootingLayer, 0f);
+-                animationActive = true;
+-                fadingOut = false;
+-                playShot = false;
+-                ads = wantsAds;
+-            }
+-            else if (animationActive && ads != wantsAds)
+-            {
+-                // 两个状态复用同一片段；切换保留当前单发进度，绝不改变 nextShotTime。
+-                float phase = Mathf.Clamp01((float)(Time.timeAsDouble - lastShotTime)
+-                    / Mathf.Max(0.01f, shotAnimationDuration));
+-                animator.Play(state, ShootingLayer, phase);
+-                ads = wantsAds;
++                AnimatorStateInfo next = animator.GetNextAnimatorStateInfo(ShootingLayer);
++                if (IsAutomaticState(next)) source = next;
+             }
++            float phase = IsAutomaticState(source) ? source.normalizedTime : 0f;
++            animator.Play(state, ShootingLayer, phase);
+         }
+ 
+-        internal void Stop()
++        private static bool IsAutomaticState(AnimatorStateInfo state) => state.fullPathHash == HipAutoFire
++            || state.fullPathHash == ADSAutoFire;
++
++        internal void ClearPresentation()
+         {
+-            bool hadPresentation = HasShotPresentation;
+-            fireHeld = false;
+-            playShot = false;
+-            animationActive = false;
+-            fadingOut = false;
++            resetAnimator |= hasShotProjection;
++            hasShotProjection = false;
+             ads = false;
+-            nextShotTime = 0d;
+-            lastShotTime = 0d;
+-            presentationEndTime = 0d;
+-            resetAnimator |= hadPresentation;
++            automatic = false;
++            fadingProjection = false;
+             if (resetAnimator && AnimatorAvailable)
+             {
+                 animator.Play(Empty, ShootingLayer, 0f);
+@@ -126,20 +137,15 @@ namespace RPG4.PlayerMovement
+ 
+         private void OnDisable()
+         {
+-            Stop();
++            ClearPresentation();
+             // 清除输入重新武装，禁用/恢复组件时不能继续消费之前按住的左右键。
+-            if (player != null) player.Stop();
++            if (player != null) player.CancelWeaponAction();
+         }
+ 
+         private void OnEnable()
+         {
+             // 初次 OnEnable 可能早于 Player.Awake；仅清理已完成初始化的拥有者。
+-            if (player != null && player.Input != null) player.Input.Clear();
+-        }
+-
+-        private void OnApplicationFocus(bool focused)
+-        {
+-            if (!focused && player != null) player.Stop();
++            if (player != null) player.CancelWeaponAction();
+         }
+ 
+         private void OnValidate()
+diff --git a/Assets/Scripts/PlayerMovement/README.md b/Assets/Scripts/PlayerMovement/README.md
+index b392a7a..4903780 100644
+--- a/Assets/Scripts/PlayerMovement/README.md
++++ b/Assets/Scripts/PlayerMovement/README.md
+@@ -8,18 +8,18 @@
+ - **鼠标移动**：自由环绕观察，原地转镜头不会改变人物朝向。
+ - **滚轮**：探索时平滑调整相机距离，当前相机 Prefab 范围 2～3 米；瞄准时忽略滚轮并保留探索距离。
+ - **按住鼠标右键**：进入瞄准，角色朝向观察水平角，WASD 相对该方向前后及侧向移动；未开火时松开回到探索，正在开火时转为腰射。瞄准移动速度为 2.5 米/秒，斜向不会加速。
+-- **鼠标左键**：不按右键也可腰射；点按触发一发完整动作，按住按同一节拍连续播放。腰射保持观察 yaw 朝向，以 6 米/秒相对镜头移动；腰射指不开镜开火，复用现有持枪姿态。
+-- **右键 + 左键**：瞄准时射击。持续左键时按下或松开右键，保持当前单发进度和下一发时间，不因模式切换额外开火。松左留右只瞄准；全部松开后末发播完并平滑退出。这里的 ADS 是肩后收近镜头，并非枪械瞄具视角。
+-- **瞄准镜头与姿态**：距离平滑切到 1.5 米、垂直 FOV 切到 45°、鼠标灵敏度乘 0.65；退出恢复探索的滚轮距离和原 FOV。上身随观察俯仰调整，枪械沿用原右手挂点与左手 IK。
++- **鼠标左键**：不按右键也可腰射；短按仍播放一发完整的 R_Shoot。同一次按住手势的第一发使用点射动画，实际第二发起切入 R_AimIdle_AutoShoot 连射循环，后续逻辑发射不逐发重播循环。腰射保持观察 yaw 朝向，以 6 米/秒相对镜头移动；腰射指不开镜开火，复用现有持枪姿态。
++- **右键 + 左键**：瞄准时射击。持续左键时按下或松开右键，保持点射或连射的当前播放进度和下一发时间，不因模式切换额外开火。松左留右在末发及淡出收尾后只瞄准；全部松开后同样保留末发并平滑退出。这里的 ADS 是肩后收近镜头，并非枪械瞄具视角。
++- **瞄准镜头与姿态**：距离平滑切到 1.5 米、垂直 FOV 切到 45°、鼠标灵敏度乘 0.65；退出恢复探索的滚轮距离和原 FOV。单纯瞄准播放 AimLocomotion 动画，不叠加手 IK 或上身俯仰；实际单发动作及淡出收尾期间才启用这些叠加，枪械沿用原右手挂点。
+ - **Esc**：释放鼠标；左键单击重新捕获。切出应用时释放鼠标，禁用 PlayerInput 时恢复此前光标状态。
+ 
+ ## 职责
+ 
+ - **摄像机**：PlayerCameraController 读取 PlayerInput，维护 yaw、pitch 和目标距离，并更新独立 CameraPivot。虚拟相机使用 3rd Person Follow 处理肩后构图、阻尼和避障，Brain 将状态应用到 Main Camera。
+-- **角色**：Player 是 MonoBehaviour 状态机宿主。PlayerInput 统一玩法输入；Player 的 stateData 持有内容引用、探索及瞄准配置。PlayerRootState 是探索和瞄准共用的根状态；探索父状态与 IdleState、MoveState 共享 `ExplorationState.Data`，活动状态在 FixedUpdate 更新刚体运动，Player.Update 进行状态切换和动画更新。
++- **角色**：Player 是 MonoBehaviour 状态机宿主。PlayerInput 统一玩法输入；Player 的 stateData 持有内容引用、探索、瞄准及腰射配置。PlayerRootState 是探索与持枪状态组的共同根，只选择初始组并维护角色公共表现；ExplorationState 组织 IdleState/MoveState，AttackState 组织 AimState/HipFireState。活动状态在 FixedUpdate 更新刚体运动，Player.Update 进行状态切换和动画更新。
+ - **UI**：UIManager 管理窗口，InventoryInputScope 保存和恢复窗口期间的光标状态。窗口打开时及开关当帧，BlocksGameplayInput 屏蔽相机、角色和世界交互输入；物理重力和相机更新继续运行。HasOpenWindows 表示实际窗口状态。
+ 
+-InputManager 独占输入资产实例和映射生命周期；角色根节点上的 `RPG4.Input.PlayerInput` 统一维护 Move、Look、Zoom、AimHeld、FirePressed、FireHeld、InteractPressed 及玩法门控。FirePressed 保留本帧点按，即使同帧已松开；状态、相机、射击和世界交互读取该组件，不直接访问 InputActions。Look 使用鼠标 delta，Zoom 使用滚轮 Y 并按每刻度 120 单位换算。FixedUpdate 使用最新 Move 输入快照。
++InputManager 独占输入资产实例和映射生命周期；角色根节点上的 `RPG4.Input.PlayerInput` 统一维护 Move、Look、Zoom、AimHeld、FirePressed、FireHeld、InteractPressed 及玩法门控。FirePressed 保留本帧点按，即使同帧已松开；状态、相机、Player 宿主和世界交互读取该组件，不直接访问 InputActions。Look 使用鼠标 delta，Zoom 使用滚轮 Y 并按每刻度 120 单位换算。FixedUpdate 使用最新 Move 输入快照。
+ 
+ 窗口占用、光标释放、失去焦点、暂停或组件禁用时取消瞄准和射击表现。恢复玩法后需要松开相应左右键再按下，避免占用期间按住的键直接重入。相机镜头恢复使用 unscaledDeltaTime，暂停时仍能恢复；禁用相机控制器会立即恢复探索距离与 FOV。
+ 
+@@ -27,19 +27,56 @@ InputManager 独占输入资产实例和映射生命周期；角色根节点上
+ 
+ ## 状态机与数据
+ 
+-Player 要求角色根节点存在 Rigidbody、CapsuleCollider 和自定义 PlayerInput。Player 的执行顺序为 150，晚于 PlayerInput(-200)、相机(-100)及背包开关输入(50)；Update 显式执行射击输入准备→状态机模式选择→射击动画，LateUpdate 再检查交互窗口(100)造成的占用。即使暂停时 deltaTime 为零，仍执行清理与状态转换。StateMachine.FixedTick 调用活动状态的物理更新。PlayerRootState 连接 ExplorationState、AimState 与 HipFireState；探索父状态的 IdleState 与 MoveState 共享 `ExplorationState.Data`，HipFireState 复用 AimState 的方向运动与腿部混合，仅使用独立腰射速度。
++Player 要求角色根节点存在 Rigidbody、CapsuleCollider 和自定义 PlayerInput。Player 的执行顺序为 150，晚于 PlayerInput(-200)、相机(-100)及背包开关输入(50)；Update 显式执行输入快照→开火动作推进→统一模式决定→状态机→射击动画投影。LateUpdate 再检查交互窗口(100)造成的占用，只取消动作并以 Tick(0) 同步模式、镜头和姿态，不再次消费开火输入。即使暂停时 deltaTime 为零，仍执行清理与状态转换。StateMachine.FixedTick 只调用已活动状态链的物理更新，不启动或切换状态。
++
++活动状态链固定为三层，持枪组表示瞄准或腰射，进入瞄准不要求正在开火：
++
++```text
++PlayerRootState
++├── ExplorationState
++│   ├── IdleState
++│   └── MoveState
++└── AttackState
++    ├── AimState
++    └── HipFireState
++```
++
++Root 的 GetInitialState 按当前 Mode 选择初始状态组，不在 GetTransition 中代替子状态切换。ExplorationState 在 Mode 不再是 Exploration 时通过强类型父状态的 root.Attack 返回兄弟组；AttackState 在 Mode 为 Exploration 时通过 root.Exploration 返回兄弟组。Idle/Move 通过 exploration.Move/Idle 返回兄弟叶，Aim/HipFire 按统一 Mode 通过 attack.HipFire/Aim 返回兄弟叶。初始选子状态不属于同级转换：Exploration 按当前移动输入直接选 Idle 或 Move，Attack 按当前 Mode 直接选 Aim 或 HipFire，因此组切换当 Tick 就进入正确的叶状态。
++
++StateMachine.Tick 从根到叶检查转换，每 Tick 最多执行一次转换。每个非空目标先检查 machine/root 归属，再检查目标 Parent 与发起转换的状态 Parent 相同；即使目标已经是 ActiveLeaf 也不能绕过层级检查。返回自身不重入。退出旧链、进入新链和递归进入初始子状态都由通用 StateMachine 完成；Stop 仍从叶到根退出。
++
++探索父状态与 Idle/Move 共享 `ExplorationState.Data`。AimState 与 HipFireState 都直接继承 State，叶状态进入时只配置自己的模式和步频；共用的观察方向运动、转向及腿部动画由 AttackState 实现，每个物理帧按当前模式读取对应移动速度。Attack 在叶互切期间持续激活，保留局部 animationMove，不重播腿部；转向平滑速度在叶进入时按原行为复位。配置仍保存在 `AimState.Data`、`HipFireState.Data` 及原有 stateData 字段路径中。
+ 
+ Player 的 `stateData.content` 保存 Animator、Rigidbody（字段名 `body`）和 PlayerCameraController 引用；相机引用由场景显式配置。`stateData.exploration` 保存移动速度、转向平滑时间、输入阈值、动画名称和过渡时间。缺少 Rigidbody、Animator 等角色自身引用时由 Player 初始化补齐。CameraTarget 是角色身上的位置锚点；角色不修改实际相机，也不读取最终镜头旋转。
+ 
+-PlayerContext 在 Player 初始化时为每个角色单独创建，统一传给各状态，保存输入、内容数据和 ExplorationState.Data 的运行时引用。输入来自 PlayerInput，观察角来自 CameraController.ViewYaw；移动方向在当前子状态局部计算。
++PlayerContext 在 Player 初始化时为每个角色单独创建，统一传给各状态，保存输入、内容数据、配置和 PlayerFireAction 的运行时引用。宿主调用 ResolveMode 统一决定本帧模式，优先级为 Aim→HipFire→Exploration；根状态、状态组、叶状态、运动与动画投影读取同一模式。HipFire 依据 fireHeld、shotActive 或 fadingOut 的逻辑动作存续，不读取 Animator 播放状态。CanControl 判断输入、刚体和观察相机，CanUseWeapon 额外要求光标锁定；二者均不依赖 Animator。输入来自 PlayerInput，观察角来自 CameraController.ViewYaw；移动方向由当前状态组的运动逻辑计算。
++
++`stateData.aim` 保存瞄准移动、转向和动画配置，`stateData.hipFire.moveSpeed` 默认 6 米/秒。根状态按 Aim 模式切换镜头，按实际射击动作切换俯仰；射击中的 Hip/ADS 互切保持俯仰平滑状态，只有 ADS 收近镜头。`stateData.content.aimPose` 显式引用与 Animator 同物体的 `PlayerAimPose`。姿态读取逻辑 `ViewPitch`，只调整 Spine/Chest；默认范围 -30°～45°、平滑时间 0.1 秒，不改变角色根节点或碰撞体。PlayerAimPose 保留执行顺序 -50，在 Update 中先还原上一帧的俯仰；最终动画层唯一 IK Pass 只记录本帧已求值，第三方武器组件仍负责原有手 IK。实际单发动作及淡出收尾期间，仅当最终层本帧完成 IK 时，LateUpdate 才在动画与 IK 输出的姿态上依次直接旋转 Spine、Chest；两臂与挂在右手下的枪随共同父骨骼一起俯仰，避免手 IK 取样与新增俯仰处于不同姿态。Chest 缺失时由 Spine 承担完整角度，范围和平滑参数不变。动作收尾结束、取消或禁用时立即恢复叠加前的骨骼旋转；暂停、Animator 停止求值或本帧无最终层 IK 时不叠加，即使仍保持 Aim 模式也不叠加额外俯仰。此方案针对当前枪与双臂共享 Spine/Chest 父层级、枪的 ParentConstraint 手持源与实际父节点同属右手的配置，保持新增俯仰前后的握持相对关系，不修正既有握持点或基础 IK 偏移。
++
++PlayerFireAction 的只读 `HasShotAction` 仅表示 shotActive 或 fadingOut；原有 `HasWeaponAction` 仍包含 fireHeld，继续用于模式存续，不能用来判断实际射击 IK。PlayerContext 的 `ShotPoseActive` 统一要求实际射击动作、非 Exploration 模式、CanUseWeapon 为真且本帧缩放时间大于零；根状态的上层/俯仰投影和 Player 的公开只读 `WeaponIKEnabled` 共用此条件，后者还要求角色启用。不直接使用左右键或 Animator 播放状态判断，单纯 Aim 和仅按住左键等待冷却均不启用 IK，末发与淡出收尾继续保持 IK。
+ 
+-`stateData.aim` 保存瞄准移动、转向和动画配置，`stateData.hipFire.moveSpeed` 默认 6 米/秒。根状态统一切换镜头与持枪俯仰，Hip/ADS 互切保持俯仰平滑状态，只有 ADS 收近镜头。`stateData.content.aimPose` 显式引用与 Animator 同物体的 `PlayerAimPose`。姿态读取逻辑 `ViewPitch`，只调整 Spine/Chest；默认范围 -30°～45°、平滑时间 0.1 秒，不改变角色根节点或碰撞体。PlayerAimPose 执行顺序 -50，在最终动画层唯一 IK Pass 中先叠加俯仰，再由默认顺序的第三方武器组件处理手 IK。
++第三方 Character_Weapon_Controller 缓存所属 Player，射击姿态未启用时清本组件所有配置目标的 IK 位置/旋转权重与 currentWeight，不再设置目标；即使零权重层不回调 IK，Update 也会清插值权重。targetWeight、动画事件与默认武器挂点保持原有语义，未由本项目 Player 管理的素材实例保留原行为。
+ 
+ `Base Layer.AimLocomotion` 使用 AimMoveX/AimMoveY 的 2D Simple Directional Blend Tree。参数取角色局部移动方向与输入长度，范围为 [-1, 1]；中心使用 R_AimIdle，六个方向使用 R_AimWalk_F/B/FL/FR/BL/BR，斜向节点为单位向量 (±0.70710677, ±0.70710677)。纯左/右输入由前后斜向步行动画混合；Hip/ADS 切换继承当前方向参数，避免归零或重播腿部状态。AimLocomotionSpeed 控制步频，ADS 为 1、腰射为 1.35。保留 Idle/Run，Root Motion 关闭，Base Layer 关闭 IK Pass，仅最终射击层开启，避免第三方手 IK 重复插值。
+ 
+-`PlayerShootSimulation` 挂在 Player 根节点，绑定同一 Animator 和 R_Shoot 单发 AnimationClip。默认 shotInterval=0.16 秒、shotAnimationDuration=0.24 秒、layerFadeInDuration=0.06 秒、layerFadeOutDuration=0.12 秒；后两个字段控制状态过渡。ShotSpeed=片段原长度/单发时长；持续开火按间隔从头重播单发，卡顿后不补播多发。每帧只消费 FirePressed/FireHeld，冷却内的点按不排队；持续按住等待下一发时仍保持腰射模式。松开后保留最后一发完整动作，再淡出；自然结束不会清零射速冷却。
++`PlayerFireAction` 是 Player 为每个角色持有的纯 C# 运行对象，不依赖 MonoBehaviour、Animator 或 PlayerInput。Player 传入本帧 FirePressed/FireHeld、缩放时间和已有配置；动作持有 nextShotTime、末发时长与淡出收尾，返回本帧新发、开始淡出、单发进度和 IsAutomatic 表现标记。同次按住手势的第一发为点射，第二发及以后为连射；松开或新的 FirePressed 切断手势计数，快速重复点按不会累计成连射。冷却内点按不排队，每帧最多一发，卡顿后不补发；新按下仍保持到冷却结束时，实际第一发仍为点射。持续按住等待下一发时仍保持腰射模式。松开后 IsAutomatic 保留至当前末发与淡出结束，或被新的实际点射/取消取代，避免收尾突然跳回点射；腰射运动、姿态与 IK 仍按真实动作存续。
++
++`PlayerShootSimulation` 挂在 Player 根节点，持有同一 Animator、shotClip（R_Shoot）及新增 autoShotClip（R_AimIdle_AutoShoot），只负责动画投影。默认 shotInterval=0.16 秒、shotAnimationDuration=0.24 秒、layerFadeInDuration=0.06 秒、layerFadeOutDuration=0.12 秒；后两个字段控制状态过渡。组件不消费输入或维护射速冷却，只接收本帧动作结果和已确定的 ADS 模式。点射沿用 ShotSpeed=片段原长度/单发时长；连射首次进入时 CrossFade 一次，以素材本身速度 1 循环，不使用 ShotSpeed，也不假设一个循环对应一发。逻辑射速仍由 shotInterval 决定，连射每次 ShotStarted 不重播动画；释放后依原末发时长及淡出配置退出。若调大射击间隔使逻辑动作已进入淡出，下一真实发射会重新进入连射循环。
++
++Hip/ADS 互切时，点射按逻辑 ShotPhase 延续；连射读取当前 auto 状态的 normalizedTime，在正过渡到 auto 时读取过渡目标的 normalizedTime，再切换对应 auto 状态以保留相位。这些 Animator 信息只用于动画连续性，不决定模式或发射。autoShotClip 未配置时回退原每发点射投影。Animator 或必需素材不可用时只清理投影，逻辑模式、IK 门控和节拍继续；恢复时先归 Empty，仅响应当帧新发，不补播缺失期间的射击。快速重新按下产生的真实点射会从 auto 切回正确的 HipFire/ADSFire。
++
++Player Prefab 的两类片段引用如下，Main 场景沿用该 Prefab，未发现射击组件字段覆盖：
++
++| 用途 | 资源 | GUID / AnimationClip fileID |
++| --- | --- | --- |
++| 点射 | `RifleGirl/Animations/Aiming/R_Shoot.fbx` | `c64081e16b2eb784285608f8182fac46` / `-319965354747890277` |
++| 连射 | `RifleGirl/Animations/Aiming/R_AimIdle_AutoShoot.fbx` | `350d849f350ac944f911df61ffa830c0` / `7853932406585560401` |
++
++以上路径位于 `Assets/CombatGirlsCharacterPack`。连射导入配置保留现有 15–36 帧裁剪、Humanoid、首帧 SwitchSocket 事件和所有既有标识，本次只开启 Loop Time；未导入或运行检查实际循环接缝。
++
++取消动作与重置冷却分开：自然结束、UI/光标/暂停/失焦中断、禁用和恢复都保留 nextShotTime，只有新建角色运行对象时初始化冷却。Player 统一取消逻辑动作与表现；ClearWeaponInput 仅清左右键并要求松开再按，不清移动、观察和交互快照，释放光标仍按原有 CanControl 规则探索移动。Player.Stop 的生命周期停机才同时清全部输入、退出 HSM。动画清理可重复调用，不通过回调递归停止宿主。
+ 
+-Animator 第 1 层必须命名 `UpperBody Shooting`，包含 Empty（默认、无 Motion）、HipFire、ADSFire 三状态；后两者复用 R_Shoot，启用 ShotSpeed 速度参数。该层使用上半身 AvatarMask、Override、恒定权重 1、Write Defaults 关闭；通过状态 CrossFade 进入/退出 Empty，代码不降低层权重，确保仅瞄准或探索时最终层仍提供唯一 IK Pass。纯射击片段不会覆盖腿部。没有采用不循环的自动射击素材，也不假设素材能自行循环。
++Animator 第 1 层必须命名 `UpperBody Shooting`，包含 Empty（默认、无 Motion）、HipFire、ADSFire、HipAutoFire、ADSAutoFire 五状态；HipFire/ADSFire 复用 R_Shoot 并启用 ShotSpeed，HipAutoFire/ADSAutoFire 复用循环 R_AimIdle_AutoShoot，以固定速度 1 播放。该层使用既有上半身 AvatarMask、Override、Write Defaults 关闭，默认权重为 0。PlayerContext 按统一 ShotPoseActive 设置层权重：实际射击动作及淡出收尾期间为 1，其余时间为 0。Exploration 播放 Idle/Run，单纯 Aim 播放 AimLocomotion，二者均无额外武器手 IK 或上半身俯仰叠加；瞄准镜头、移动及朝向仍按原 Aim 模式生效。初始化显式关闭射击姿态，每帧更新和清理路径重新设置权重；Animator 暂时禁用时也清理可访问的旧层权重，恢复后按当前动作重新投影。射击层仍通过 CrossFade 进入/退出 Empty；射击中的 Hip/ADS 互切不关闭层或取消当前动作。Base Layer 的 IK Pass 及 Idle/Run 的 Foot IK 保持关闭，仅射击层保留唯一 IK Pass，上层片段不覆盖腿部。
+ 
+ IdleState 在移动输入长度超过配置阈值时转入 MoveState，MoveState 在输入低于或等于阈值时转回 IdleState。默认阈值为 0.01。玩法输入受屏蔽或观察相机不可用时回到 IdleState。状态转换由 State.GetTransition 和 StateMachine.Tick 完成，探索父状态在转换期间保持激活。
+ 
+@@ -80,6 +117,32 @@ State Data → Aim 配置为：移动速度 2.5 米/秒、转向平滑时间 0.1
+ 
+ ## 验证记录
+ 
++本次上下调角度时左手握持修正仅改动 PlayerAimPose 与本 README。已静态核对 Update 先还原、最终层同帧 IK 标记、LateUpdate 逐骨骼叠加及退出/禁用还原；保留全部序列化字段、默认范围与平滑参数。相对本轮基线，第三方武器脚本、Player Prefab、Controller、Main 场景及点射/连射 FBX meta 的 SHA256 均未变化，射击节拍、状态与动画事件未改。两份改动文件的 git diff --check 通过；全仓检查报告的 Player Prefab 四处尾随空白在本轮基线中已存在，未改动。
++
++使用 Unity 2022.3.62f3 引用元数据与 Roslyn/csc 静态编译 RPG4.UI（2 个源文件）、RPG4.StateMachine（2 个）、RPG4.Input（3 个）、RPG4.PlayerMovement（14 个），共 21 个 C# 源文件；4 项 exitCode 均为 0，日志无警告或错误。本轮报告为 `.codex-task-snapshot/shoot-simulation/static-check/run-20261024-195810/compile-report.json`。未启动 Unity、导入、构建、执行项目逻辑、分析器、生成器或直接测试。修正保证新增俯仰不会改变现有握持相对关系，不代表基础 IK 偏移或实际运行表现已验证；仍需人工确认点射及持续连射上下调角度、退出/纯瞄准恢复，以及暂停、UI 和禁用时无残留。以下均为此前工作的验证历史，不代表本次修正的运行结果。
++
++本次连射动画整合已完成静态阅读、动作/投影分支与引用审阅，以及 Controller、Prefab 和指定 FBX meta 的差异核对；git diff --check 通过，未跟踪的 PlayerFireAction 源文件也无尾随空白。新增同手势第二发起的 IsAutomatic 标记与连射投影，Prefab 仅新增 autoShotClip 引用，原点射和时长配置保持原样；Controller 的 12 个文档无重复 ID 或缺失本地状态引用，射击层五个子状态及 Motion 绑定匹配，两类 auto 状态均速度 1 且不启用 ShotSpeed，默认层权重仍为 0。
++
++独立资源核对还将当前连射 meta 的 loopTime 改回 0 后计算原始字节 SHA256，与本轮开始基线完全一致，证实本轮只开启 Loop Time，用户已有的 15–36 帧裁剪、事件、GUID、internalID 及其他修改完整保留。Main 场景、FBX 二进制与原点射 meta 未改。资源报告为 `.codex-task-snapshot/shoot-simulation/static-check/run-20261024-192556/auto-shoot-assets-report.json`。
++
++使用 Unity 引用元数据与 Roslyn/csc 静态编译 RPG4.UI（2 个源文件）、RPG4.StateMachine（2 个）、RPG4.Input（3 个）、RPG4.PlayerMovement（14 个），共 21 个 C# 源文件，4 项 exitCode 均为 0，日志无警告或错误；本轮报告为同目录 `compile-report.json`。未启动 Unity、导入、构建、执行项目逻辑、分析器、生成器或任何直接测试，未观察新片段实际播放。实际循环接缝与首帧事件、短按完整点射、长按第二发起循环、快速点按不累计连射、跨 Hip/ADS 及过渡中的相位、松键收尾、素材缺失与恢复仍需人工运行确认。以下均为此前工作的验证历史，不代表本次连射整合的验证结果。
++
++此前射击动作 IK 门控修正已静态核对实际单发/淡出条件、纯瞄准与冷却等待的区别、根状态和公开 IK 接口共用条件，以及既有中断清理顺序；git diff --check 通过。与该轮开始基线比较，HasWeaponAction 与 FireAction 的 Tick/Cancel/冷却逻辑保持原样，只新增实际动作只读查询；未更改状态转换、瞄准镜头、移动朝向、射击动画投影、第三方武器脚本、Controller、场景、prefab、meta 或配置字段。
++
++使用 Unity 引用元数据与 Roslyn/csc 静态编译 RPG4.UI（2 个源文件）、RPG4.StateMachine（2 个）、RPG4.Input（3 个）、RPG4.PlayerMovement（14 个），共 21 个 C# 源文件，4 项 exitCode 均为 0，日志无警告或错误。本轮报告为 `.codex-task-snapshot/shoot-simulation/static-check/run-20261024-184845/compile-report.json`。未启动 Unity、导入、构建、执行项目逻辑、分析器、生成器或任何直接测试。纯 Aim 无额外手 IK/俯仰、射击及收尾恢复叠加、仅按住等待冷却和 UI/暂停/失焦等中断的实际表现仍需人工确认。以下均为此前工作的验证历史，其结果不代表本次修正。
++
++此前非攻击 IK 清理已静态核对 Player 模式门控、初始化/中断投影、第三方 IK 与挂点/动画事件职责边界，以及 Controller 的层权重差异；git diff --check 通过。Controller 仅将 UpperBody Shooting 的默认权重由 1 改为 0，保留 Base Layer、IK Pass 和 Foot IK 配置。与该轮开始基线比较，仅改动 Player、PlayerContext、Character_Weapon_Controller、player.controller 和本 README，HSM、开火动作、射击投影、配置字段、场景、prefab 和 meta 保持原样。
++
++使用 Unity 引用元数据直接运行 Roslyn/csc 静态编译 RPG4.UI（2 个源文件）、RPG4.StateMachine（2 个）、RPG4.Input（3 个）、RPG4.PlayerMovement（14 个），共 21 个 C# 源文件，4 项 exitCode 均为 0，日志无警告或错误；报告为 `.codex-task-snapshot/shoot-simulation/static-check/run-20261024-183817/compile-report.json`。修改后的 Character_Weapon_Controller.cs 还分别完成运行时与 UNITY_EDITOR 两个编译分支的单文件静态编译，两项 exitCode 均为 0，日志无警告或错误；报告为同目录 `weapon-ik-compile-report.json`，覆盖的是实际武器脚本的两个分支，并非整个 Assembly-CSharp。
++
++该次未启动 Unity、导入、构建、执行项目逻辑、分析器、生成器或任何直接测试。该版运行时待人工确认的项目为探索只播放基础动画、Aim/HipFire 与腰射收尾可恢复 IK、退出与中断无残留，以及 Animator 禁用和恢复后的层权重；其中纯 Aim 启用 IK 的规则已被本次修正取代。
++
++此前 HSM 层级重构已完成静态阅读、差异审阅、同级转移与初始链核对、序列化字段及新脚本 meta 检查，git diff --check 通过。Aim 的 6 个、HipFire 的 1 个和 Exploration 的 6 个 SerializeField 声明及默认值保持原样；Player、Context、StateData、FireAction、ShootSimulation、Input 和 Main 场景相对该次任务开始基线未改动。新 Attack 脚本的 MonoImporter meta 完整，GUID 在 Assets 的 meta 中唯一。
++
++该次使用 Unity 2022.3.62f3 引用元数据与 Roslyn 静态编译 RPG4.UI（2 个源文件）、RPG4.StateMachine（2 个）、RPG4.Input（3 个）、RPG4.PlayerMovement（14 个），共 21 个 C# 源文件，4 项 exitCode 均为 0，四份编译日志无警告或错误。该次报告相对路径为 `.codex-task-snapshot/shoot-simulation/static-check/run-20261024-183025/compile-report.json`。仅执行静态编译，未启动 Unity、导入、构建、执行项目逻辑、分析器、生成器或直接测试。运行验证由人工确认：探索与持枪组当帧进入正确叶状态、Hip/ADS 互切时的腿部连续性与转向、速度和步频切换，以及 UI/暂停/失焦/禁用清理。
++
++此前状态职责重构已完成代码差异、符号引用、序列化字段与资源边界静态核对，git diff --check 通过。使用 Unity 2022.3.62f3 的引用元数据与 Roslyn 静态编译 RPG4.UI（2 个源文件）、RPG4.StateMachine（2 个）、RPG4.Input（3 个）、RPG4.PlayerMovement（13 个），共 20 个 C# 源文件，4 项 exitCode 均为 0，编译日志无警告或错误。报告相对路径为 `.codex-task-snapshot/shoot-simulation/static-check/run-20261024-162559/compile-report.json`。仅执行静态编译，未启动 Unity、导入、构建、执行项目逻辑、分析器、生成器或直接测试。运行验证由人工确认：短点击与持续节拍、Hip/ADS 切换的腿部连续性与单发进度、末发及淡出期间的腰射运动、Animator 暂时不可用与恢复、UI 在 LateUpdate 打开后的模式和姿态同步，以及中断恢复不能绕过冷却或沿用按住的左右键。
++
+ 本次腰射/ADS 射击实现仅做静态代码和序列化资源核对，未启动 Unity、导入、构建、执行项目代码或直接测试。人工运行时需确认：短点击完整单发、长按节拍、持续左键切右键不额外开火、松左留右仅瞄准、全松平滑收尾、腰射六方向移动及俯仰握枪、UI/暂停/失焦/光标释放和禁用组件时停止及恢复后重新按键。Empty 无 Motion 的混合效果与最终单次手 IK 仍需在角色动画实际运行中确认。
+ 
+ 本次瞄准整合仅做代码与资源静态核对：检查输入/状态/镜头接口、七个动画的 meta GUID 与 AnimationClip fileID、Blend Tree 参数和单位方向、PlayerAimPose 与状态数据引用、Root Motion 和 IK Pass，以及 Main 场景继承的相机绑定。未启动 Unity、导入资源、执行编辑器脚本或运行任何直接测试。运行验证由人工进行，需确认右键进出与占用恢复、瞄准转身和六方向混合、上下看时持枪与左手 IK，以及遮挡时退出瞄准能恢复原探索镜头距离。
+diff --git a/Assets/Scripts/PlayerMovement/States/AimState.cs b/Assets/Scripts/PlayerMovement/States/AimState.cs
+index 936d577..f1bba33 100644
+--- a/Assets/Scripts/PlayerMovement/States/AimState.cs
++++ b/Assets/Scripts/PlayerMovement/States/AimState.cs
+@@ -5,8 +5,8 @@ using HierarchicalStateMachine = RPG4.StateMachine.StateMachine;
+ 
+ namespace RPG4.PlayerMovement
+ {
+-    /// <summary>瞄准叶状态：观察方向决定移动方向和人物朝向，2D 动画树处理局部步伐。</summary>
+-    internal class AimState : State
++    /// <summary>瞄准叶状态：选择瞄准运动参数，并在统一模式改变时转入腰射。</summary>
++    internal sealed class AimState : State
+     {
+         [Serializable]
+         internal sealed class Data
+@@ -26,83 +26,19 @@ namespace RPG4.PlayerMovement
+             internal float AnimationParameterSmoothTime => animationParameterSmoothTime;
+         }
+ 
+-        private static readonly int AimMoveX = Animator.StringToHash("AimMoveX");
+-        private static readonly int AimMoveY = Animator.StringToHash("AimMoveY");
+-        private static readonly int LocomotionSpeed = Animator.StringToHash("AimLocomotionSpeed");
++        private readonly AttackState attack;
+         private readonly PlayerContext context;
+-        private readonly Data data;
+-        private readonly bool hipFire;
+-        private float turnVelocity;
+-        private Vector2 animationMove;
+ 
+-        internal AimState(HierarchicalStateMachine machine, PlayerRootState parent, PlayerContext context,
+-            bool hipFire = false)
++        internal AimState(HierarchicalStateMachine machine, AttackState parent, PlayerContext context)
+             : base(machine, parent)
+         {
++            attack = parent;
+             this.context = context;
+-            data = context.Aim;
+-            this.hipFire = hipFire;
+         }
+ 
+-        protected override void OnEnter()
+-        {
+-            turnVelocity = 0f;
+-            if (context.AnimatorIsAvailable)
+-            {
+-                Animator animator = context.Content.Animator;
+-                animationMove = new Vector2(animator.GetFloat(AimMoveX), animator.GetFloat(AimMoveY));
+-                animator.SetFloat(LocomotionSpeed, hipFire ? 1.35f : 1f);
+-                // 腰射/ADS共享底层运动，不重播同一状态以免步伐在切换时跳变。
+-                int stateHash = Animator.StringToHash(data.AimAnimation);
+-                if (animator.GetCurrentAnimatorStateInfo(0).fullPathHash != stateHash
+-                    && (!animator.IsInTransition(0)
+-                        || animator.GetNextAnimatorStateInfo(0).fullPathHash != stateHash))
+-                    animator.CrossFadeInFixedTime(data.AimAnimation,
+-                        data.AnimationTransitionDuration, layer: 0);
+-            }
+-        }
+-
+-        protected override void OnExit()
+-        {
+-            turnVelocity = 0f;
+-        }
+-
+-        protected override void OnFixedUpdate(float deltaTime)
+-        {
+-            if (hipFire ? !context.WantsHipFire || context.WantsAim : !context.WantsAim)
+-            {
+-                context.SetPlanarVelocity(Vector3.zero);
+-                turnVelocity = 0f;
+-                return;
+-            }
++        protected override State GetTransition() => context.Mode == PlayerMode.HipFire
++            ? attack.HipFire : null;
+ 
+-            Rigidbody body = context.Content.Body;
+-            float viewYaw = context.Content.CameraController.ViewYaw;
+-            Vector2 move = Vector2.ClampMagnitude(context.Input.Move, 1f);
+-            if (move.sqrMagnitude <= data.MoveInputThreshold * data.MoveInputThreshold)
+-                move = Vector2.zero;
+-            Vector3 direction = Quaternion.Euler(0f, viewYaw, 0f) * new Vector3(move.x, 0f, move.y);
+-            context.SetPlanarVelocity(direction * (hipFire ? context.HipFire.MoveSpeed : data.MoveSpeed));
+-
+-            // 原地也朝向观察 yaw；旋转只使用 Y 轴，根节点始终直立。
+-            float yaw = Mathf.SmoothDampAngle(body.rotation.eulerAngles.y, viewYaw,
+-                ref turnVelocity, data.TurnSmoothTime, Mathf.Infinity, deltaTime);
+-            Quaternion rotation = Quaternion.Euler(0f, yaw, 0f);
+-            body.MoveRotation(rotation);
+-
+-            Vector3 localDirection = Quaternion.Inverse(rotation) * direction;
+-            Vector2 target = Vector2.ClampMagnitude(new Vector2(localDirection.x, localDirection.z), 1f);
+-            float blend = data.AnimationParameterSmoothTime <= 0f ? 1f
+-                : 1f - Mathf.Exp(-deltaTime / data.AnimationParameterSmoothTime);
+-            animationMove = Vector2.ClampMagnitude(Vector2.Lerp(animationMove, target, blend), 1f);
+-            SetAnimationMove(animationMove);
+-        }
+-
+-        private void SetAnimationMove(Vector2 move)
+-        {
+-            if (!context.AnimatorIsAvailable) return;
+-            context.Content.Animator.SetFloat(AimMoveX, move.x);
+-            context.Content.Animator.SetFloat(AimMoveY, move.y);
+-        }
++        protected override void OnEnter() => attack.SetLocomotion(PlayerMode.Aim, 1f);
+     }
+ }
+diff --git a/Assets/Scripts/PlayerMovement/States/ExplorationState.cs b/Assets/Scripts/PlayerMovement/States/ExplorationState.cs
+index 7c854d1..58ebf74 100644
+--- a/Assets/Scripts/PlayerMovement/States/ExplorationState.cs
++++ b/Assets/Scripts/PlayerMovement/States/ExplorationState.cs
+@@ -27,6 +27,7 @@ namespace RPG4.PlayerMovement
+             internal float AnimationTransitionDuration => animationTransitionDuration;
+         }
+ 
++        private readonly PlayerRootState root;
+         private readonly PlayerContext context;
+         private readonly Data data;
+         private string currentAnimation;
+@@ -40,6 +41,7 @@ namespace RPG4.PlayerMovement
+         internal ExplorationState(HierarchicalStateMachine machine, PlayerRootState parent, PlayerContext context)
+             : base(machine, parent)
+         {
++            root = parent;
+             this.context = context;
+             data = context.Exploration;
+             Idle = new IdleState(machine, this, context);
+@@ -48,6 +50,9 @@ namespace RPG4.PlayerMovement
+ 
+         protected override State GetInitialState() => HasMovementInput ? (State)Move : Idle;
+ 
++        protected override State GetTransition() => context.Mode != PlayerMode.Exploration
++            ? root.Attack : null;
++
+         protected override void OnEnter()
+         {
+             currentAnimation = null;
+diff --git a/Assets/Scripts/PlayerMovement/States/HipFireState.cs b/Assets/Scripts/PlayerMovement/States/HipFireState.cs
+index a2310fc..4b3398e 100644
+--- a/Assets/Scripts/PlayerMovement/States/HipFireState.cs
++++ b/Assets/Scripts/PlayerMovement/States/HipFireState.cs
+@@ -1,20 +1,33 @@
+ using System;
++using RPG4.StateMachine;
+ using UnityEngine;
+ using HierarchicalStateMachine = RPG4.StateMachine.StateMachine;
+ 
+ namespace RPG4.PlayerMovement
+ {
+-    /// <summary>腰射沿观察方向持枪移动，复用瞄准的六方向腿部动画。</summary>
+-    internal sealed class HipFireState : AimState
++    /// <summary>腰射叶状态：选择腰射运动参数，并在统一模式改变时转入瞄准。</summary>
++    internal sealed class HipFireState : State
+     {
+         [Serializable]
+-        internal new sealed class Data
++        internal sealed class Data
+         {
+             [SerializeField, Min(0.1f)] private float moveSpeed = 6f;
+             internal float MoveSpeed => moveSpeed;
+         }
+ 
+-        internal HipFireState(HierarchicalStateMachine machine, PlayerRootState parent, PlayerContext context)
+-            : base(machine, parent, context, hipFire: true) { }
++        private readonly AttackState attack;
++        private readonly PlayerContext context;
++
++        internal HipFireState(HierarchicalStateMachine machine, AttackState parent, PlayerContext context)
++            : base(machine, parent)
++        {
++            attack = parent;
++            this.context = context;
++        }
++
++        protected override State GetTransition() => context.Mode == PlayerMode.Aim
++            ? attack.Aim : null;
++
++        protected override void OnEnter() => attack.SetLocomotion(PlayerMode.HipFire, 1.35f);
+     }
+ }
+diff --git a/Assets/Scripts/PlayerMovement/States/PlayerRootState.cs b/Assets/Scripts/PlayerMovement/States/PlayerRootState.cs
+index 98d915c..f1f5651 100644
+--- a/Assets/Scripts/PlayerMovement/States/PlayerRootState.cs
++++ b/Assets/Scripts/PlayerMovement/States/PlayerRootState.cs
+@@ -4,36 +4,27 @@ using HierarchicalStateMachine = RPG4.StateMachine.StateMachine;
+ 
+ namespace RPG4.PlayerMovement
+ {
+-    /// <summary>角色共同根：仅在模式改变时切换，并在停机时复位角色表现。</summary>
++    /// <summary>角色共同根：选择初始状态组，维护角色公共表现，并在停机时复位。</summary>
+     internal sealed class PlayerRootState : State
+     {
+         private readonly PlayerContext context;
+-        private readonly ExplorationState exploration;
+-        private readonly AimState aim;
+-        private readonly HipFireState hipFire;
++
++        internal ExplorationState Exploration { get; }
++        internal AttackState Attack { get; }
+ 
+         internal PlayerRootState(HierarchicalStateMachine machine, PlayerContext context) : base(machine)
+         {
+             this.context = context;
+-            exploration = new ExplorationState(machine, this, context);
+-            aim = new AimState(machine, this, context);
+-            hipFire = new HipFireState(machine, this, context);
++            Exploration = new ExplorationState(machine, this, context);
++            Attack = new AttackState(machine, this, context);
+         }
+ 
+-        private State RequestedMode => context.WantsAim ? (State)aim
+-            : context.WantsHipFire ? (State)hipFire : exploration;
+-
+-        protected override State GetInitialState() => RequestedMode;
+-
+-        protected override State GetTransition()
+-        {
+-            State requested = RequestedMode;
+-            return ActiveChild == requested ? null : requested;
+-        }
++        protected override State GetInitialState() => context.Mode == PlayerMode.Exploration
++            ? (State)Exploration : Attack;
+ 
+         protected override void OnUpdate(float deltaTime)
+         {
+-            context.SetWeaponMode(context.WantsAim, context.WantsAim || context.WantsHipFire);
++            context.SetWeaponMode(context.Mode == PlayerMode.Aim, context.ShotPoseActive);
+             if (!context.CanControl) context.SetPlanarVelocity(Vector3.zero);
+         }
+ 
+diff --git a/Assets/Scripts/StateMachine/State.cs b/Assets/Scripts/StateMachine/State.cs
+index 44f43c7..1205eea 100644
+--- a/Assets/Scripts/StateMachine/State.cs
++++ b/Assets/Scripts/StateMachine/State.cs
+@@ -15,6 +15,7 @@ namespace RPG4.StateMachine
+         }
+ 
+         protected virtual State GetInitialState() => null;
++        /// <summary>返回同一父状态下的目标状态；返回 null 或自身时不切换。</summary>
+         protected virtual State GetTransition() => null;
+         protected virtual void OnEnter() { }
+         protected virtual void OnExit() { }
+diff --git a/Assets/Scripts/StateMachine/StateMachine.cs b/Assets/Scripts/StateMachine/StateMachine.cs
+index a3f7bf6..b7150fa 100644
+--- a/Assets/Scripts/StateMachine/StateMachine.cs
++++ b/Assets/Scripts/StateMachine/StateMachine.cs
+@@ -30,8 +30,11 @@ namespace RPG4.StateMachine
+             for (State state = Root; state != null; state = state.ActiveChild)
+             {
+                 State target = state.Transition();
+-                if (target == null || target == ActiveLeaf) continue;
++                if (target == null) continue;
+                 ValidateState(target);
++                if (target.Parent != state.Parent)
++                    throw new InvalidOperationException("A transition target must be a sibling of the requesting state.");
++                if (target == state) continue;
+                 ChangeState(target);
+                 break;
+             }
+diff --git a/Assets/player/player.controller b/Assets/player/player.controller
+index 35fdef5..f2d651a 100644
+--- a/Assets/player/player.controller
++++ b/Assets/player/player.controller
+@@ -136,7 +136,7 @@ AnimatorController:
+     m_Behaviours: []
+     m_BlendingMode: 0
+     m_SyncedLayerIndex: -1
+-    m_DefaultWeight: 1
++    m_DefaultWeight: 0
+     m_IKPass: 1
+     m_SyncedLayerAffectsTiming: 0
+     m_Controller: {fileID: 9100000}
+@@ -262,6 +262,12 @@ AnimatorStateMachine:
+   - serializedVersion: 1
+     m_State: {fileID: 710000015}
+     m_Position: {x: 550, y: 160, z: 0}
++  - serializedVersion: 1
++    m_State: {fileID: 710000016}
++    m_Position: {x: 800, y: 40, z: 0}
++  - serializedVersion: 1
++    m_State: {fileID: 710000017}
++    m_Position: {x: 800, y: 160, z: 0}
+   m_ChildStateMachines: []
+   m_AnyStateTransitions: []
+   m_EntryTransitions: []
+@@ -352,3 +358,57 @@ AnimatorState:
+   m_MirrorParameter: 
+   m_CycleOffsetParameter: 
+   m_TimeParameter: 
++--- !u!1102 &710000016
++AnimatorState:
++  serializedVersion: 6
++  m_ObjectHideFlags: 1
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_Name: HipAutoFire
++  m_Speed: 1
++  m_CycleOffset: 0
++  m_Transitions: []
++  m_StateMachineBehaviours: []
++  m_Position: {x: 50, y: 50, z: 0}
++  m_IKOnFeet: 0
++  m_WriteDefaultValues: 0
++  m_Mirror: 0
++  m_SpeedParameterActive: 0
++  m_MirrorParameterActive: 0
++  m_CycleOffsetParameterActive: 0
++  m_TimeParameterActive: 0
++  m_Motion: {fileID: 7853932406585560401, guid: 350d849f350ac944f911df61ffa830c0,
++    type: 3}
++  m_Tag: 
++  m_SpeedParameter: 
++  m_MirrorParameter: 
++  m_CycleOffsetParameter: 
++  m_TimeParameter: 
++--- !u!1102 &710000017
++AnimatorState:
++  serializedVersion: 6
++  m_ObjectHideFlags: 1
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_Name: ADSAutoFire
++  m_Speed: 1
++  m_CycleOffset: 0
++  m_Transitions: []
++  m_StateMachineBehaviours: []
++  m_Position: {x: 50, y: 50, z: 0}
++  m_IKOnFeet: 0
++  m_WriteDefaultValues: 0
++  m_Mirror: 0
++  m_SpeedParameterActive: 0
++  m_MirrorParameterActive: 0
++  m_CycleOffsetParameterActive: 0
++  m_TimeParameterActive: 0
++  m_Motion: {fileID: 7853932406585560401, guid: 350d849f350ac944f911df61ffa830c0,
++    type: 3}
++  m_Tag: 
++  m_SpeedParameter: 
++  m_MirrorParameter: 
++  m_CycleOffsetParameter: 
++  m_TimeParameter: 
+diff --git a/Assets/player/player.prefab b/Assets/player/player.prefab
+index 173fc14..d7e1fb2 100644
+--- a/Assets/player/player.prefab
++++ b/Assets/player/player.prefab
+@@ -6437,7 +6437,7 @@ MonoBehaviour:
+   defaultEventSetting:
+     enabled: 1
+     eventName: 'To_Hand_R_Socket, IK_ON_Left_Handle  '
+-    monitoredLayers: 01
++    monitoredLayers: 0100
+   showDebugLog: 0
+   weaponSlots:
+   - name: 
+@@ -6581,8 +6581,6 @@ MonoBehaviour:
+       idleAnimation: Base Layer.Idle
+       moveAnimation: Base Layer.Run
+       animationTransitionDuration: 0.25
+-    hipFire:
+-      moveSpeed: 6
+     aim:
+       moveSpeed: 2.5
+       turnSmoothTime: 0.12
+@@ -6590,21 +6588,8 @@ MonoBehaviour:
+       aimAnimation: Base Layer.AimLocomotion
+       animationTransitionDuration: 0.15
+       animationParameterSmoothTime: 0.1
+---- !u!114 &710000009
+-MonoBehaviour:
+-  m_ObjectHideFlags: 0
+-  m_CorrespondingSourceObject: {fileID: 0}
+-  m_PrefabInstance: {fileID: 0}
+-  m_PrefabAsset: {fileID: 0}
+-  m_GameObject: {fileID: 5963844012669126346}
+-  m_Enabled: 1
+-  m_EditorHideFlags: 0
+-  m_Script: {fileID: 11500000, guid: a6f7dc15404743bca87daf29208a44a6, type: 3}
+-  m_Name:
+-  m_EditorClassIdentifier:
+-  pitchRange: {x: -30, y: 45}
+-  pitchSmoothTime: 0.1
+-  finalIkLayer: 1
++    hipFire:
++      moveSpeed: 6
+ --- !u!114 &610000000000000001
+ MonoBehaviour:
+   m_ObjectHideFlags: 0
+@@ -6653,6 +6638,42 @@ MonoBehaviour:
+   m_EditorClassIdentifier: 
+   isLocalPlayer: 1
+   fillCatalogOnStart: 1
++--- !u!114 &710000009
++MonoBehaviour:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 5963844012669126346}
++  m_Enabled: 1
++  m_EditorHideFlags: 0
++  m_Script: {fileID: 11500000, guid: a6f7dc15404743bca87daf29208a44a6, type: 3}
++  m_Name: 
++  m_EditorClassIdentifier: 
++  pitchRange: {x: -30, y: 45}
++  pitchSmoothTime: 0.1
++  finalIkLayer: 1
++--- !u!114 &710000012
++MonoBehaviour:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 5963844012669126346}
++  m_Enabled: 1
++  m_EditorHideFlags: 0
++  m_Script: {fileID: 11500000, guid: fd651b88b3b94e5c983ba447bf9c13b2, type: 3}
++  m_Name: 
++  m_EditorClassIdentifier: 
++  animator: {fileID: 392520455371606196}
++  shotClip: {fileID: -319965354747890277, guid: c64081e16b2eb784285608f8182fac46,
++    type: 3}
++  autoShotClip: {fileID: 7853932406585560401, guid: 350d849f350ac944f911df61ffa830c0,
++    type: 3}
++  shotInterval: 0.16
++  shotAnimationDuration: 0.24
++  layerFadeInDuration: 0.06
++  layerFadeOutDuration: 0.12
+ --- !u!1 &5964859506687398495
+ GameObject:
+   m_ObjectHideFlags: 0
+@@ -9112,21 +9133,3 @@ Transform:
+     type: 3}
+   m_PrefabInstance: {fileID: 464032024294814340}
+   m_PrefabAsset: {fileID: 0}
+---- !u!114 &710000012
+-MonoBehaviour:
+-  m_ObjectHideFlags: 0
+-  m_CorrespondingSourceObject: {fileID: 0}
+-  m_PrefabInstance: {fileID: 0}
+-  m_PrefabAsset: {fileID: 0}
+-  m_GameObject: {fileID: 5963844012669126346}
+-  m_Enabled: 1
+-  m_EditorHideFlags: 0
+-  m_Script: {fileID: 11500000, guid: fd651b88b3b94e5c983ba447bf9c13b2, type: 3}
+-  m_Name:
+-  m_EditorClassIdentifier:
+-  animator: {fileID: 392520455371606196}
+-  shotClip: {fileID: -319965354747890277, guid: c64081e16b2eb784285608f8182fac46, type: 3}
+-  shotInterval: 0.16
+-  shotAnimationDuration: 0.24
+-  layerFadeInDuration: 0.06
+-  layerFadeOutDuration: 0.12

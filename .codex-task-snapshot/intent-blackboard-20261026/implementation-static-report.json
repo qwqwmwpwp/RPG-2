@@ -1,0 +1,184 @@
+{
+  "changedExistingFiles": [
+    "Assets/CombatGirlsCharacterPack/Biperworks_Tools/CombatGirls_Weapon_Control/Character_Weapon_Controller.cs",
+    "Assets/Scripts/Input/PlayerInput.cs",
+    "Assets/Scripts/Input/RPG4.Input.asmdef",
+    "Assets/Scripts/Interaction/PlayerInteraction.cs",
+    "Assets/Scripts/Interaction/README.md",
+    "Assets/Scripts/Interaction/RPG4.Interaction.asmdef",
+    "Assets/Scripts/PlayerMovement/Player.cs",
+    "Assets/Scripts/PlayerMovement/PlayerAimPose.cs",
+    "Assets/Scripts/PlayerMovement/PlayerCameraController.cs",
+    "Assets/Scripts/PlayerMovement/PlayerContext.cs",
+    "Assets/Scripts/PlayerMovement/PlayerLocomotion.cs",
+    "Assets/Scripts/PlayerMovement/PlayerViewController.cs",
+    "Assets/Scripts/PlayerMovement/PlayerWeaponPresentation.cs",
+    "Assets/Scripts/PlayerMovement/README.md",
+    "Assets/Scripts/PlayerMovement/RPG4.PlayerMovement.asmdef",
+    "Assets/Scripts/PlayerMovement/States/LowerBodyRootState.cs",
+    "Assets/Scripts/PlayerMovement/States/UpperBodyRootState.cs"
+  ],
+  "newFiles": [
+    "Assets/Scripts/PlayerIntent.meta",
+    "Assets/Scripts/PlayerIntent/PlayerBlackboard.cs",
+    "Assets/Scripts/PlayerIntent/PlayerBlackboard.cs.meta",
+    "Assets/Scripts/PlayerIntent/RPG4.PlayerIntent.asmdef",
+    "Assets/Scripts/PlayerIntent/RPG4.PlayerIntent.asmdef.meta",
+    "Assets/Scripts/PlayerMovement/PlayerIntentManager.cs",
+    "Assets/Scripts/PlayerMovement/PlayerIntentManager.cs.meta"
+  ],
+  "serializedFieldDeclarations": [
+    {
+      "file": "Assets\\CombatGirlsCharacterPack\\Biperworks_Tools\\CombatGirls_Weapon_Control\\Character_Weapon_Controller.cs",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\Input\\PlayerInput.cs",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\Interaction\\PlayerInteraction.cs",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\Player.cs",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\PlayerAimPose.cs",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\PlayerCameraController.cs",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\PlayerContext.cs",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\PlayerLocomotion.cs",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\PlayerViewController.cs",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\PlayerWeaponPresentation.cs",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\States\\LowerBodyRootState.cs",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\States\\UpperBodyRootState.cs",
+      "unchanged": true
+    }
+  ],
+  "existingMetas": [
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\Player.cs.meta",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\PlayerAimPose.cs.meta",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\PlayerCameraController.cs.meta",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\PlayerContext.cs.meta",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\PlayerFireAction.cs.meta",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\PlayerLocomotion.cs.meta",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\PlayerStateData.cs.meta",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\PlayerViewController.cs.meta",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\PlayerWeaponPresentation.cs.meta",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\README.md.meta",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\RPG4.PlayerMovement.asmdef.meta",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\States.meta",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\States\\LowerBodyRootState.cs.meta",
+      "unchanged": true
+    },
+    {
+      "file": "Assets\\Scripts\\PlayerMovement\\States\\UpperBodyRootState.cs.meta",
+      "unchanged": true
+    }
+  ],
+  "newMetaGuidOccurrences": {
+    "612774482dc04f34969a00ad5b66b257": [
+      "Assets\\Scripts\\PlayerIntent.meta"
+    ],
+    "d18b6210ec88417bb4eb8ad6cf855279": [
+      "Assets\\Scripts\\PlayerIntent\\PlayerBlackboard.cs.meta"
+    ],
+    "4ef0eb9cddd249d48fac52b558654bfd": [
+      "Assets\\Scripts\\PlayerIntent\\RPG4.PlayerIntent.asmdef.meta"
+    ],
+    "0e57eadfaf1b4351bd619838dbe9925e": [
+      "Assets\\Scripts\\PlayerMovement\\PlayerIntentManager.cs.meta"
+    ]
+  },
+  "assemblies": {
+    "RPG4.Input": [
+      "Unity.InputSystem",
+      "RPG4.UI",
+      "RPG4.PlayerIntent"
+    ],
+    "RPG4.Interaction": [
+      "RPG4.Input",
+      "UnityEngine.UI",
+      "Unity.TextMeshPro",
+      "RPG4.PlayerIntent"
+    ],
+    "RPG4.PlayerIntent": [],
+    "RPG4.PlayerMovement": [
+      "RPG4.Input",
+      "RPG4.StateMachine",
+      "Cinemachine",
+      "RPG4.PlayerIntent"
+    ],
+    "RPG4.StateMachine": [],
+    "RPG4.UI": []
+  },
+  "assemblyCycles": [],
+  "validation": "Pure text/metadata static audit; no Unity or project code executed.",
+  "followupStaticNotes": [
+    {
+      "file": "Assets/Scripts/PlayerMovement/PlayerViewController.cs",
+      "change": "Awake 初始化观察角后，若已有该角色 IntentManager，则经 RecordView 同步共享黑板；支持初始 inactive AimPivot 延迟 Awake，正常 Awake 先于 Player 时保持 Initialize 原有同步路径。",
+      "scope": "仅新增一行空值保护调用；无 OnEnable 重置，无配置/序列化字段/meta/场景/Animator 修改。",
+      "validation": "静态调用链复核及目标文件 git diff --check；未启动 Unity、构建或执行项目逻辑。"
+    }
+  ]
+}

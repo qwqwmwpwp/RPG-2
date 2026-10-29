@@ -3,9 +3,9 @@
 `PlayerInteraction` 从相机视口中心发射射线，忽略玩家自身与 Trigger，只取最近碰撞体。墙壁等非交互物体会阻挡射线；距离以玩家根节点到命中点计算，默认 3 米。碰撞体可以在物品子节点，交互组件挂在它的父节点。
 
 - 键盘 **E** / 手柄 **西侧按钮（X / Square）** 触发一次交互。
-- 输入由玩家根节点上的自定义 `RPG4.Input.PlayerInput` 统一采样，`PlayerInteraction` 只读取 `InteractPressed`；未绑定时从同节点获取该组件。
+- 输入由玩家根节点上的自定义 `RPG4.Input.PlayerInput` 统一采样，`PlayerInteraction` 从该角色的共享 `PlayerBlackboard` 读取 `CanInteract` / `InteractPressed`；原 PlayerInput 字段只用于结构绑定与明确阶段刷新，未绑定时从同节点获取该组件。
 - 准心默认白色，检测到距离内的可交互物品时变绿。
-- `PlayerInput.CanReadGameplayInput` 统一控制焦点、暂停和 UI 输入占用；输入被阻止或交互相机不可用时隐藏准心并暂停交互。交互打开窗口后立即重新检查该门控。
+- `InputIntentProcessor` 统一控制焦点、暂停和 UI 输入占用并写入共享许可；输入被阻止或交互相机不可用时隐藏准心并暂停交互。检测/交互前后显式刷新许可，开窗当帧使黑板表现失效，Player 的既有 Late 阶段同步撤销已施加的骨架补偿；目标结果经同一输入处理器写回黑板。
 - `interactionCamera` 留空使用 `Camera.main`。`raycastLayers` 必须同时包含物品和遮挡物。
 
 ## 已接入的资源

@@ -99,7 +99,9 @@ namespace RPG4.Backpack.UI
                 }
 
                 if (view.transform.parent != cursorLayer) view.transform.SetParent(cursorLayer, false);
-                Vector2 nextSize = target.GetItemPixelSize(carry.Dimensions);
+                GridCoord targetDimensions = target.Inventory.ResolveItemDimensions(carry.Item);
+                Vector2Int targetGrabOffset = targetDimensions == carry.Dimensions ? carry.GrabOffset : Vector2Int.zero;
+                Vector2 nextSize = target.GetItemPixelSize(targetDimensions);
                 if (size != nextSize)
                 {
                     size = nextSize;
@@ -115,7 +117,7 @@ namespace RPG4.Backpack.UI
                 if (index >= 0) view.transform.position = target.GetCellWorldPosition(index);
                 else if (RectTransformUtility.ScreenPointToLocalPointInRectangle(cursorLayer, point, GetUICamera(target), out Vector2 local))
                 {
-                    Vector2 grabCenter = target.GetGrabCenterOffset(carry.GrabOffset);
+                    Vector2 grabCenter = target.GetGrabCenterOffset(targetGrabOffset);
                     view.transform.position = cursorLayer.TransformPoint(local + new Vector2(-grabCenter.x, grabCenter.y));
                 }
             }
@@ -134,6 +136,12 @@ namespace RPG4.Backpack.UI
 
         private static int nextRequestId;
         private BackpackContainerUI[] views = Array.Empty<BackpackContainerUI>();
+        private BackpackContainerUI quickTransferFirst;
+        private BackpackContainerUI quickTransferSecond;
+        private string quickTransferFirstHint;
+        private string quickTransferSecondHint;
+        private bool quickTransferCanReplaceSecondSlot;
+        private string dropError;
         private readonly CarryPreview preview = new CarryPreview();
         private CarrySession carry;
         private PendingOperation pending;
@@ -160,6 +168,7 @@ namespace RPG4.Backpack.UI
         private string cachedCarryHint;
         private DropAction cachedHintAction;
         private bool cachedHintPartial;
+        private string cachedHintError;
         public Vector2 PointerPosition { get; private set; }
         public bool HasPointer { get; private set; }
 
@@ -190,6 +199,23 @@ namespace RPG4.Backpack.UI
             SessionVersion++;
         }
 
+        /// <summary>显式指定快捷转移的两侧，新增其它拖放容器不会改变原有快捷键目标。</summary>
+        public void SetQuickTransferPair(BackpackContainerUI first, BackpackContainerUI second,
+            string firstHint = "自动转移", string secondHint = "自动转移", bool replaceSecondSingleSlot = false)
+        {
+            if (first == null || second == null || first == second
+                || Array.IndexOf(views, first) < 0 || Array.IndexOf(views, second) < 0) return;
+            quickTransferFirst = first;
+            quickTransferSecond = second;
+            quickTransferFirstHint = firstHint;
+            quickTransferSecondHint = secondHint;
+            quickTransferCanReplaceSecondSlot = replaceSecondSingleSlot;
+        }
+
+        private BackpackContainerUI GetQuickTransferDestination(BackpackContainerUI source) =>
+            source != null && source == quickTransferFirst ? quickTransferSecond
+            : source != null && source == quickTransferSecond ? quickTransferFirst : null;
+
         /// <summary>只接收活动会话的本帧输入；由较晚执行的 Update 在视图刷新后消费一次。</summary>
         public void ReceiveInput(SessionInput input)
         {
@@ -206,6 +232,9 @@ namespace RPG4.Backpack.UI
             CancelInteraction();
             preview.Dispose();
             views = Array.Empty<BackpackContainerUI>();
+            quickTransferFirst = quickTransferSecond = null;
+            quickTransferFirstHint = quickTransferSecondHint = null;
+            quickTransferCanReplaceSecondSlot = false;
             HasPointer = false;
             operationFeedback = contextHint = string.Empty;
             feedbackExpiresAt = 0f;
@@ -294,7 +323,7 @@ namespace RPG4.Backpack.UI
             else if (input.SecondaryClick) HandleSecondaryClick(target, tile.TileIndex);
             else if (input.PrimaryClick)
             {
-                if (carry == null && input.QuickTransfer && views.Length == 2) TryQuickTransfer(target, tile.TileIndex);
+                if (carry == null && input.QuickTransfer && GetQuickTransferDestination(target) != null) TryQuickTransfer(target, tile.TileIndex);
                 else if (carry == null) BeginCarry(target, tile.TileIndex, false);
                 else TryDrop(target, tile.TileIndex);
             }
@@ -318,7 +347,8 @@ namespace RPG4.Backpack.UI
                 InventoryOperationResult result = pending.Result.Value;
                 if (!result.Success) BackpackLog.Warn(LogModule.Interaction, result.Error);
                 CancelInteraction();
-                SetOperationFeedback(result.Success ? "操作完成" : "操作未完成，请重试");
+                SetOperationFeedback(result.Success ? "操作完成"
+                    : string.IsNullOrEmpty(result.Error) ? "操作未完成，请重试" : result.Error);
                 return;
             }
             if (Time.unscaledTime < pending.Deadline) return;
@@ -378,12 +408,32 @@ namespace RPG4.Backpack.UI
 
         private void TryQuickTransfer(BackpackContainerUI source, int index)
         {
-            if (views.Length != 2 || source == null) return;
-            BackpackContainerUI destination = views[0] == source ? views[1] : views[0];
+            if (source == null) return;
+            BackpackContainerUI destination = GetQuickTransferDestination(source);
             if (destination == source || !IsViewReady(destination)
                 || ReferenceEquals(source.Inventory, destination.Inventory)) return;
             BeginCarry(source, index, false);
             if (carry == null) return;
+            if (!destination.Inventory.CanAcceptItem(carry.Item, out string error))
+            {
+                CancelInteraction();
+                SetOperationFeedback(string.IsNullOrEmpty(error) ? "此物品无法放入目标容器" : error);
+                return;
+            }
+            if (quickTransferCanReplaceSecondSlot && source == quickTransferFirst
+                && destination.Columns == 1 && destination.Rows == 1
+                && destination.TryGetCellOwner(0, out ItemId previousId, out _)
+                && destination.TryGetItem(previousId, out RuntimeItem previous))
+            {
+                if (!carry.Inventory.CanAcceptItem(previous, out error))
+                {
+                    CancelInteraction();
+                    SetOperationFeedback(string.IsNullOrEmpty(error) ? "原物品无法放回来源容器" : error);
+                    return;
+                }
+                Submit(InventoryOperationKind.SwapItems, destination, 0, previousId);
+                return;
+            }
             Submit(InventoryOperationKind.TransferItem, destination, -1, ItemId.None);
         }
 
@@ -470,14 +520,18 @@ namespace RPG4.Backpack.UI
 
         private DropAction ResolveDrop(BackpackContainerUI target, int hoverIndex, out int index, out SpaceQueryResult<RuntimeItem> region)
         {
+            dropError = null;
             index = -1;
             region = SpaceQueryResult<RuntimeItem>.Empty;
             if (carry == null || target == null) return DropAction.Blocked;
             if (carry.IsPartial && target == carry.Source && target.TryGetCellOwner(hoverIndex, out ItemId owner, out _) && owner == carry.Item.ItemId)
                 return DropAction.Return;
-            index = target.GetUpperLeftIndex(hoverIndex, carry.GrabOffset);
+            GridCoord dimensions = target.Inventory.ResolveItemDimensions(carry.Item);
+            Vector2Int grabOffset = dimensions == carry.Dimensions ? carry.GrabOffset : Vector2Int.zero;
+            index = target.GetUpperLeftIndex(hoverIndex, grabOffset);
             if (index < 0) return DropAction.Blocked;
-            region = target.QuerySpace(index, carry.Dimensions);
+            if (!target.Inventory.CanAcceptItem(carry.Item, out dropError)) return DropAction.Blocked;
+            region = target.QuerySpace(index, dimensions);
             bool sameInventory = ReferenceEquals(target.Inventory, carry.Inventory);
             if (region.HasSpace || (!carry.IsPartial && sameInventory && region.ValidItem?.ItemId == carry.Item.ItemId))
             {
@@ -489,6 +543,8 @@ namespace RPG4.Backpack.UI
             if (region.ValidItem == null || !(carry.Inventory is IInventoryOperations writer)
                 || !writer.CanSubmitTo(target.Inventory)) return DropAction.Blocked;
             RuntimeItem other = region.ValidItem;
+            // 交换的返回物也必须满足来源容器的准入规则，例如武器槽不能换入普通物品。
+            if (!carry.Inventory.CanAcceptItem(other, out dropError)) return DropAction.Blocked;
             if (!carry.Item.IsStackable || !other.IsStackable || !carry.Item.ItemType.MatchesTagExact(other.ItemType))
                 return carry.IsPartial ? DropAction.Blocked : DropAction.SwapPosition;
             int room = other.MaxStackSize - other.StackCount;
@@ -524,7 +580,7 @@ namespace RPG4.Backpack.UI
                     Submit(InventoryOperationKind.TransferItem, target, index, ItemId.None);
                     return;
             }
-            SetOperationFeedback("此处无法放置，请选择可用位置");
+            SetOperationFeedback(string.IsNullOrEmpty(dropError) ? "此处无法放置，请选择可用位置" : dropError);
         }
 
         private void Submit(InventoryOperationKind kind, BackpackContainerUI target, int index, ItemId other)
@@ -573,12 +629,13 @@ namespace RPG4.Backpack.UI
             {
                 DropAction action = ResolveDrop(target, index, out _, out _);
                 bool partial = carry.IsPartial;
-                if (cachedCarryHint == null || cachedHintAction != action || cachedHintPartial != partial)
+                if (cachedCarryHint == null || cachedHintAction != action || cachedHintPartial != partial || cachedHintError != dropError)
                 {
                     cachedHintAction = action;
                     cachedHintPartial = partial;
+                    cachedHintError = dropError;
                     string cancel = partial ? " · 右键原堆增加数量 · Esc 取消" : " · 右键 / Esc 取消";
-                    cachedCarryHint = (action == DropAction.Blocked ? "无法放置" : action == DropAction.Merge ? "左键合并堆叠"
+                    cachedCarryHint = (action == DropAction.Blocked ? string.IsNullOrEmpty(dropError) ? "无法放置" : dropError : action == DropAction.Merge ? "左键合并堆叠"
                         : action == DropAction.SwapPosition || action == DropAction.SwapStackCounts ? "左键交换"
                         : action == DropAction.Return ? "左键放回原堆" : action == DropAction.Transfer ? "左键转移"
                         : action == DropAction.Split ? "左键拆出并放置" : "左键放置") + cancel;
@@ -589,9 +646,9 @@ namespace RPG4.Backpack.UI
             RuntimeItem item = DisplayedItem;
             if (item == null) { contextHint = "将鼠标移到物品上查看详情"; return; }
             bool canSplit = item.IsStackable && item.StackCount > 1;
-            contextHint = views.Length == 2
-                ? canSplit ? "左键拿取 · 右键逐个拆分 · Shift + 右键选择数量 · Ctrl + 左键自动转移" : "左键拿取 · Ctrl + 左键自动转移"
-                : canSplit ? "左键拿取 · 右键逐个拆分 · Shift + 右键选择数量" : "左键拿取";
+            contextHint = canSplit ? "左键拿取 · 右键逐个拆分 · Shift + 右键选择数量" : "左键拿取";
+            if (GetQuickTransferDestination(target) != null)
+                contextHint += " · Ctrl + 左键" + (target == quickTransferFirst ? quickTransferFirstHint : quickTransferSecondHint);
         }
 
         private void SetHoveredItem(BackpackContainerUI target, int index)
@@ -612,7 +669,7 @@ namespace RPG4.Backpack.UI
             bool swap = action == DropAction.Merge || action == DropAction.SwapPosition || action == DropAction.SwapStackCounts;
             BackpackHoverState state = action == DropAction.Blocked ? BackpackHoverState.Blocked
                 : swap ? BackpackHoverState.Swap : BackpackHoverState.Available;
-            GridCoord dimensions = carry.Dimensions;
+            GridCoord dimensions = target != null ? target.Inventory.ResolveItemDimensions(carry.Item) : carry.Dimensions;
             if (swap && target.TryGetPlacement(region.ValidItem.ItemId, out GridDisplayPlacement placement))
                 dimensions = new GridCoord(placement.Item.Width, placement.Item.Height);
             int highlightIndex = swap ? region.UpperLeftIndex : index;

@@ -1,0 +1,26 @@
+{
+  "purpose": "Static Roslyn compilation of modified weapon controller runtime and UNITY_EDITOR branches; no Unity editor, project logic, tests, analyzers, generators, or generated assemblies executed.",
+  "mainReport": "E:\\github\\RPG-2\\.codex-task-snapshot\\shoot-simulation\\static-check\\run-20261024-183817\\compile-report.json",
+  "results": [
+    {
+      "variant": "Runtime",
+      "source": "E:\\github\\RPG-2\\Assets\\CombatGirlsCharacterPack\\Biperworks_Tools\\CombatGirls_Weapon_Control\\Character_Weapon_Controller.cs",
+      "sourceSha256": "64DD4E780EA343D3B3FF1F71E7E6E77B452D2BF8300D930965B195715A007947",
+      "sourceCount": 1,
+      "exitCode": 0,
+      "responseFile": "E:\\github\\RPG-2\\.codex-task-snapshot\\shoot-simulation\\static-check\\run-20261024-183817\\CombatGirls.WeaponControl.Runtime.StaticCheck.rsp",
+      "compilerLog": "E:\\github\\RPG-2\\.codex-task-snapshot\\shoot-simulation\\static-check\\run-20261024-183817\\CombatGirls.WeaponControl.Runtime.StaticCheck.log",
+      "output": "E:\\github\\RPG-2\\.codex-task-snapshot\\shoot-simulation\\static-check\\run-20261024-183817\\out\\CombatGirls.WeaponControl.Runtime.StaticCheck.dll"
+    },
+    {
+      "variant": "Editor",
+      "source": "E:\\github\\RPG-2\\Assets\\CombatGirlsCharacterPack\\Biperworks_Tools\\CombatGirls_Weapon_Control\\Character_Weapon_Controller.cs",
+      "sourceSha256": "64DD4E780EA343D3B3FF1F71E7E6E77B452D2BF8300D930965B195715A007947",
+      "sourceCount": 1,
+      "exitCode": 0,
+      "responseFile": "E:\\github\\RPG-2\\.codex-task-snapshot\\shoot-simulation\\static-check\\run-20261024-183817\\CombatGirls.WeaponControl.Editor.StaticCheck.rsp",
+      "compilerLog": "E:\\github\\RPG-2\\.codex-task-snapshot\\shoot-simulation\\static-check\\run-20261024-183817\\CombatGirls.WeaponControl.Editor.StaticCheck.log",
+      "output": "E:\\github\\RPG-2\\.codex-task-snapshot\\shoot-simulation\\static-check\\run-20261024-183817\\out\\CombatGirls.WeaponControl.Editor.StaticCheck.dll"
+    }
+  ]
+}

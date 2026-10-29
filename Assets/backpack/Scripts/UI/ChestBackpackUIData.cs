@@ -8,6 +8,7 @@ namespace RPG4.Backpack.UI
     public sealed class ChestBackpackUIData : MonoBehaviour
     {
         public BackpackContainerUI playerView;
+        public BackpackContainerUI equipmentView;
         public BackpackContainerUI chestView;
         public BackpackInteractionController interaction;
         public TMP_Text playerTitle;

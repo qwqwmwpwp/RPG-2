@@ -1,24 +1,90 @@
+using System;
+using RPG4.PlayerIntent;
 using RPG4.UI;
 using UnityEngine;
 
 namespace RPG4.Input
 {
-    /// <summary>
-    /// 角色输入快照：统一采样与输入占用判断，具体移动、镜头和交互效果由消费方执行。
-    /// 后续输入延迟、缓冲和重复触发策略统一归本组件维护，目前尚未实现这些策略。
-    /// </summary>
+    /// <summary>输入生命周期宿主；-200 明确采样并通知该角色的意图管理器。</summary>
     [DisallowMultipleComponent]
     [DefaultExecutionOrder(-200)]
     public sealed class PlayerInput : MonoBehaviour
     {
-        private Vector2 move;
-        private Vector2 look;
-        private float zoom;
-        private bool interactPressed;
-        private bool aimHeld;
+        public InputIntentProcessor IntentProcessor { get; } = new InputIntentProcessor();
+        public PlayerBlackboard Blackboard => IntentProcessor.Blackboard;
+        private Action refreshIntent;
+
+        // 兼容既有入口；读取快照没有门控检查或副作用。
+        public bool CanReadGameplayInput => Blackboard.InputAllowed;
+        public Vector2 Move => Blackboard.Move;
+        public Vector2 Look => Blackboard.Look;
+        public float Zoom => Blackboard.Zoom;
+        public bool InteractPressed => Blackboard.InteractPressed;
+        public bool CrouchHeld => Blackboard.CrouchHeld;
+        public bool ReloadPressed => Blackboard.ReloadPressed;
+        public bool AimHeld => Blackboard.AimHeld;
+        public bool FirePressed => Blackboard.FirePressed;
+        public bool FireHeld => Blackboard.FireHeld;
+
+        private void Awake() => IntentProcessor.Attach(this);
+        private void OnEnable()
+        {
+            IntentProcessor.Enable(this);
+            RefreshIntentPermissions();
+        }
+        private void Update()
+        {
+            IntentProcessor.Sample();
+            RefreshIntentPermissions();
+        }
+        private void LateUpdate() => RefreshIntentPermissions();
+
+        /// <summary>单角色明确绑定；管理器拥有调用顺序，不使用全局注册或事件总线。</summary>
+        public void BindIntentManager(Action refresh)
+        {
+            refreshIntent = refresh;
+            RefreshIntentPermissions();
+        }
+        public void UnbindIntentManager(Action refresh)
+        {
+            if (refreshIntent == refresh) refreshIntent = null;
+        }
+        public void RefreshIntentPermissions()
+        {
+            IntentProcessor.RefreshPermissions();
+            refreshIntent?.Invoke();
+        }
+        public void Clear()
+        {
+            IntentProcessor.Clear();
+            RefreshIntentPermissions();
+        }
+        public void ClearWeaponInput() => IntentProcessor.ClearWeaponInput();
+        public void ReportInteraction(MonoBehaviour target) => IntentProcessor.ReportInteraction(target);
+        private void OnApplicationFocus(bool focused)
+        {
+            if (focused) return;
+            IntentProcessor.Clear();
+            IntentProcessor.SetCursorCaptured(false);
+            RefreshIntentPermissions();
+        }
+        private void OnApplicationPause(bool paused) { if (paused) Clear(); }
+        private void OnDisable()
+        {
+            IntentProcessor.Disable();
+            RefreshIntentPermissions();
+        }
+    }
+
+    /// <summary>采样、实时许可、帧脉冲与重按抑制；所有输入快照写入都集中在此。</summary>
+    public sealed class InputIntentProcessor
+    {
+        public PlayerBlackboard Blackboard { get; } = new PlayerBlackboard();
+        private PlayerInput host;
+        private bool ownerReady;
+        private bool bodyReady;
+        private bool viewReady;
         private bool aimArmed;
-        private bool firePressed;
-        private bool fireHeld;
         private bool fireArmed;
         private int sampledFrame = -1;
         private bool lookReady;
@@ -26,166 +92,138 @@ namespace RPG4.Input
         private CursorLockMode previousLockMode;
         private bool previousCursorVisible;
 
-        /// <summary>实时检查占用，窗口在采样后打开或关闭时也不能泄漏本帧输入。</summary>
-        public bool CanReadGameplayInput
+        internal void Attach(PlayerInput source) => host = source;
+        internal void Enable(PlayerInput source)
         {
-            get
-            {
-                bool allowed = isActiveAndEnabled && Application.isFocused && Time.timeScale > 0f
-                    && InputManager.Instance != null
-                    && (UIManager.Instance == null || !UIManager.Instance.BlocksGameplayInput);
-                if (!allowed) Clear();
-                return allowed;
-            }
-        }
-
-        // 连续移动为物理帧保留最近采样值；观察增量和按键脉冲仍只在当前帧有效。
-        public Vector2 Move => CanReadGameplayInput && sampledFrame >= 0 ? move : Vector2.zero;
-        public Vector2 Look => CanReadLookInput ? look : Vector2.zero;
-        public float Zoom => CanReadLookInput ? zoom : 0f;
-        public bool InteractPressed => HasCurrentSnapshot && interactPressed;
-        public bool AimHeld
-        {
-            get
-            {
-                if (!CanReadGameplayInput || Cursor.lockState != CursorLockMode.Locked)
-                {
-                    aimHeld = false;
-                    aimArmed = false;
-                    return false;
-                }
-                return sampledFrame >= 0 && aimHeld;
-            }
-        }
-
-        /// <summary>本帧左键开火脉冲；重新捕获光标的点击会被消耗。</summary>
-        public bool FirePressed => CanReadFireInput && sampledFrame == Time.frameCount && firePressed;
-
-        /// <summary>最近采样到的左键按住状态。</summary>
-        public bool FireHeld => CanReadFireInput && sampledFrame >= 0 && fireHeld;
-
-        private bool HasCurrentSnapshot => CanReadGameplayInput && sampledFrame == Time.frameCount;
-
-        private bool CanReadFireInput
-        {
-            get
-            {
-                if (CanReadGameplayInput && Cursor.lockState == CursorLockMode.Locked) return true;
-                ClearFire();
-                return false;
-            }
-        }
-
-        private bool CanReadLookInput
-        {
-            get
-            {
-                if (HasCurrentSnapshot && Cursor.lockState == CursorLockMode.Locked) return true;
-                lookReady = false;
-                look = Vector2.zero;
-                zoom = 0f;
-                return false;
-            }
-        }
-
-        private void OnEnable()
-        {
+            Attach(source);
             previousLockMode = Cursor.lockState;
             previousCursorVisible = Cursor.visible;
             cursorStateSaved = true;
             Clear();
-            if (CanReadGameplayInput) SetCursorCaptured(true);
+            RefreshPermissions();
+            if (Blackboard.InputAllowed) SetCursorCaptured(true);
         }
-
-        private void Update()
+        public void SetControlAvailability(bool ownerEnabled, bool bodyAvailable, bool viewAvailable)
         {
-            if (!CanReadGameplayInput) return;
-
+            ownerReady = ownerEnabled;
+            bodyReady = bodyAvailable;
+            viewReady = viewAvailable;
+            RefreshPermissions();
+        }
+        public void RefreshPermissions()
+        {
+            bool allowed = host != null && host.isActiveAndEnabled && Application.isFocused
+                && Time.timeScale > 0f && InputManager.Instance != null
+                && (UIManager.Instance == null || !UIManager.Instance.BlocksGameplayInput);
+            if (!allowed) Clear();
+            ExpireFrameInput();
+            Blackboard.InputAllowed = allowed;
+            Blackboard.CanMove = allowed && ownerReady && bodyReady && viewReady;
+            Blackboard.CanLook = Blackboard.CanMove;
+            Blackboard.CanUseWeapon = Blackboard.CanMove && Cursor.lockState == CursorLockMode.Locked;
+            Blackboard.CanInteract = allowed;
+            if (!Blackboard.CanUseWeapon) ClearWeaponInput();
+            if (!Blackboard.CanLook || Cursor.lockState != CursorLockMode.Locked)
+            {
+                lookReady = false;
+                Blackboard.Look = Vector2.zero;
+                Blackboard.Zoom = 0f;
+            }
+        }
+        private void ExpireFrameInput()
+        {
+            if (sampledFrame == Time.frameCount) return;
+            Blackboard.Look = Vector2.zero;
+            Blackboard.Zoom = 0f;
+            Blackboard.InteractPressed = false;
+            Blackboard.ReloadPressed = false;
+            Blackboard.FirePressed = false;
+        }
+        internal void Sample()
+        {
+            RefreshPermissions();
+            if (!Blackboard.InputAllowed) return;
             InputManager input = InputManager.Instance;
             InputActions.BackpackActions pointer = input.backpackInput;
             bool cursorCapturedThisFrame = false;
-            if (pointer.cancel.WasPressedThisFrame())
-                SetCursorCaptured(false);
+            if (pointer.cancel.WasPressedThisFrame()) SetCursorCaptured(false);
             else if (Cursor.lockState != CursorLockMode.Locked && pointer.leftButton.WasPressedThisFrame())
             {
                 SetCursorCaptured(true);
                 cursorCapturedThisFrame = true;
             }
-
             InputActions.PlayerActions player = input.playerInput;
             sampledFrame = Time.frameCount;
-            move = Vector2.ClampMagnitude(player.move.ReadValue<Vector2>(), 1f);
-            interactPressed = player.interact.WasPressedThisFrame();
+            Blackboard.Move = Vector2.ClampMagnitude(player.move.ReadValue<Vector2>(), 1f);
+            Blackboard.InteractPressed = player.interact.WasPressedThisFrame();
+            Blackboard.CrouchHeld = player.crouch.IsPressed();
+            Blackboard.ReloadPressed = !cursorCapturedThisFrame && Cursor.lockState == CursorLockMode.Locked
+                && player.reload.WasPressedThisFrame();
             if (Cursor.lockState == CursorLockMode.Locked && !player.aim.IsPressed()) aimArmed = true;
-            aimHeld = Cursor.lockState == CursorLockMode.Locked && aimArmed && player.aim.IsPressed();
+            Blackboard.AimHeld = Cursor.lockState == CursorLockMode.Locked && aimArmed && player.aim.IsPressed();
             bool fireDown = player.fire.IsPressed();
-            if (cursorCapturedThisFrame)
-            {
-                ClearFire();
-            }
+            if (cursorCapturedThisFrame) ClearFire();
             else
             {
                 if (!fireDown) fireArmed = true;
-                firePressed = fireArmed && player.fire.WasPressedThisFrame();
-                fireHeld = fireArmed && fireDown;
+                Blackboard.FirePressed = fireArmed && player.fire.WasPressedThisFrame();
+                Blackboard.FireHeld = fireArmed && fireDown;
             }
-            look = Vector2.zero;
-            zoom = 0f;
-
+            Blackboard.Look = Vector2.zero;
+            Blackboard.Zoom = 0f;
             if (Cursor.lockState != CursorLockMode.Locked)
             {
                 lookReady = false;
                 return;
             }
-            // 重新捕获指针或解除窗口占用后，首个可读帧丢弃累积的位移和滚轮。
+            // 重新捕获指针或解除窗口占用后首帧丢弃累积位移与滚轮。
             if (!lookReady)
             {
                 lookReady = true;
                 return;
             }
-            look = player.look.ReadValue<Vector2>();
-            zoom = player.zoom.ReadValue<float>();
+            Blackboard.Look = player.look.ReadValue<Vector2>();
+            Blackboard.Zoom = player.zoom.ReadValue<float>();
         }
-
-        /// <summary>丢弃当前快照和观察就绪状态；恢复后不会重放被占用期间的输入。</summary>
         public void Clear()
         {
             sampledFrame = -1;
-            move = Vector2.zero;
-            look = Vector2.zero;
-            zoom = 0f;
-            interactPressed = false;
-            aimHeld = false;
-            aimArmed = false;
-            ClearFire();
+            Blackboard.InputAllowed = false;
+            Blackboard.CanMove = false;
+            Blackboard.CanLook = false;
+            Blackboard.CanUseWeapon = false;
+            Blackboard.CanInteract = false;
+            Blackboard.Move = Vector2.zero;
+            Blackboard.Look = Vector2.zero;
+            Blackboard.Zoom = 0f;
+            Blackboard.InteractPressed = false;
+            Blackboard.CrouchHeld = false;
+            Blackboard.InteractionTarget = null;
+            ClearWeaponInput();
             lookReady = false;
         }
-
+        public void ClearWeaponInput()
+        {
+            Blackboard.AimHeld = false;
+            aimArmed = false;
+            Blackboard.ReloadPressed = false;
+            ClearFire();
+        }
         private void ClearFire()
         {
-            firePressed = false;
-            fireHeld = false;
+            Blackboard.FirePressed = false;
+            Blackboard.FireHeld = false;
             fireArmed = false;
         }
-
-        private void SetCursorCaptured(bool captured)
+        internal void SetCursorCaptured(bool captured)
         {
             Cursor.lockState = captured ? CursorLockMode.Locked : CursorLockMode.None;
             Cursor.visible = !captured;
-            aimHeld = false;
-            aimArmed = false;
-            ClearFire();
+            ClearWeaponInput();
             lookReady = false;
         }
-
-        private void OnApplicationFocus(bool focused)
-        {
-            if (focused) return;
-            Clear();
-            SetCursorCaptured(false);
-        }
-
-        private void OnDisable()
+        public void ReportInteraction(MonoBehaviour target) => Blackboard.InteractionTarget = target;
+        internal void Disable()
         {
             Clear();
             if (!cursorStateSaved) return;

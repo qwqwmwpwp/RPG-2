@@ -88,6 +88,14 @@ namespace RPG4.Backpack.Network
 
         public bool CanSubmitTo(IBackpackView destination) => core != null && core.CanSubmitTo(destination);
 
+        public GridCoord ResolveItemDimensions(RuntimeItem item) => InventoryContainer.GetItemDimensions(item);
+
+        public bool CanAcceptItem(RuntimeItem item, out string error)
+        {
+            error = item == null ? "物品为空。" : null;
+            return item != null;
+        }
+
         public bool HasEmptySpace(GridCoord dimensions) => core != null && core.HasEmptySpace(dimensions);
 
         /// <summary>覆盖本实例的类型目录（须在客户端初始化前调用）；框架不提供全局兜底目录，目录缺失属于配置错误并由诊断信息暴露。</summary>
@@ -117,6 +125,7 @@ namespace RPG4.Backpack.Network
 
             // 权威端：核心创建权威容器（尺寸非法由核心回退默认并记警告）并接线「自己为主端」。
             core = new InventoryHostCore(rows, columns, LogModule.Network, name);
+            core.SupportsSingleCellTransfers = false;
             core.Catalog = catalog;
             core.IsAuthority = () => IsServerInventory;
             core.IdGeneratorProvider = ResolveGenerator;
@@ -161,6 +170,7 @@ namespace RPG4.Backpack.Network
 
             // 纯客户端：核心不持有容器，只把意图转发为 Command。
             core = new InventoryHostCore(LogModule.Network, name);
+            core.SupportsSingleCellTransfers = false;
             core.Catalog = catalog;
             core.IsAuthority = () => false;
             core.ForwardOperation = RequestInventoryOperation;

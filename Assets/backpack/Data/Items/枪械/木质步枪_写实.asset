@@ -1,0 +1,66 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4c34e53e651b4930ac2714e72c40d43d, type: 3}
+  m_Name: 木质步枪_写实
+  m_EditorClassIdentifier:
+  itemType:
+    name: GameItems.Equipment.Weapons.Rifle.RealWood
+  fragments:
+  - rid: 1001
+  - rid: 1002
+  - rid: 1003
+  - rid: 1004
+  - rid: 1005
+  references:
+    version: 2
+    RefIds:
+    - rid: 1001
+      type: {class: GridFragment, ns: RPG4.Backpack.Items, asm: RPG4.Backpack.Items}
+      data:
+        fragmentTag:
+          name: FragmentTags.Default.GridFragment
+        width: 4
+        height: 2
+        padding: 0
+    - rid: 1002
+      type: {class: ImageFragment, ns: RPG4.Backpack.Items, asm: RPG4.Backpack.Items}
+      data:
+        fragmentTag:
+          name: FragmentTags.Default.IconFragment
+        icon: {fileID: 21300000, guid: 2324990750894db295a038bc894b8fe9, type: 3}
+        iconDimensions: {x: 1024, y: 512}
+    - rid: 1003
+      type: {class: EquipmentFragment, ns: RPG4.Backpack.Items, asm: RPG4.Backpack.Items}
+      data:
+        fragmentTag:
+          name: FragmentTags.Equip.EquipmentFragment
+        equipmentType:
+          name: GameItems.Equipment.Weapons.Rifle
+        equipPrefab: {fileID: 6363982380300774935, guid: 2ca0e8c2811c471380084b4c152dab58, type: 3}
+        socketAttachPoint: Hand_R_Socket
+        modifiers: []
+    - rid: 1004
+      type: {class: TextFragment, ns: RPG4.Backpack.Items, asm: RPG4.Backpack.Items}
+      data:
+        fragmentTag:
+          name: FragmentTags.Default.Description
+        text: 木质枪托、握把与护木，写实材质。占用 4×2 格，不可堆叠。
+    - rid: 1005
+      type: {class: WeaponDefinitionFragment, ns: RPG4.Backpack.Items, asm: RPG4.Backpack.Items}
+      data:
+        fragmentTag:
+          name: FragmentTags.Equip.WeaponDefinition
+        fireMode: 0
+        shotInterval: 0.25
+        shotDuration: 0.25
+        fadeOutDuration: 0.12
+        reloadDuration: 1.6

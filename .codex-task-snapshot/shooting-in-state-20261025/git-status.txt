@@ -1,0 +1,31 @@
+ M .codex-task-snapshot/shoot-simulation/static-check/assets-report.json
+ M .vscode/settings.json
+ M Assets/CombatGirlsCharacterPack/Biperworks_Tools/CombatGirls_Weapon_Control/Character_Weapon_Controller.cs
+ M Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimIdle_AutoShoot.fbx.meta
+ M Assets/Scenes/Main.unity
+ M Assets/Scripts/Input/PlayerInput.cs
+ M Assets/Scripts/PlayerMovement/Player.cs
+ M Assets/Scripts/PlayerMovement/PlayerAimPose.cs
+ M Assets/Scripts/PlayerMovement/PlayerContext.cs
+ M Assets/Scripts/PlayerMovement/PlayerShootSimulation.cs
+ M Assets/Scripts/PlayerMovement/README.md
+ M Assets/Scripts/PlayerMovement/States/AimState.cs
+ M Assets/Scripts/PlayerMovement/States/ExplorationState.cs
+ M Assets/Scripts/PlayerMovement/States/HipFireState.cs
+ M Assets/Scripts/PlayerMovement/States/PlayerRootState.cs
+ M Assets/Scripts/StateMachine/State.cs
+ M Assets/Scripts/StateMachine/StateMachine.cs
+ M Assets/player/player.controller
+ M Assets/player/player.prefab
+?? .codex-task-snapshot/ik-pitch-fix-20261024/
+?? .codex-task-snapshot/shoot-simulation/static-check/run-20261024-162559/
+?? .codex-task-snapshot/shoot-simulation/static-check/run-20261024-183025/
+?? .codex-task-snapshot/shoot-simulation/static-check/run-20261024-183817/
+?? .codex-task-snapshot/shoot-simulation/static-check/run-20261024-184845/
+?? .codex-task-snapshot/shoot-simulation/static-check/run-20261024-192556/
+?? .codex-task-snapshot/shoot-simulation/static-check/run-20261024-195810/
+?? .codex-task-snapshot/shooting-in-state-20261025/
+?? Assets/Scripts/PlayerMovement/PlayerFireAction.cs
+?? Assets/Scripts/PlayerMovement/PlayerFireAction.cs.meta
+?? Assets/Scripts/PlayerMovement/States/AttackState.cs
+?? Assets/Scripts/PlayerMovement/States/AttackState.cs.meta

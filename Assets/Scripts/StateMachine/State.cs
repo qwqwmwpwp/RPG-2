@@ -15,6 +15,7 @@ namespace RPG4.StateMachine
         }
 
         protected virtual State GetInitialState() => null;
+        /// <summary>返回同一父状态下的目标状态；返回 null 或自身时不切换。</summary>
         protected virtual State GetTransition() => null;
         protected virtual void OnEnter() { }
         protected virtual void OnExit() { }

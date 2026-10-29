@@ -11,6 +11,7 @@ namespace RPG4.Backpack.UI
     public class BackpackGridUI : UIBase
     {
         [SerializeField] private BackpackContainerUI containerUI;
+        [SerializeField] private BackpackContainerUI equipmentView;
         [SerializeField] private BackpackInteractionController interaction;
         [SerializeField] private TMP_Text hudHint;
         [SerializeField] private string openKeyHint;
@@ -21,6 +22,8 @@ namespace RPG4.Backpack.UI
         private IBackpackView preparedInventory;
         private IBackpackView boundInventory;
         private object boundEventSource;
+        private IBackpackView boundEquipment;
+        private object boundEquipmentEventSource;
         private RectTransform windowRect;
         private RectTransform containerRect;
         private float nextBindingCheck;
@@ -49,6 +52,7 @@ namespace RPG4.Backpack.UI
                 containerRect = (RectTransform)containerUI.transform;
                 containerUI.SetPresentationVisible(false);
             }
+            if (equipmentView != null) equipmentView.SetPresentationVisible(false);
         }
 
         private void Start()
@@ -85,11 +89,12 @@ namespace RPG4.Backpack.UI
 
         private bool EnsureDisplay()
         {
-            if (containerUI != null) return containerUI.EnsureInitialized();
+            if (containerUI != null && equipmentView != null && containerUI != equipmentView)
+                return containerUI.EnsureInitialized() && equipmentView.EnsureInitialized();
             if (!configurationWarned)
             {
                 configurationWarned = true;
-                BackpackLog.Warn(LogModule.UI, "请在背包窗口中接线 BackpackContainerUI 网格预制体实例。");
+                BackpackLog.Warn(LogModule.UI, "请在背包窗口中接线不同的背包网格与装备槽视图。");
             }
             return false;
         }
@@ -103,14 +108,28 @@ namespace RPG4.Backpack.UI
         private void BindInventory(IBackpackView source)
         {
             object eventSource = source?.EventSource;
-            if (ReferenceEquals(boundInventory, source) && ReferenceEquals(boundEventSource, eventSource)) return;
+            IBackpackView equipment = LocalBackpackSourceResolver.ResolveEquipment(source);
+            object equipmentEventSource = equipment?.EventSource;
+            if (ReferenceEquals(boundInventory, source) && ReferenceEquals(boundEventSource, eventSource)
+                && ReferenceEquals(boundEquipment, equipment) && ReferenceEquals(boundEquipmentEventSource, equipmentEventSource)) return;
 
             // 改绑只结束旧交互，不关闭窗口或释放当前输入状态。
             if (interaction != null) interaction.EndSession();
             boundInventory = source;
             boundEventSource = eventSource;
+            boundEquipment = equipment;
+            boundEquipmentEventSource = equipmentEventSource;
             containerUI.BindInventory(source);
-            if (interaction != null) interaction.BeginSession(containerUI);
+            equipmentView.BindInventory(equipment);
+            if (interaction != null)
+            {
+                if (equipment != null)
+                {
+                    interaction.BeginSession(containerUI, equipmentView);
+                    interaction.SetQuickTransferPair(containerUI, equipmentView, "快速装备", "快速卸装", replaceSecondSingleSlot: true);
+                }
+                else interaction.BeginSession(containerUI);
+            }
         }
 
         protected override bool CanOpen()
@@ -132,6 +151,7 @@ namespace RPG4.Backpack.UI
             SyncWindowSize();
             inputScope.Capture(Inventory);
             containerUI.SetPresentationVisible(true);
+            equipmentView.SetPresentationVisible(true);
             if (hudHint != null) hudHint.gameObject.SetActive(false);
         }
 
@@ -141,10 +161,17 @@ namespace RPG4.Backpack.UI
             inputScope.Release();
             preparedInventory = boundInventory = null;
             boundEventSource = null;
+            boundEquipment = null;
+            boundEquipmentEventSource = null;
             if (containerUI != null)
             {
                 containerUI.UnbindInventory();
                 containerUI.SetPresentationVisible(false);
+            }
+            if (equipmentView != null)
+            {
+                equipmentView.UnbindInventory();
+                equipmentView.SetPresentationVisible(false);
             }
             nextBindingCheck = 0f;
             RefreshClosedHint();

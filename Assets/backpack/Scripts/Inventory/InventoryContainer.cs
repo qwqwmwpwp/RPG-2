@@ -5,6 +5,8 @@ using RPG4.Backpack.Items;
 
 namespace RPG4.Backpack.Inventory
 {
+    public delegate bool ItemAdmissionHandler(RuntimeItem item, out string error);
+
     /// <summary>库存真相源：统一承担物品集合、格子映射与读写查询，唯一权威地持有「物品集合 + 上左位置 + 格子占用」，两份状态只在提交阶段同源写入、不存在中间态；物品下标按 ItemId 排序并按需缓存，不另建权威数据；堆叠数不缓存（唯一来源 RuntimeItem.StackCount）；纯 C# 数据层，不引用 UI / MonoBehaviour / 网络；按主线程单线程访问、不加锁，查询复用轮次戳缓冲做到零 GC；变更成功后经 F6 事件总线广播（source 为容器实例）。</summary>
     public sealed class InventoryContainer
     {
@@ -22,10 +24,12 @@ namespace RPG4.Backpack.Inventory
         private readonly List<StackStep> stackSteps = new List<StackStep>(); // 接收规划复用的合并缓冲，成功规划后复制到独立计划以隔离事件重入。
 
         private int claimStamp; // 查询轮次戳，每轮自增；初值 0 与缓冲初值相同，故必须先 BeginClaimPass。
+        private readonly ItemAdmissionHandler admission;
+        public bool SingleCellItems { get; }
         private bool itemIndicesDirty = true; // 提交变更后失效，首次下标查询时重建。
 
         /// <summary>创建指定行列数的容器；行列非正或 rows × columns 超过 MaxSlotCount 时抛 ArgumentOutOfRangeException（用长整型探测溢出）。</summary>
-        public InventoryContainer(int rows, int columns)
+        public InventoryContainer(int rows, int columns, bool singleCellItems = false, ItemAdmissionHandler admission = null)
         {
             if (rows <= 0) throw new ArgumentOutOfRangeException(nameof(rows), rows, "行数必须大于 0。");
             if (columns <= 0) throw new ArgumentOutOfRangeException(nameof(columns), columns, "列数必须大于 0。");
@@ -39,6 +43,8 @@ namespace RPG4.Backpack.Inventory
 
             Rows = rows;
             Columns = columns;
+            SingleCellItems = singleCellItems;
+            this.admission = admission;
             cells = new InventoryPlacement[(int)slotCount];
             claimed = new int[(int)slotCount];
 
@@ -273,6 +279,16 @@ namespace RPG4.Backpack.Inventory
             return grid == null ? GridCoord.One : new GridCoord(grid.Width, grid.Height);
         }
 
+        public GridCoord ResolveItemDimensions(RuntimeItem item) => SingleCellItems ? GridCoord.One : GetItemDimensions(item);
+
+        public bool CanAcceptItem(RuntimeItem item, out string error)
+        {
+            error = null;
+            if (item == null) { error = "物品为空。"; return false; }
+            if (SingleCellItems && item.StackCount != 1) { error = "装备格只能容纳一件物品。"; return false; }
+            return admission == null || admission(item, out error);
+        }
+
         /// <summary>悬停落点空间查询：以 startIndex 为上左格扫描 dimensions，整块全空返回 HasSpace；被挡且所有被占格同属一个物品时该物品作为 ValidItem（可交换候选，锚点取该物品上左格）；越界 / 尺寸非法 / 多个不同物品挡路返回空结果；只读。</summary>
         public SpaceQueryResult<RuntimeItem> QuerySpace(int startIndex, GridCoord dimensions)
         {
@@ -312,7 +328,7 @@ namespace RPG4.Backpack.Inventory
         public SpaceQueryResult<RuntimeItem> QuerySpace(int startIndex, RuntimeItem item) =>
             item == null
                 ? SpaceQueryResult<RuntimeItem>.Empty
-                : QuerySpace(startIndex, GetItemDimensions(item));
+                : QuerySpace(startIndex, ResolveItemDimensions(item));
 
         // 容量查询（放得下吗 / 放几个 / 剩多少）
 
@@ -332,12 +348,13 @@ namespace RPG4.Backpack.Inventory
             result.Clear();
             if (item == null) return;
 
-            GridCoord dimensions = GetItemDimensions(item);
+            if (!CanAcceptItem(item, out _)) return;
+            GridCoord dimensions = ResolveItemDimensions(item);
             int amountToFill = amountOverride >= 0 ? amountOverride : item.StackCount;
             if (dimensions.X < 1 || dimensions.Y < 1 || amountToFill <= 0) return;
 
-            bool isStackable = item.IsStackable;
-            int incomingMaxStack = item.MaxStackSize;
+            bool isStackable = !SingleCellItems && item.IsStackable;
+            int incomingMaxStack = SingleCellItems ? 1 : item.MaxStackSize;
 
             result.Item = item;
             result.IsStackable = isStackable;
@@ -428,7 +445,7 @@ namespace RPG4.Backpack.Inventory
         {
             if (!CanInsert(item, nameof(TryPlaceItem), out error)) return false;
 
-            GridCoord dimensions = GetItemDimensions(item);
+            GridCoord dimensions = ResolveItemDimensions(item);
             if (dimensions.X < 1 || dimensions.Y < 1
                 || !GridUtils.IsInGridBounds(startIndex, dimensions, Columns, Rows))
             {
@@ -456,6 +473,7 @@ namespace RPG4.Backpack.Inventory
             error = null;
             if (item == null || !placements.TryGetValue(item, out InventoryPlacement previous))
                 return Reject(out error, nameof(TryMoveItem), "物品不在容器中。");
+            if (!CanAcceptItem(item, out error)) return false;
             if (!IsRegionAvailable(upperLeftIndex, previous.Dimensions, item, null))
                 return Reject(out error, nameof(TryMoveItem), "目标矩形越界或被其他物品占用。");
             if (previous.UpperLeftIndex == upperLeftIndex) return true;
@@ -488,19 +506,33 @@ namespace RPG4.Backpack.Inventory
                 || !destination.placements.TryGetValue(target, out InventoryPlacement second))
                 return Reject(out error, nameof(TrySwapItems), "来源与目标必须是各自库存内的不同物品。");
             bool same = ReferenceEquals(this, destination);
-            if ((!same && ((source.ItemId.IsValid && destination.TryGetItemById(source.ItemId, out _))
+            if (!destination.CanAcceptItem(source, out error) || !CanAcceptItem(target, out error)) return false;
+            bool changesLayout = !same && SingleCellItems != destination.SingleCellItems;
+            GridCoord sourceSize = changesLayout ? destination.ResolveItemDimensions(source) : first.Dimensions;
+            GridCoord targetSize = changesLayout ? ResolveItemDimensions(target) : second.Dimensions;
+            int sourceIndex = second.UpperLeftIndex;
+            int targetIndex = first.UpperLeftIndex;
+            if (changesLayout && !SingleCellItems)
+                targetIndex = FindSwapRegion(targetIndex, targetSize, source);
+            if (changesLayout && !destination.SingleCellItems)
+                sourceIndex = destination.FindSwapRegion(sourceIndex, sourceSize, target);
+            if (!same && ((source.ItemId.IsValid && destination.TryGetItemById(source.ItemId, out _))
                     || (target.ItemId.IsValid && TryGetItemById(target.ItemId, out _))))
-                || !destination.IsRegionAvailable(second.UpperLeftIndex, first.Dimensions, target, same ? source : null)
-                || !IsRegionAvailable(first.UpperLeftIndex, second.Dimensions, source, same ? target : null)
-                || (same && RegionsOverlap(second.UpperLeftIndex, first.Dimensions, first.UpperLeftIndex, second.Dimensions)))
+                return Reject(out error, nameof(TrySwapItems), "交换后的矩形越界、重叠、被占用或标识重复。");
+            if (changesLayout && ((!SingleCellItems && targetIndex == NoIndex)
+                    || (!destination.SingleCellItems && sourceIndex == NoIndex)))
+                return Reject(out error, nameof(TrySwapItems), "原武器无法放回背包，请先腾出空间。");
+            if (!destination.IsRegionAvailable(sourceIndex, sourceSize, target, same ? source : null)
+                || !IsRegionAvailable(targetIndex, targetSize, source, same ? target : null)
+                || (same && RegionsOverlap(sourceIndex, sourceSize, targetIndex, targetSize)))
                 return Reject(out error, nameof(TrySwapItems), "交换后的矩形越界、重叠、被占用或标识重复。");
 
             ClearCells(first);
             destination.ClearCells(second);
             placements.Remove(source);
             destination.placements.Remove(target);
-            CommitPlacement(target, first.UpperLeftIndex, second.Dimensions);
-            destination.CommitPlacement(source, second.UpperLeftIndex, first.Dimensions);
+            CommitPlacement(target, targetIndex, targetSize);
+            destination.CommitPlacement(source, sourceIndex, sourceSize);
             itemIndicesDirty = destination.itemIndicesDirty = true;
             bool accepted = confirm == null || confirm(target.ItemId, out error);
             if (accepted && same && confirm != null) accepted = confirm(source.ItemId, out error);
@@ -530,6 +562,14 @@ namespace RPG4.Backpack.Inventory
                 destination.NotifyItemAdded(source);
             }
             return true;
+        }
+
+        private int FindSwapRegion(int preferredIndex, GridCoord dimensions, RuntimeItem outgoing)
+        {
+            if (IsRegionAvailable(preferredIndex, dimensions, outgoing, null)) return preferredIndex;
+            for (int index = 0; index < SlotCount; index++)
+                if (IsRegionAvailable(index, dimensions, outgoing, null)) return index;
+            return NoIndex;
         }
 
         private bool IsRegionAvailable(int startIndex, GridCoord dimensions, RuntimeItem ignored, RuntimeItem secondIgnored)
@@ -580,6 +620,8 @@ namespace RPG4.Backpack.Inventory
             if (ReferenceEquals(target, incoming)) return Reject(out error, nameof(TryStackItem), "目标与来源是同一个物品实例。");
             if (!placements.ContainsKey(target)) return Reject(out error, nameof(TryStackItem), "目标物品不在容器中。");
             if (!CanInsert(incoming, nameof(TryStackItem), out error)) return false;
+            if (!CanAcceptItem(target, out error)) return false;
+            if (SingleCellItems) return Reject(out error, nameof(TryStackItem), "装备格不支持合堆。");
             if (!target.IsStackable || !incoming.IsStackable) return Reject(out error, nameof(TryStackItem), "双方必须都可堆叠才能合并。");
             if (!target.ItemType.MatchesTagExact(incoming.ItemType)) return Reject(out error, nameof(TryStackItem), "物品类型不一致（需整串精确匹配）。");
 
@@ -606,6 +648,8 @@ namespace RPG4.Backpack.Inventory
         {
             if (item == null) return Reject(out error, nameof(TrySetStackCount), "物品为空。");
             if (!placements.ContainsKey(item)) return Reject(out error, nameof(TrySetStackCount), "物品不在容器中。");
+            if (!CanAcceptItem(item, out error)) return false;
+            if (SingleCellItems && stackCount != 1) return Reject(out error, nameof(TrySetStackCount), "装备格只能容纳一件物品。");
 
             if (stackCount < 1 || stackCount > item.MaxStackSize)
             {
@@ -639,6 +683,9 @@ namespace RPG4.Backpack.Inventory
                 return Reject(out error, operation, "来源与目标必须是库存内的不同物品。");
             if (!source.IsStackable || !target.IsStackable || !source.ItemType.MatchesTagExact(target.ItemType))
                 return Reject(out error, operation, "双方必须是同类型的可堆叠物品。");
+            if (!CanAcceptItem(source, out error) || !destination.CanAcceptItem(target, out error)) return false;
+            if (SingleCellItems || destination.SingleCellItems)
+                return Reject(out error, operation, "装备格不支持堆叠数量操作。");
 
             int sourceCount = source.StackCount;
             int targetCount = target.StackCount;
@@ -769,7 +816,10 @@ namespace RPG4.Backpack.Inventory
                 return Reject(out error, operation, "拆分实例与来源堆叠类型不一致。");
             if (splitItem.StackCount < 1 || splitItem.StackCount >= source.StackCount)
                 return Reject(out error, operation, "拆分数量必须大于零且小于来源堆叠数。");
-            if (!destination.TryPlanReceiveItem(splitItem, operation, out ReceivePlan plan, out error, false, upperLeftIndex, placements[source].Dimensions)) return false;
+            if (!CanAcceptItem(source, out error)) return false;
+            GridCoord splitSize = SingleCellItems != destination.SingleCellItems
+                ? destination.ResolveItemDimensions(splitItem) : placements[source].Dimensions;
+            if (!destination.TryPlanReceiveItem(splitItem, operation, out ReceivePlan plan, out error, false, upperLeftIndex, splitSize)) return false;
 
             bool sameContainer = ReferenceEquals(this, destination);
             int previousStack = source.StackCount;
@@ -815,7 +865,10 @@ namespace RPG4.Backpack.Inventory
                 return Reject(out error, operation, "物品不在来源容器中。");
             }
 
-            if (!destination.TryPlanReceiveItem(item, operation, out ReceivePlan plan, out error, mergeStacks, upperLeftIndex, placement.Dimensions)) return false;
+            GridCoord incomingSize = SingleCellItems != destination.SingleCellItems
+                ? destination.ResolveItemDimensions(item) : placement.Dimensions;
+            if (!destination.TryPlanReceiveItem(item, operation, out ReceivePlan plan, out error,
+                    mergeStacks && !SingleCellItems && !destination.SingleCellItems, upperLeftIndex, incomingSize)) return false;
 
             // 双方静默提交：此段无回调，不能通过两个公开增删操作拼接转移。
             ClearCells(placement);
@@ -867,7 +920,7 @@ namespace RPG4.Backpack.Inventory
             plan = default;
             if (!CanInsert(item, operation, out error)) return false;
 
-            GridCoord dimensions = frozenDimensions ?? GetItemDimensions(item);
+            GridCoord dimensions = frozenDimensions ?? ResolveItemDimensions(item);
             if (upperLeftIndex < NoIndex) return Reject(out error, operation, "目标索引非法。");
             if (dimensions.X < 1 || dimensions.Y < 1)
             {
@@ -877,7 +930,7 @@ namespace RPG4.Backpack.Inventory
             stackSteps.Clear();
             int remaining = item.StackCount;
 
-            if (mergeStacks && item.IsStackable)
+            if (mergeStacks && !SingleCellItems && item.IsStackable)
             {
                 for (int index = 0; index < cells.Length && remaining > 0; index++)
                 {
@@ -972,6 +1025,7 @@ namespace RPG4.Backpack.Inventory
         private bool CanInsert(RuntimeItem item, string operation, out string error)
         {
             if (item == null) return Reject(out error, operation, "物品为空。");
+            if (!CanAcceptItem(item, out error)) return false;
             if (placements.ContainsKey(item)) return Reject(out error, operation, "物品已在容器中。");
             if (item.ItemId.IsValid && TryGetItemById(item.ItemId, out _))
             {

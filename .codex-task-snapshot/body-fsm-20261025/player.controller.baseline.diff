@@ -1,0 +1,305 @@
+--- baseline/Assets/player/player.controller
++++ Assets/player/player.controller
+@@ -7,7 +7,7 @@
+   m_CorrespondingSourceObject: {fileID: 0}
+   m_PrefabInstance: {fileID: 0}
+   m_PrefabAsset: {fileID: 0}
+-  m_Name: Run
++  m_Name: CrouchFreeLocomotion
+   m_Speed: 1
+   m_CycleOffset: 0
+   m_Transitions: []
+@@ -20,8 +20,7 @@
+   m_MirrorParameterActive: 0
+   m_CycleOffsetParameterActive: 0
+   m_TimeParameterActive: 0
+-  m_Motion: {fileID: -7614703449353396500, guid: 711a2af0b4d844b47ad8942d0114c502,
+-    type: 3}
++  m_Motion: {fileID: 710000022}
+   m_Tag: 
+   m_SpeedParameter: 
+   m_MirrorParameter: 
+@@ -45,6 +44,9 @@
+   - serializedVersion: 1
+     m_State: {fileID: 710000010}
+     m_Position: {x: 460, y: 240, z: 0}
++  - serializedVersion: 1
++    m_State: {fileID: 710000020}
++    m_Position: {x: 720, y: 240, z: 0}
+   m_ChildStateMachines: []
+   m_AnyStateTransitions: []
+   m_EntryTransitions: []
+@@ -62,7 +64,7 @@
+   m_CorrespondingSourceObject: {fileID: 0}
+   m_PrefabInstance: {fileID: 0}
+   m_PrefabAsset: {fileID: 0}
+-  m_Name: Idle
++  m_Name: FreeLocomotion
+   m_Speed: 1
+   m_CycleOffset: 0
+   m_Transitions: []
+@@ -75,8 +77,7 @@
+   m_MirrorParameterActive: 0
+   m_CycleOffsetParameterActive: 0
+   m_TimeParameterActive: 0
+-  m_Motion: {fileID: -5109575877556825824, guid: 3787889f507548045abba6b87370b07d,
+-    type: 3}
++  m_Motion: {fileID: 710000021}
+   m_Tag: 
+   m_SpeedParameter: 
+   m_MirrorParameter: 
+@@ -110,6 +111,18 @@
+     m_DefaultBool: 0
+     m_Controller: {fileID: 9100000}
+   - m_Name: AimLocomotionSpeed
++    m_Type: 1
++    m_DefaultFloat: 1
++    m_DefaultInt: 0
++    m_DefaultBool: 0
++    m_Controller: {fileID: 9100000}
++  - m_Name: MoveSpeed
++    m_Type: 1
++    m_DefaultFloat: 0
++    m_DefaultInt: 0
++    m_DefaultBool: 0
++    m_Controller: {fileID: 9100000}
++  - m_Name: ReloadSpeed
+     m_Type: 1
+     m_DefaultFloat: 1
+     m_DefaultInt: 0
+@@ -268,6 +281,12 @@
+   - serializedVersion: 1
+     m_State: {fileID: 710000017}
+     m_Position: {x: 800, y: 160, z: 0}
++  - serializedVersion: 1
++    m_State: {fileID: 710000024}
++    m_Position: {x: 550, y: 280, z: 0}
++  - serializedVersion: 1
++    m_State: {fileID: 710000025}
++    m_Position: {x: 800, y: 280, z: 0}
+   m_ChildStateMachines: []
+   m_AnyStateTransitions: []
+   m_EntryTransitions: []
+@@ -412,3 +431,222 @@
+   m_MirrorParameter: 
+   m_CycleOffsetParameter: 
+   m_TimeParameter: 
++--- !u!1102 &710000020
++AnimatorState:
++  serializedVersion: 6
++  m_ObjectHideFlags: 1
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_Name: CrouchAimLocomotion
++  m_Speed: 1
++  m_CycleOffset: 0
++  m_Transitions: []
++  m_StateMachineBehaviours: []
++  m_Position: {x: 50, y: 50, z: 0}
++  m_IKOnFeet: 0
++  m_WriteDefaultValues: 1
++  m_Mirror: 0
++  m_SpeedParameterActive: 1
++  m_MirrorParameterActive: 0
++  m_CycleOffsetParameterActive: 0
++  m_TimeParameterActive: 0
++  m_Motion: {fileID: 710000023}
++  m_Tag:
++  m_SpeedParameter: AimLocomotionSpeed
++  m_MirrorParameter:
++  m_CycleOffsetParameter:
++  m_TimeParameter:
++--- !u!206 &710000021
++BlendTree:
++  m_ObjectHideFlags: 1
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_Name: FreeLocomotion
++  m_Childs:
++  - serializedVersion: 2
++    m_Motion: {fileID: -5109575877556825824, guid: 3787889f507548045abba6b87370b07d, type: 3}
++    m_Threshold: 0
++    m_Position: {x: 0, y: 0}
++    m_TimeScale: 1
++    m_CycleOffset: 0
++    m_DirectBlendParameter:
++    m_Mirror: 0
++  - serializedVersion: 2
++    m_Motion: {fileID: -7614703449353396500, guid: 711a2af0b4d844b47ad8942d0114c502, type: 3}
++    m_Threshold: 1
++    m_Position: {x: 0, y: 0}
++    m_TimeScale: 1
++    m_CycleOffset: 0
++    m_DirectBlendParameter:
++    m_Mirror: 0
++  m_BlendParameter: MoveSpeed
++  m_BlendParameterY:
++  m_MinThreshold: 0
++  m_MaxThreshold: 1
++  m_UseAutomaticThresholds: 0
++  m_NormalizedBlendValues: 0
++  m_BlendType: 0
++--- !u!206 &710000022
++BlendTree:
++  m_ObjectHideFlags: 1
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_Name: CrouchFreeLocomotion
++  m_Childs:
++  - serializedVersion: 2
++    m_Motion: {fileID: 8550655282779565432, guid: f844e01ec11e33d44a3e231176cf8b76, type: 3}
++    m_Threshold: 0
++    m_Position: {x: 0, y: 0}
++    m_TimeScale: 1
++    m_CycleOffset: 0
++    m_DirectBlendParameter:
++    m_Mirror: 0
++  - serializedVersion: 2
++    m_Motion: {fileID: 1271380791048328025, guid: e28ccbe717c12894a9fc0b68b701403d, type: 3}
++    m_Threshold: 0.5
++    m_Position: {x: 0, y: 0}
++    m_TimeScale: 1
++    m_CycleOffset: 0
++    m_DirectBlendParameter:
++    m_Mirror: 0
++  - serializedVersion: 2
++    m_Motion: {fileID: 5656398705936316957, guid: 68ff0f9c97ce77d4e88487924474b482, type: 3}
++    m_Threshold: 1
++    m_Position: {x: 0, y: 0}
++    m_TimeScale: 1
++    m_CycleOffset: 0
++    m_DirectBlendParameter:
++    m_Mirror: 0
++  m_BlendParameter: MoveSpeed
++  m_BlendParameterY:
++  m_MinThreshold: 0
++  m_MaxThreshold: 1
++  m_UseAutomaticThresholds: 0
++  m_NormalizedBlendValues: 0
++  m_BlendType: 0
++--- !u!206 &710000023
++BlendTree:
++  m_ObjectHideFlags: 1
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_Name: CrouchAimLocomotion
++  m_Childs:
++  - serializedVersion: 2
++    m_Motion: {fileID: -595616424952459445, guid: c0609b7c907988443ad4b19984e93963, type: 3}
++    m_Threshold: 0
++    m_Position: {x: 0, y: 0}
++    m_TimeScale: 1
++    m_CycleOffset: 0
++    m_DirectBlendParameter:
++    m_Mirror: 0
++  - serializedVersion: 2
++    m_Motion: {fileID: 2077707881950928216, guid: c3285db8284ef68448bbae7e0a8e3d9b, type: 3}
++    m_Threshold: 0
++    m_Position: {x: 0, y: 1}
++    m_TimeScale: 1
++    m_CycleOffset: 0
++    m_DirectBlendParameter:
++    m_Mirror: 0
++  - serializedVersion: 2
++    m_Motion: {fileID: 3418815282884303396, guid: 712a753f5e8303247954174ca7f16668, type: 3}
++    m_Threshold: 0
++    m_Position: {x: 0, y: -1}
++    m_TimeScale: 1
++    m_CycleOffset: 0
++    m_DirectBlendParameter:
++    m_Mirror: 0
++  - serializedVersion: 2
++    m_Motion: {fileID: -6265346231284765993, guid: 0731ddaca6a8b8341b1f9d255237795e, type: 3}
++    m_Threshold: 0
++    m_Position: {x: -0.70710677, y: 0.70710677}
++    m_TimeScale: 1
++    m_CycleOffset: 0
++    m_DirectBlendParameter:
++    m_Mirror: 0
++  - serializedVersion: 2
++    m_Motion: {fileID: -4167891483669781554, guid: 915a7c54a4028ec4d92da2c72581a33d, type: 3}
++    m_Threshold: 0
++    m_Position: {x: 0.70710677, y: 0.70710677}
++    m_TimeScale: 1
++    m_CycleOffset: 0
++    m_DirectBlendParameter:
++    m_Mirror: 0
++  - serializedVersion: 2
++    m_Motion: {fileID: 7003460124356273496, guid: cd46d5c21d2e3b94da18b6fa13218cd0, type: 3}
++    m_Threshold: 0
++    m_Position: {x: -0.70710677, y: -0.70710677}
++    m_TimeScale: 1
++    m_CycleOffset: 0
++    m_DirectBlendParameter:
++    m_Mirror: 0
++  - serializedVersion: 2
++    m_Motion: {fileID: 5183732281669676300, guid: e9dd62f51d9e1884b8a24cca9f0b3cbb, type: 3}
++    m_Threshold: 0
++    m_Position: {x: 0.70710677, y: -0.70710677}
++    m_TimeScale: 1
++    m_CycleOffset: 0
++    m_DirectBlendParameter:
++    m_Mirror: 0
++  m_BlendParameter: AimMoveX
++  m_BlendParameterY: AimMoveY
++  m_MinThreshold: 0
++  m_MaxThreshold: 1
++  m_UseAutomaticThresholds: 0
++  m_NormalizedBlendValues: 0
++  m_BlendType: 1
++--- !u!1102 &710000024
++AnimatorState:
++  serializedVersion: 6
++  m_ObjectHideFlags: 1
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_Name: Reload
++  m_Speed: 1
++  m_CycleOffset: 0
++  m_Transitions: []
++  m_StateMachineBehaviours: []
++  m_Position: {x: 50, y: 50, z: 0}
++  m_IKOnFeet: 0
++  m_WriteDefaultValues: 0
++  m_Mirror: 0
++  m_SpeedParameterActive: 1
++  m_MirrorParameterActive: 0
++  m_CycleOffsetParameterActive: 0
++  m_TimeParameterActive: 0
++  m_Motion: {fileID: 5714656323464922859, guid: 0cca85e4195c278438de2c6dc0070788, type: 3}
++  m_Tag:
++  m_SpeedParameter: ReloadSpeed
++  m_MirrorParameter:
++  m_CycleOffsetParameter:
++  m_TimeParameter:
++--- !u!1102 &710000025
++AnimatorState:
++  serializedVersion: 6
++  m_ObjectHideFlags: 1
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_Name: CrouchReload
++  m_Speed: 1
++  m_CycleOffset: 0
++  m_Transitions: []
++  m_StateMachineBehaviours: []
++  m_Position: {x: 50, y: 50, z: 0}
++  m_IKOnFeet: 0
++  m_WriteDefaultValues: 0
++  m_Mirror: 0
++  m_SpeedParameterActive: 1
++  m_MirrorParameterActive: 0
++  m_CycleOffsetParameterActive: 0
++  m_TimeParameterActive: 0
++  m_Motion: {fileID: -6602412621051750717, guid: bac5ede3f395a424d8f81ec498611f5d, type: 3}
++  m_Tag:
++  m_SpeedParameter: ReloadSpeed
++  m_MirrorParameter:
++  m_CycleOffsetParameter:
++  m_TimeParameter:

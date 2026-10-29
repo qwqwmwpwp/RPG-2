@@ -167,6 +167,24 @@
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": false
+                },
+                {
+                    "name": "crouch",
+                    "type": "Button",
+                    "id": "bf2f6ba6-726a-4c0f-8ee3-04f6a5ab5320",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "reload",
+                    "type": "Button",
+                    "id": "61ed4b3a-01a7-4a21-a441-9eaf368cdca8",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
                 }
             ],
             "bindings": [
@@ -288,6 +306,28 @@
                     "processors": "",
                     "groups": "",
                     "action": "fire",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "2d95f8a8-60aa-4f6d-bb5f-45db7ec5a638",
+                    "path": "<Keyboard>/leftCtrl",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "crouch",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "77c89337-5aa7-4fa0-b8a8-51e78f1e30b9",
+                    "path": "<Keyboard>/r",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "reload",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

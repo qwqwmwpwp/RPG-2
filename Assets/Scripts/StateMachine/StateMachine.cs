@@ -30,8 +30,11 @@ namespace RPG4.StateMachine
             for (State state = Root; state != null; state = state.ActiveChild)
             {
                 State target = state.Transition();
-                if (target == null || target == ActiveLeaf) continue;
+                if (target == null) continue;
                 ValidateState(target);
+                if (target.Parent != state.Parent)
+                    throw new InvalidOperationException("A transition target must be a sibling of the requesting state.");
+                if (target == state) continue;
                 ChangeState(target);
                 break;
             }

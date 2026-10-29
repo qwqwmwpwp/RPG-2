@@ -1,0 +1,7 @@
+{
+  "poseHasNoIndependentFrameCallbacks": true,
+  "restoresBeforeLookInput": true,
+  "appliesPoseBeforeCameraPivot": true,
+  "cameraDisableResetsPose": true,
+  "finalIkFrameStillRequired": true
+}

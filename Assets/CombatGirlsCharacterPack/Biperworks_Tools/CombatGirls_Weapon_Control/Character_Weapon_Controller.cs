@@ -1,6 +1,8 @@
 using UnityEngine;
 using UnityEngine.Animations;
 using System.Collections.Generic;
+using RPG4.Input;
+using RPG4.PlayerIntent;
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -344,11 +346,15 @@ public class Character_Weapon_Controller : MonoBehaviour
 
     // Internal Variables
     private Animator animator;
+    private PlayerInput inputSource;
+    private PlayerBlackboard blackboard;
     private int[] lastStateHashes;
 
     private void Awake()
     {
         animator = GetComponent<Animator>();
+        inputSource = GetComponentInParent<PlayerInput>();
+        blackboard = inputSource != null ? inputSource.Blackboard : null;
 
         if (weaponSlots != null)
         {
@@ -430,6 +436,13 @@ public class Character_Weapon_Controller : MonoBehaviour
 
     private void Update()
     {
+        // A zero-weight layer may skip IK callbacks; discard the old blend even then.
+        if (blackboard != null && !blackboard.WeaponIKEnabled)
+        {
+            foreach (var ik in supportIKSettings)
+                ik.currentWeight = 0f;
+        }
+
         if (defaultEventSetting == null || !defaultEventSetting.enabled || string.IsNullOrEmpty(defaultEventSetting.eventName) || animator == null) return;
 
         int layerCount = animator.layerCount;
@@ -640,6 +653,18 @@ public class Character_Weapon_Controller : MonoBehaviour
     private void OnAnimatorIK(int layerIndex)
     {
         if (animator == null) return;
+        if (inputSource != null) inputSource.RefreshIntentPermissions();
+
+        if (blackboard != null && !blackboard.WeaponIKEnabled)
+        {
+            foreach (var ik in supportIKSettings)
+            {
+                ik.currentWeight = 0f;
+                animator.SetIKPositionWeight(ik.ikHand, 0f);
+                animator.SetIKRotationWeight(ik.ikHand, 0f);
+            }
+            return;
+        }
 
         // Iterate through all tracked IK modules for individual smooth lerp transitioning.
         foreach (var ik in supportIKSettings)

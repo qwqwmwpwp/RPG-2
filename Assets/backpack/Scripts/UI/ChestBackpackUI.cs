@@ -43,6 +43,7 @@ namespace RPG4.Backpack.UI
         private readonly InventoryInputScope inputScope = new InventoryInputScope();
         private object boundPlayerEventSource;
         private object boundChestEventSource;
+        private object boundEquipmentEventSource;
 
         public BackpackContainerUI PlayerView => ui != null ? ui.playerView : null;
         public BackpackContainerUI ChestView => ui != null ? ui.chestView : null;
@@ -119,7 +120,7 @@ namespace RPG4.Backpack.UI
                 ui.interaction.enabled = false;
             }
             currentChest = null;
-            boundPlayerEventSource = boundChestEventSource = null;
+            boundPlayerEventSource = boundChestEventSource = boundEquipmentEventSource = null;
             if (ui != null && ui.playerView != null)
             {
                 ui.playerView.UnbindInventory();
@@ -130,6 +131,11 @@ namespace RPG4.Backpack.UI
             {
                 ui.chestView.UnbindInventory();
                 ui.chestView.SetPresentationVisible(false);
+            }
+            if (ui != null && ui.equipmentView != null)
+            {
+                ui.equipmentView.UnbindInventory();
+                ui.equipmentView.SetPresentationVisible(false);
             }
 
             inputScope.Release();
@@ -151,24 +157,37 @@ namespace RPG4.Backpack.UI
             }
 
             IBackpackView player = ResolvePlayer();
+            IBackpackView equipment = LocalBackpackSourceResolver.ResolveEquipment(player);
             BackpackInventory chest = currentChest != null ? currentChest.Inventory : null;
             if (chest != null && !chest.IsInitialized) chest = null;
 
             object playerEventSource = player?.EventSource;
             object chestEventSource = chest?.EventSource;
+            object equipmentEventSource = equipment?.EventSource;
             bool sourceChanged = !ReferenceEquals(ui.playerView.Inventory, player)
                 || !ReferenceEquals(ui.chestView.Inventory, chest)
+                || !ReferenceEquals(ui.equipmentView.Inventory, equipment)
                 || !ReferenceEquals(boundPlayerEventSource, playerEventSource)
-                || !ReferenceEquals(boundChestEventSource, chestEventSource);
+                || !ReferenceEquals(boundChestEventSource, chestEventSource)
+                || !ReferenceEquals(boundEquipmentEventSource, equipmentEventSource);
             // 任一侧来源或事件键变化，都要在视图改绑前清理旧交互。
             if (sourceChanged) EndInteractionSession();
             ui.playerView.BindInventory(player);
             ui.chestView.BindInventory(chest);
+            ui.equipmentView.BindInventory(equipment);
             boundPlayerEventSource = playerEventSource;
             boundChestEventSource = chestEventSource;
-            if (!ui.interaction.IsSessionActive) ui.interaction.BeginSession(ui.playerView, ui.chestView);
+            boundEquipmentEventSource = equipmentEventSource;
+            if (!ui.interaction.IsSessionActive)
+            {
+                if (equipment != null) ui.interaction.BeginSession(ui.playerView, ui.chestView, ui.equipmentView);
+                else ui.interaction.BeginSession(ui.playerView, ui.chestView);
+                // 箱子窗口保留原有背包 ↔ 箱子的快捷转移；装备槽只接受手动拖放。
+                ui.interaction.SetQuickTransferPair(ui.playerView, ui.chestView);
+            }
             ui.playerView.SetPresentationVisible(true);
             ui.chestView.SetPresentationVisible(true);
+            ui.equipmentView.SetPresentationVisible(true);
             ui.playerTitle.text = player != null ? playerTitleText : waitingPlayerTitleText;
             ui.chestTitle.text = chest != null ? chestTitleText : unboundChestTitleText;
             inputScope.SetSource(PlayerInventory);
@@ -192,20 +211,20 @@ namespace RPG4.Backpack.UI
         {
             if (windowRect == null) windowRect = GetComponent<RectTransform>();
             if (ui == null) ui = GetComponent<ChestBackpackUIData>();
-            if (ui == null || ui.playerView == null || ui.chestView == null
-                || ui.playerView == ui.chestView || ui.interaction == null
+            if (ui == null || ui.playerView == null || ui.chestView == null || ui.equipmentView == null
+                || ui.playerView == ui.chestView || ui.equipmentView == ui.playerView || ui.equipmentView == ui.chestView || ui.interaction == null
                 || ui.playerTitle == null || ui.chestTitle == null || ui.interaction.CursorLayer == null)
             {
                 if (!configurationWarned)
                 {
                     configurationWarned = true;
-                    BackpackLog.Warn(LogModule.UI, "请在 ChestBackpackUIData 中接线两个不同的容器、交互组件和标题，并在交互组件中接线携带预览层。");
+                    BackpackLog.Warn(LogModule.UI, "请在 ChestBackpackUIData 中接线不同的背包、箱子和装备视图、交互组件和标题，并在交互组件中接线携带预览层。");
                 }
                 return false;
             }
 
             configurationWarned = false;
-            if (!ui.playerView.EnsureInitialized() || !ui.chestView.EnsureInitialized()) return false;
+            if (!ui.playerView.EnsureInitialized() || !ui.chestView.EnsureInitialized() || !ui.equipmentView.EnsureInitialized()) return false;
             if (!IsOpen) ui.interaction.enabled = false;
             return true;
         }

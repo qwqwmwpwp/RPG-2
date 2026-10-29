@@ -82,6 +82,18 @@ namespace RPG4.Backpack.Runtime
 
         public bool CanSubmitTo(IBackpackView destination) => core != null && core.CanSubmitTo(destination);
 
+        public InventoryOperationResult ExecuteOperation(InventoryOperation operation) => core != null
+            ? core.ExecuteOperation(operation)
+            : new InventoryOperationResult(operation.RequestId, false, ItemId.None, 0, "背包尚未初始化。");
+
+        public GridCoord ResolveItemDimensions(RuntimeItem item) => InventoryContainer.GetItemDimensions(item);
+
+        public bool CanAcceptItem(RuntimeItem item, out string error)
+        {
+            error = item == null ? "物品为空。" : null;
+            return item != null;
+        }
+
         public bool HasEmptySpace(GridCoord dimensions) => core != null && core.HasEmptySpace(dimensions);
 
         /// <summary>物品目录：可在运行时注入（例如场景手搭后再赋值），拆分前必须能按类型取到模板。</summary>

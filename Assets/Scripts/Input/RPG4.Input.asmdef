@@ -3,7 +3,8 @@
     "rootNamespace": "RPG4.Input",
     "references": [
         "Unity.InputSystem",
-        "RPG4.UI"
+        "RPG4.UI",
+        "RPG4.PlayerIntent"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

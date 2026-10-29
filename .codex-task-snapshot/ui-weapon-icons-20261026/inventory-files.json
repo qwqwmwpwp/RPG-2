@@ -1,0 +1,66 @@
+[
+  {
+    "key": "Style_Wood",
+    "source": "C:\\Users\\13545\\.codex\\generated_images\\01a17812-bf37-7f80-8d4a-eb78f0e7fde6\\exec-6935ee23-de50-473b-b011-601ef00fa16a.png",
+    "filename": "Icon_Rifle_Style_Wood.png",
+    "optimized": true,
+    "visible_bbox": [
+      42,
+      176,
+      1753,
+      770
+    ],
+    "source_size": [
+      1774,
+      887
+    ]
+  },
+  {
+    "key": "Style_Meatl",
+    "source": "C:\\Users\\13545\\.codex\\generated_images\\01a17812-bf37-7f80-8d4a-eb78f0e7fde6\\exec-5d29bcef-3732-4d79-848c-18955ffe6570.png",
+    "filename": "Icon_Rifle_Style_Metal.png",
+    "optimized": false,
+    "visible_bbox": [
+      24,
+      258,
+      1232,
+      973
+    ],
+    "source_size": [
+      1254,
+      1254
+    ]
+  },
+  {
+    "key": "Real_Wood",
+    "source": "C:\\Users\\13545\\.codex\\generated_images\\01a17812-bf37-7f80-8d4a-eb78f0e7fde6\\exec-17cdad19-26fb-4ec7-8837-b3193ec3a2de.png",
+    "filename": "Icon_Rifle_Real_Wood.png",
+    "optimized": true,
+    "visible_bbox": [
+      27,
+      181,
+      1751,
+      795
+    ],
+    "source_size": [
+      1774,
+      887
+    ]
+  },
+  {
+    "key": "Real_Metal",
+    "source": "C:\\Users\\13545\\.codex\\generated_images\\01a17812-bf37-7f80-8d4a-eb78f0e7fde6\\exec-39ea60d4-8b40-437b-8967-1dd8c10145d5.png",
+    "filename": "Icon_Rifle_Real_Metal.png",
+    "optimized": false,
+    "visible_bbox": [
+      45,
+      332,
+      1224,
+      927
+    ],
+    "source_size": [
+      1254,
+      1254
+    ]
+  }
+]

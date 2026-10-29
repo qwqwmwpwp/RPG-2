@@ -1,0 +1,28 @@
+{
+  "purpose": "Static serialized resource inspection only; no Unity import, project logic, or animation playback.",
+  "controllerDocumentCount": 12,
+  "duplicateDocumentIds": 0,
+  "missingLocalStateReferences": 0,
+  "shootingStates": [
+    "Empty",
+    "HipFire",
+    "ADSFire",
+    "HipAutoFire",
+    "ADSAutoFire"
+  ],
+  "shootingLayerDefaultWeight": 0,
+  "autoClipGuid": "350d849f350ac944f911df61ffa830c0",
+  "autoClipFileId": "7853932406585560401",
+  "autoClipFrameRange": [
+    15,
+    36
+  ],
+  "autoLoopTime": 1,
+  "metaOnlyLoopTimeChangedFromTaskBaseline": true,
+  "prefabAutoClipReferenceMatches": true,
+  "originalSingleShotBindingPreserved": true,
+  "existingTimingSettingsPreserved": true,
+  "mainSceneUnchanged": true,
+  "fbxBinaryUnchanged": true,
+  "singleShotImporterUnchanged": true
+}

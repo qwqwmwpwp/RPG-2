@@ -4,6 +4,7 @@
     "references": [
         "RPG4.Input",
         "UnityEngine.UI",
-        "Unity.TextMeshPro"
+        "Unity.TextMeshPro",
+        "RPG4.PlayerIntent"
     ]
 }

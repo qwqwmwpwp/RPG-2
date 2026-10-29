@@ -1,0 +1,10 @@
+{
+    "name": "RPG4.PlayerMovement",
+    "rootNamespace": "RPG4.PlayerMovement",
+    "references": [
+        "RPG4.Input",
+        "RPG4.StateMachine",
+        "Cinemachine",
+        "RPG4.PlayerIntent"
+    ]
+}

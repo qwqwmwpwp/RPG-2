@@ -2,7 +2,7 @@
   "verification_method": "Static text inspection of current files only; no Unity launch, project code execution, import, build, or tests.",
   "resources": {
     "Assets/player/player.controller": {
-      "sha256": "edc9c66c9308ec3f44d13303a08d4b1f48d701f399cc8b15838e48288e45f0de",
+      "sha256": "793a96740cd27f93277253183627229fddfb396fe1e748e0ae20333b4f37bf85",
       "object_count": 10,
       "unique_object_ids": true,
       "local_reference_count": 10,
@@ -50,7 +50,8 @@
         "RightHandIK"
       ],
       "encoding_reference": "https://github.com/Unity-Technologies/UnityCsReference/blob/master/Modules/Animation/ScriptBindings/AvatarMask.bindings.cs",
-      "transform_elements": []
+      "transform_elements": [],
+      "sha256": "eee42299f3e7e956afe68fae1fabc696d65f809166aa568026a6aa012d0e4200"
     }
   },
   "contracts": {
@@ -159,5 +160,97 @@
     "Always-weight-one shooting layer uses Empty with no Motion and Write Defaults off; the actual return to the underlying pose after firing needs manual verification.",
     "Only the final UpperBody Shooting layer enables IKPass; OnAnimatorIK behavior during Empty needs manual verification.",
     "Unity Humanoid Body includes Hips, Spine, and Chest. Root and leg channels are disabled, but Hips cannot be separated from Spine using Humanoid body-part slots."
-  ]
+  ],
+  "recheck": {
+    "checked_at_utc": "2026-10-23T18:17:47.876038+00:00",
+    "result": "passed_static_reference_and_contract_checks",
+    "controller_resaved_externally_after_previous_report": true,
+    "external_save_note": "The controller was saved externally after the earlier report. Current AimLocomotion editor node position is x=460 (before snapshot x=456); empty-field whitespace and YAML wrapping also changed. These are preserved. Current shooting states, parameters, mask, weight, and IK contracts match the implemented contract.",
+    "assets_modified_during_recheck": false,
+    "source_hashes": {
+      "Assets/player/player.controller": "793a96740cd27f93277253183627229fddfb396fe1e748e0ae20333b4f37bf85",
+      "Assets/player/player.controller.meta": "7d29f571699fa1f47cdb1f400a914b1ac222dd03a4d82c5fe7d1e29a21b32b22",
+      "Assets/player/player.prefab": "fdb78425d9475f4c0e0ce2ba1447b3fa2fc19f48fc7daa6f38cb813e0ec0a4e5",
+      "Assets/player/player.prefab.meta": "9a901074143bc90739d4a35f621c877a265262250d5ca08cf67d3a4fd62cbbb8",
+      "Assets/player/UpperBodyShooting.mask": "eee42299f3e7e956afe68fae1fabc696d65f809166aa568026a6aa012d0e4200",
+      "Assets/player/UpperBodyShooting.mask.meta": "d5c2347a94ee68fabd5cd5fc048893d58b4013c871ce0b9bdad75dd59fcda9eb",
+      "Assets/Scenes/Main.unity": "3c5a19cd7de2711923ea7e2c6227ba8062e31bbc70ef344c819b84c3aec9f3ba",
+      "Assets/Scripts/PlayerMovement/PlayerShootSimulation.cs": "ce2984b25e9b4a84c5712ca6c3b2dbbdd75678cd73e28b7f164a13ac03157996",
+      "Assets/Scripts/PlayerMovement/PlayerShootSimulation.cs.meta": "2124323f7eefca7c08937e95cc1aff4f7d9fdd176c07cd83809d4d6b1ce1a44a",
+      "Assets/Scripts/PlayerMovement/PlayerAimPose.cs": "4837fec4191e801ac62b76457c097b58b38b7b0daf461d0ac68711530a16a1c0",
+      "Assets/Scripts/PlayerMovement/PlayerStateData.cs": "be5302f3cd8a16f25834c4f01c7812084f06e6b8a7283de1dfaa33a54df99927"
+    },
+    "controller_external_references": [
+      {
+        "guid": "711a2af0b4d844b47ad8942d0114c502",
+        "fileID": -7614703449353396500,
+        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Normal/R_Run.fbx.meta"
+      },
+      {
+        "guid": "3787889f507548045abba6b87370b07d",
+        "fileID": -5109575877556825824,
+        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Normal/R_Idle.fbx.meta"
+      },
+      {
+        "guid": "206db03de8174df68bd28b139650251d",
+        "fileID": 31900000,
+        "meta": "Assets/player/UpperBodyShooting.mask.meta"
+      },
+      {
+        "guid": "5b0c2c871074d4742bf7150dca39c436",
+        "fileID": 145786180134763700,
+        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimIdle.fbx.meta"
+      },
+      {
+        "guid": "5c39511cfd8e963449dc97205030eb51",
+        "fileID": -8694474364745777521,
+        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimWalk_F.fbx.meta"
+      },
+      {
+        "guid": "fe28bbe24969b434fa8729aa88ae7445",
+        "fileID": 6147688166201776650,
+        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimWalk_B.fbx.meta"
+      },
+      {
+        "guid": "16f033bb1bde357438bd3c0511a51ede",
+        "fileID": -6634934411699340864,
+        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimWalk_FL.fbx.meta"
+      },
+      {
+        "guid": "8a5d4be37c7e8bd48b415ca308632efe",
+        "fileID": -7036691193190048577,
+        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimWalk_FR.fbx.meta"
+      },
+      {
+        "guid": "b513f8bb11977514d95addd82df6fff5",
+        "fileID": 1982008771778853863,
+        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimWalk_BL.fbx.meta"
+      },
+      {
+        "guid": "11942bbdd60292f4190e900f211eb2f1",
+        "fileID": -7383578122819572745,
+        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_AimWalk_BR.fbx.meta"
+      },
+      {
+        "guid": "c64081e16b2eb784285608f8182fac46",
+        "fileID": -319965354747890277,
+        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_Shoot.fbx.meta"
+      },
+      {
+        "guid": "c64081e16b2eb784285608f8182fac46",
+        "fileID": -319965354747890277,
+        "meta": "Assets/CombatGirlsCharacterPack/RifleGirl/Animations/Aiming/R_Shoot.fbx.meta"
+      }
+    ],
+    "checked_contracts": [
+      "Controller and prefab object IDs unique; all local fileID references resolve",
+      "All controller external GUIDs resolve uniquely; FBX animation fileIDs exist in their importer metadata",
+      "UpperBody Shooting remains layer 1, Override, weight 1, masked; only final layer enables IKPass",
+      "Empty, HipFire, ADSFire states and ShotSpeed/AimLocomotionSpeed match runtime paths and parameters",
+      "Prefab shooting component GUID, root attachment, Animator/clip references and serialized fields match scripts",
+      "AimPose finalIkLayer=1 and Player hipFire.moveSpeed=6 remain valid",
+      "Main scene inherits the player prefab and new component, with existing cameraController override intact"
+    ],
+    "runtime_validation_performed": false
+  }
 }

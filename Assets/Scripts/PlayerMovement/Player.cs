@@ -1,10 +1,11 @@
 using RPG4.Input;
+using RPG4.PlayerIntent;
 using UnityEngine;
 using HierarchicalStateMachine = RPG4.StateMachine.StateMachine;
 
 namespace RPG4.PlayerMovement
 {
-    /// <summary>角色状态机宿主，通过 Unity 生命周期维护状态机的运行。</summary>
+    /// <summary>双 HSM 宿主：意图管理器组织共享黑板，上身输出需求，下身执行计划。</summary>
     [DisallowMultipleComponent]
     [DefaultExecutionOrder(150)]
     [RequireComponent(typeof(Rigidbody), typeof(CapsuleCollider), typeof(PlayerInput))]
@@ -12,68 +13,103 @@ namespace RPG4.PlayerMovement
     {
         [SerializeField] private PlayerInput playerInput;
         [SerializeField] private PlayerStateData stateData = new PlayerStateData();
-
-        private HierarchicalStateMachine stateMachine;
+        private HierarchicalStateMachine upperStateMachine;
+        private HierarchicalStateMachine lowerStateMachine;
         private PlayerContext context;
-        private PlayerShootSimulation shooting;
-
+        private UpperBodyRootState upperRoot;
+        private PlayerIntentManager intents;
+        private LowerBodyRootState lowerRoot;
         public PlayerInput Input => playerInput;
+        public PlayerBlackboard Blackboard => playerInput != null ? playerInput.Blackboard : null;
+        public bool WeaponIKEnabled => Blackboard != null && Blackboard.WeaponIKEnabled;
+        internal PlayerIntentManager Intents => intents;
 
         private void Awake()
         {
             if (playerInput == null) playerInput = GetComponent<PlayerInput>();
+            context = new PlayerContext(playerInput.Blackboard, stateData);
+            context.Equipment = GetComponent<PlayerEquipment>();
+            intents = new PlayerIntentManager(this, playerInput, context);
+            context.Intents = intents;
             stateData.Content.Initialize(this);
-
-            shooting = GetComponent<PlayerShootSimulation>();
-            if (shooting != null) shooting.Initialize(this, stateData.Content.Animator);
-            context = new PlayerContext(playerInput, stateData.Content, stateData.Exploration,
-                stateData.Aim, stateData.HipFire, shooting);
-            stateMachine = new HierarchicalStateMachine();
-            stateMachine.Initialize(new PlayerRootState(stateMachine, context));
+            upperStateMachine = new HierarchicalStateMachine();
+            lowerStateMachine = new HierarchicalStateMachine();
+            upperRoot = new UpperBodyRootState(upperStateMachine, context);
+            upperStateMachine.Initialize(upperRoot);
+            lowerRoot = new LowerBodyRootState(lowerStateMachine, context);
+            lowerStateMachine.Initialize(lowerRoot);
+            intents.Bind();
         }
-
-        private void Update()
-        {
-            float deltaTime = Mathf.Max(0f, Time.deltaTime);
-            // 明确的输入→射击请求→模式→动画顺序，不依赖独立组件的 Update 顺序。
-            if (shooting != null) shooting.PrepareInput(context.CanUseWeapon, deltaTime);
-            stateMachine.Tick(deltaTime);
-            if (shooting != null) shooting.TickAnimation();
-        }
-
         private void OnEnable()
         {
-            // Input 可在 Player 禁用期间继续采样；恢复时重新要求松开再按。
             if (playerInput != null) playerInput.Clear();
         }
-
-        private void LateUpdate()
+        private void Update()
         {
-            // 交互窗口可在 LateUpdate 打开；补充取消后续射击并恢复持枪姿态。
-            if (context.CanUseWeapon) return;
-            if (shooting != null) shooting.Stop();
-            context.SetWeaponMode(false, false);
-            if (!context.CanControl) context.SetPlanarVelocity(Vector3.zero);
+            intents.RefreshPermissions();
+            float deltaTime = Mathf.Max(0f, Time.deltaTime);
+            upperRoot.PrepareFrame(deltaTime, Time.timeAsDouble);
+            upperStateMachine.Tick(deltaTime);
+            intents.ResolveLocomotion(lowerRoot.PhysicallyCrouched,
+                !lowerRoot.PhysicallyCrouched || lowerRoot.CanStand());
+            lowerStateMachine.Tick(deltaTime);
+            ApplyIntentPresentation();
+            upperRoot.SyncPresentation();
         }
-
         private void FixedUpdate()
         {
-            float deltaTime = Time.fixedDeltaTime;
-            if (deltaTime <= 0f) return;
-
-            stateMachine.FixedTick(deltaTime);
+            intents.RefreshPermissions();
+            if (Time.fixedDeltaTime > 0f) lowerStateMachine.FixedTick(Time.fixedDeltaTime);
         }
-
-        private void OnDisable()
+        // 角色位移与转向由下身状态机驱动刚体；显式接管 Animator / Rig 的根运动输出。
+        private void OnAnimatorMove() { }
+        private void LateUpdate()
         {
-            Stop();
+            intents.RefreshPermissions();
+            if (context.CanUseWeapon && Time.deltaTime > 0f && !Blackboard.WeaponCancellationRequested) return;
+            bool hadPresentation = HasWeaponPresentation();
+            CancelWeaponAction();
+            if (hadPresentation) stateData.Content.AimPose?.Reevaluate();
         }
-
+        internal void CancelWeaponAction()
+        {
+            if (upperRoot == null) return;
+            upperRoot.CancelWeaponAction();
+            ApplyIntentPresentation();
+            // 仅同步已激活的链；不准备本帧、不再次消费 fire/reload，也不启动停机状态。
+            if (!isActiveAndEnabled || upperStateMachine.ActiveLeaf == null) return;
+            upperStateMachine.Tick(0f);
+            intents.ResolveLocomotion(lowerRoot.PhysicallyCrouched,
+                !lowerRoot.PhysicallyCrouched || lowerRoot.CanStand());
+            if (lowerStateMachine.ActiveLeaf != null) lowerStateMachine.Tick(0f);
+            ApplyIntentPresentation();
+            upperRoot.SyncPresentation();
+        }
         internal void Stop()
         {
-            if (shooting != null) shooting.Stop();
-            if (stateMachine != null) stateMachine.Stop();
+            bool hadPresentation = HasWeaponPresentation();
+            if (upperRoot != null) upperRoot.CancelWeaponAction();
+            if (upperStateMachine != null) upperStateMachine.Stop();
+            if (lowerStateMachine != null) lowerStateMachine.Stop();
             if (playerInput != null) playerInput.Clear();
+            ApplyIntentPresentation();
+            upperRoot?.ApplyLayerWeight();
+            if (hadPresentation) stateData.Content.AimPose?.Reevaluate();
         }
+        private bool HasWeaponPresentation()
+        {
+            Animator animator = stateData.Content.Animator;
+            return stateData.Content.AimPose != null && stateData.Content.AimPose.HasActivePose
+                || animator != null && animator.layerCount > 1 && animator.GetLayerWeight(1) > 0f;
+        }
+        private void ApplyIntentPresentation()
+        {
+            if (stateData.Content.AimPose != null) stateData.Content.AimPose.ApplyPresentation();
+        }
+        private void OnDestroy() => intents?.Dispose();
+        private void OnDisable() => Stop();
+        private void OnApplicationFocus(bool focused) { if (!focused) Stop(); }
+        private void OnApplicationPause(bool paused) { if (paused) Stop(); }
+        private void OnValidate() => stateData?.Attack?.Validate();
     }
 }

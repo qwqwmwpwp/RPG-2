@@ -1,0 +1,39 @@
+{
+  "newScriptGuids": {
+    "PlayerLocomotion.cs": "19d59c70f222426cbfe585a89210a7fd",
+    "PlayerWeaponPresentation.cs": "59831fbe099b47499895186b9ef78914",
+    "States/UpperBodyRootState.cs": "22d97a87fbb0438bbd2ea8887f23e5e8",
+    "States/LowerBodyRootState.cs": "78259d041a39446da0785ce952a3e399"
+  },
+  "guidOccurrences": {
+    "19d59c70f222426cbfe585a89210a7fd": [
+      "Assets\\Scripts\\PlayerMovement\\PlayerLocomotion.cs.meta"
+    ],
+    "59831fbe099b47499895186b9ef78914": [
+      "Assets\\Scripts\\PlayerMovement\\PlayerWeaponPresentation.cs.meta"
+    ],
+    "22d97a87fbb0438bbd2ea8887f23e5e8": [
+      "Assets\\Scripts\\PlayerMovement\\States\\UpperBodyRootState.cs.meta"
+    ],
+    "78259d041a39446da0785ce952a3e399": [
+      "Assets\\Scripts\\PlayerMovement\\States\\LowerBodyRootState.cs.meta"
+    ]
+  },
+  "unchangedAgainstTaskBaseline": {
+    "Assets\\Scripts\\PlayerMovement\\PlayerFireAction.cs": true,
+    "Assets\\Scripts\\PlayerMovement\\PlayerAimPose.cs": true,
+    "Assets\\Scripts\\PlayerMovement\\PlayerCameraController.cs": true,
+    "Assets\\Scripts\\PlayerMovement\\RPG4.PlayerMovement.asmdef": true
+  },
+  "oldStateScriptsRemoved": [
+    "AimState",
+    "AttackState",
+    "ExplorationState",
+    "HipFireState",
+    "IdleState",
+    "MoveState",
+    "PlayerRootState"
+  ],
+  "staticOnly": true,
+  "unityOrDirectTestsRun": false
+}
