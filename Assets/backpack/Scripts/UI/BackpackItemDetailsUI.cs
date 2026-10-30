@@ -5,6 +5,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using RPG4.Backpack.Core;
 using RPG4.Backpack.Items;
+using RPG4.UI;
 
 namespace RPG4.Backpack.UI
 {
@@ -28,25 +29,42 @@ namespace RPG4.Backpack.UI
         public GameObject contentRoot;
         public CanvasGroup group;
         public RectTransform rectTransform;
+        public bool docked;
+        public RectTransform propertiesViewport;
+        public ScrollRect propertiesScroll;
 
         private RuntimeItem displayedItem;
         private int displayedCount = -1;
+        private int displayedRevision = -1;
         private bool initialized;
         private readonly StringBuilder text = new StringBuilder();
         private readonly Vector3[] corners = new Vector3[4];
         private Canvas canvas;
 
+        private void OnEnable()
+        {
+            initialized = false;
+            PlayerUiPreferences.Changed += RefreshTextScale;
+        }
+        private void OnDisable() => PlayerUiPreferences.Changed -= RefreshTextScale;
+        private void RefreshTextScale()
+        {
+            initialized = false;
+        }
+
         public void Show(RuntimeItem item)
         {
-            if (initialized && ReferenceEquals(item, displayedItem) && (item == null || displayedCount == item.StackCount)) return;
+            if (initialized && ReferenceEquals(item, displayedItem)
+                && (item == null || displayedCount == item.StackCount && displayedRevision == item.Revision)) return;
             initialized = true;
             displayedItem = item;
             displayedCount = item != null ? item.StackCount : -1;
+            displayedRevision = item != null ? item.Revision : -1;
             if (group != null)
             {
-                group.alpha = item != null ? 1f : 0f;
-                group.interactable = false;
-                group.blocksRaycasts = false;
+                group.alpha = docked || item != null ? 1f : 0f;
+                group.interactable = docked;
+                group.blocksRaycasts = docked;
                 group.ignoreParentGroups = false;
             }
             if (emptyState != null) emptyState.SetActive(item == null);
@@ -62,11 +80,15 @@ namespace RPG4.Backpack.UI
             SetText(itemSize, item != null ? $"占格  {item.Size.X} × {item.Size.Y}" : string.Empty);
             SetText(stackCount, item != null ? $"堆叠  {item.StackCount} / {item.MaxStackSize}" : string.Empty);
             SetText(properties, item != null ? BuildProperties(item) : string.Empty);
+            if (docked && properties != null && propertiesViewport != null)
+                properties.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,
+                    Mathf.Max(propertiesViewport.rect.height, properties.preferredHeight));
+            if (propertiesScroll != null) propertiesScroll.verticalNormalizedPosition = 1f;
         }
 
         public void SetPointer(Vector2 point)
         {
-            if (displayedItem == null || rectTransform == null) return;
+            if (docked || displayedItem == null || rectTransform == null) return;
             if (canvas == null)
             {
                 Canvas parent = GetComponentInParent<Canvas>();
@@ -107,6 +129,9 @@ namespace RPG4.Backpack.UI
 
         private static string ResolveCategory(RuntimeItem item)
         {
+            if (item.MagazineState != null) return "弹匣";
+            if (item.GetFragment<AmmoDefinitionFragment>() != null) return "弹药";
+            if (item.GetFragment<AttachmentDefinitionFragment>() != null) return "武器配件";
             if (item.ItemType.MatchesTag(Weapons)) return "武器";
             if (item.ItemType.MatchesTag(Armors)) return "护甲";
             if (item.ItemType.MatchesTag(Cloaks)) return "披风";
@@ -136,6 +161,7 @@ namespace RPG4.Backpack.UI
         private string BuildProperties(RuntimeItem item)
         {
             text.Clear();
+            AppendWeaponProperties(item);
             foreach (ItemFragment fragment in item.Fragments)
             {
                 if (fragment is LabeledNumberFragment number) AppendNumber(number);
@@ -151,6 +177,59 @@ namespace RPG4.Backpack.UI
                 }
             }
             return text.Length > 0 ? text.ToString().TrimEnd() : "暂无额外属性";
+        }
+
+        private void AppendWeaponProperties(RuntimeItem item)
+        {
+            WeaponDefinitionFragment weapon = item.GetFragment<WeaponDefinitionFragment>();
+            if (weapon != null)
+            {
+                WeaponItemState state = item.WeaponState;
+                MagazineItemState magazine = state?.Magazine?.MagazineState;
+                text.Append("射击模式  ").AppendLine(weapon.FireMode == WeaponFireMode.Automatic ? "自动" : "半自动");
+                text.Append("弹药口径  ").AppendLine(LastSegment(weapon.AmmoType.Name));
+                text.Append("弹匣规格  ").AppendLine(LastSegment(weapon.MagazineType.Name));
+                text.Append("弹匣  ").Append(magazine?.RoundCount ?? 0).Append('/').Append(magazine?.Capacity ?? 0)
+                    .Append(" + 膛内 ").AppendLine(state != null && !state.ChamberAmmo.IsEmpty ? "1" : "0");
+                text.Append("耐久  ").Append((state?.Durability ?? weapon.MaxDurability).ToString("0.#", CultureInfo.InvariantCulture))
+                    .Append('/').AppendLine(weapon.MaxDurability.ToString("0.#", CultureInfo.InvariantCulture));
+                text.Append("基础伤害  ").AppendLine(weapon.BaseDamage.ToString("0.#", CultureInfo.InvariantCulture));
+                text.Append("基础射击间隔  ").Append(weapon.ShotInterval.ToString("0.###", CultureInfo.InvariantCulture)).AppendLine(" 秒");
+                text.Append("基础散布  ").Append(weapon.SpreadAngle.ToString("0.##", CultureInfo.InvariantCulture)).AppendLine("°");
+                text.Append("射程  ").Append(weapon.Range.ToString("0.#", CultureInfo.InvariantCulture)).AppendLine(" 米");
+                text.AppendLine("F 检查并装配");
+            }
+            MagazineDefinitionFragment magazineDefinition = item.GetFragment<MagazineDefinitionFragment>();
+            if (magazineDefinition != null)
+            {
+                text.Append("弹数  ").Append(item.MagazineState?.RoundCount ?? 0).Append('/').AppendLine(magazineDefinition.Capacity.ToString());
+                text.Append("弹药口径  ").AppendLine(LastSegment(magazineDefinition.AmmoType.Name));
+                text.Append("弹匣规格  ").AppendLine(LastSegment(magazineDefinition.MagazineType.Name));
+                text.AppendLine("F 检查并选择装填数量");
+            }
+            AmmoDefinitionFragment ammo = item.GetFragment<AmmoDefinitionFragment>();
+            if (ammo != null)
+            {
+                text.Append("弹药口径  ").AppendLine(LastSegment(ammo.AmmoType.Name));
+                AppendMultiplier("伤害倍率", ammo.DamageMultiplier);
+                AppendMultiplier("散布倍率", ammo.SpreadMultiplier);
+                text.Append("弹丸数  ").AppendLine(ammo.PelletCount.ToString());
+            }
+            AttachmentDefinitionFragment attachment = item.GetFragment<AttachmentDefinitionFragment>();
+            if (attachment != null)
+            {
+                text.AppendLine("配件槽  枪口");
+                text.Append("适用武器  ").AppendLine(attachment.WeaponType.IsEmpty ? "兼容枪口槽" : LastSegment(attachment.WeaponType.Name));
+                AppendMultiplier("伤害倍率", attachment.DamageMultiplier);
+                AppendMultiplier("散布倍率", attachment.SpreadMultiplier);
+                AppendMultiplier("后坐力倍率", attachment.RecoilMultiplier);
+                AppendMultiplier("射击间隔倍率", attachment.ShotIntervalMultiplier);
+            }
+        }
+
+        private void AppendMultiplier(string label, float value)
+        {
+            text.Append(label).Append("  ×").AppendLine(value.ToString("0.###", CultureInfo.InvariantCulture));
         }
 
         private void AppendNumber(LabeledNumberFragment number)

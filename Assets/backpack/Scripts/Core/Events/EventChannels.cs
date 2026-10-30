@@ -14,6 +14,11 @@ namespace RPG4.Backpack.Core
         public const string Changed = "Inv.Changed"; // 粗粒度「数据已变」脏信号，无载荷；表现层收到后置脏标记、帧末合并刷新一次，不区分具体变了什么。
 
         public const string OperationCompleted = "Inv.Operation.Completed"; // 完整库存操作结果。载荷 (InventoryOperationResult)，source 为来源库存的事件键。
+
+        public const string WeaponOperationCompleted = "Inv.Weapon.OperationCompleted"; // (WeaponOperationResult)，玩家背包 EventSource。
+        public const string WeaponHudChanged = "Inv.Weapon.HudChanged"; // (WeaponHudSnapshot)，玩家背包 EventSource。
+        public const string WeaponActionChanged = "Inv.Weapon.ActionChanged"; // 无载荷，source 为 Weapon 实例；玩家适配器合并为只读 HUD 时间轴。
+        public const string WeaponInspectionChanged = "Inv.Weapon.InspectionChanged"; // (WeaponInspectionSnapshot)，玩家背包 EventSource。
     }
 
     /// <summary>交互意图命令：发送方只声明意图，不关心谁处理；命令不保证成功，库存操作结果由 <see cref="InvChannels"/> 的状态广播回传。</summary>
@@ -22,6 +27,9 @@ namespace RPG4.Backpack.Core
         public const string OpenChestUI = "Cmd.Chest.OpenUI"; // 请求打开箱子窗口。载荷 (ChestInventory)，source 为发起交互的箱子；库存 UI 协调器按通配来源订阅。
 
         public const string InventoryOperation = "Cmd.Inventory.Operation"; // 完整库存意图。载荷 (InventoryOperation)。
+
+        public const string WeaponOperation = "Cmd.Weapon.Operation"; // (WeaponOperation)，玩家背包 EventSource，单处理者执行。
+        public const string WeaponSnapshot = "Cmd.Weapon.Snapshot"; // (WeaponSnapshotRequest)，玩家背包 EventSource，None 取消检查。
 
         public const string DropItem = "Cmd.Item.Drop"; // 丢弃物品。载荷 (item, int stackCount)。
 
@@ -33,6 +41,7 @@ namespace RPG4.Backpack.Core
     /// <summary>UI 内部事件：发送方以自身组件实例作 source key，取代父子控件互相持引用；不经过数据层。</summary>
     public static class UiChannels
     {
+        public const string WeaponCandidateSelected = "Ui.Weapon.CandidateSelected"; // (int rowIndex)，source 为 WeaponInspectionPanel。
         /// <summary>鼠标键编码：只传「哪个键被按下」，不传 UI 事件对象自身。</summary>
         public static class MouseButton
         {

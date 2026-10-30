@@ -52,6 +52,7 @@ namespace RPG4.Backpack.Network
         private readonly HashSet<ulong> liveIds = new HashSet<ulong>();
         private readonly Dictionary<ulong, RuntimeItem> itemsById = new Dictionary<ulong, RuntimeItem>();
         private readonly Dictionary<ulong, int> indexById = new Dictionary<ulong, int>();
+        private readonly HashSet<ulong> treeIds = new HashSet<ulong>();
 
         public int ItemCount => itemsById.Count; // 上一次同步记录的权威物品数量。
 
@@ -63,6 +64,7 @@ namespace RPG4.Backpack.Network
             liveIds.Clear();
             itemsById.Clear();
             indexById.Clear();
+            treeIds.Clear();
         }
 
         /// <summary>按标识查找上一次同步看到的权威物品（O(1)）。</summary>
@@ -93,7 +95,7 @@ namespace RPG4.Backpack.Network
                 return false;
             }
 
-            if (!RuntimeItemSnapshotCodec.TryEncodeNumbers(snapshot.Numbers, out byte[] payload, out error))
+            if (!RuntimeItemSnapshotCodec.TryEncodeSnapshot(snapshot, out byte[] payload, out error))
             {
                 return false;
             }
@@ -128,13 +130,13 @@ namespace RPG4.Backpack.Network
                 return false;
             }
 
-            if (!RuntimeItemSnapshotCodec.TryDecodeNumbers(entry.fragmentState, out FragmentNumberState[] numbers, out error))
+            if (!RuntimeItemSnapshotCodec.TryDecodeSnapshot(entry.Id, entry.Tag, entry.stackCount, entry.fragmentState,
+                out RuntimeItemSnapshot snapshot, out error))
             {
                 return false;
             }
 
-            RuntimeItemSnapshot snapshot = new RuntimeItemSnapshot(entry.Id, entry.Tag, entry.stackCount, numbers);
-            if (!manifest.TryRestoreRuntimeItem(snapshot, out item, out error))
+            if (!manifest.TryRestoreRuntimeItem(snapshot, catalog, out item, out error))
             {
                 item = null;
                 return false;
@@ -164,6 +166,7 @@ namespace RPG4.Backpack.Network
 
             itemsById.Clear();
             liveIds.Clear();
+            treeIds.Clear();
 
             for (int i = 0; i < orderedItems.Count; i++)
             {
@@ -172,6 +175,14 @@ namespace RPG4.Backpack.Network
                 {
                     rejected++;
                     if (firstError == null) firstError = error;
+                    continue;
+                }
+                var currentIds = new HashSet<ulong>();
+                CollectTreeIds(item, currentIds);
+                if (treeIds.Overlaps(currentIds))
+                {
+                    rejected++;
+                    if (firstError == null) firstError = "不同根物品图有重复标识。";
                     continue;
                 }
 
@@ -191,6 +202,7 @@ namespace RPG4.Backpack.Network
                     continue;
                 }
                 itemsById[entry.itemId] = item;
+                treeIds.UnionWith(currentIds);
                 liveIds.Add(entry.itemId);
 
                 if (indexById.TryGetValue(entry.itemId, out int index))
@@ -247,6 +259,7 @@ namespace RPG4.Backpack.Network
             firstError = null;
             int rejected = 0;
             destination.Clear();
+            treeIds.Clear();
 
             for (int i = 0; i < source.Count; i++)
             {
@@ -258,7 +271,9 @@ namespace RPG4.Backpack.Network
                     continue;
                 }
 
-                if (destination.ContainsKey(entry.itemId))
+                var currentIds = new HashSet<ulong>();
+                CollectTreeIds(item, currentIds);
+                if (destination.ContainsKey(entry.itemId) || treeIds.Overlaps(currentIds))
                 {
                     rejected++;
                     if (firstError == null) firstError = "条目 " + entry.itemId + " 重复出现。";
@@ -266,6 +281,7 @@ namespace RPG4.Backpack.Network
                 }
 
                 destination.Add(entry.itemId, item);
+                treeIds.UnionWith(currentIds);
             }
 
             return rejected;
@@ -282,6 +298,14 @@ namespace RPG4.Backpack.Network
                 if (indexById.ContainsKey(id)) continue;
                 indexById.Add(id, i);
             }
+        }
+
+        private static void CollectTreeIds(RuntimeItem item, HashSet<ulong> ids)
+        {
+            if (item.ItemId.IsValid) ids.Add(item.ItemId.Value);
+            if (item.WeaponState == null) return;
+            if (item.WeaponState.Magazine != null) CollectTreeIds(item.WeaponState.Magazine, ids);
+            foreach (RuntimeItem child in item.WeaponState.Attachments.Values) CollectTreeIds(child, ids);
         }
     }
 }

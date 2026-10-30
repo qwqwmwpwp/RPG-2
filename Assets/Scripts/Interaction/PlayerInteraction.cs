@@ -19,10 +19,10 @@ namespace RPG4.Interaction
         [Tooltip("已配置好层级和引用的准心预制体，每个玩家只创建一次。")]
         [SerializeField] private CrosshairUI crosshairPrefab;
 
-        private PlayerBlackboard blackboard;
+        private IPlayerInteractionState interactionState;
         private readonly RaycastHit[] hitBuffer = new RaycastHit[16];
         private MonoBehaviour targetComponent;
-        private CrosshairUI crosshairUI;
+        public CrosshairUI CrosshairPrefab => crosshairPrefab;
 
         public IInteractable CurrentTarget => targetComponent != null && targetComponent.isActiveAndEnabled
             ? targetComponent as IInteractable : null;
@@ -30,24 +30,20 @@ namespace RPG4.Interaction
         /// <summary>向本机玩家显示当前交互的结果；不创建额外 UI。</summary>
         public void ShowInteractionFeedback(string message, bool success)
         {
-            if (crosshairUI != null) crosshairUI.ShowFeedback(message, success);
+            if (playerInput != null) playerInput.ReportInteractionFeedback(message, success);
         }
 
         private bool CanUseInteraction => isActiveAndEnabled
-            && blackboard != null && blackboard.CanInteract
+            && interactionState != null && interactionState.CanInteract
             && interactionCamera != null && interactionCamera.isActiveAndEnabled;
 
         private void Awake()
         {
             if (playerInput == null) playerInput = GetComponent<PlayerInput>();
-            if (playerInput != null) blackboard = playerInput.Blackboard;
+            if (playerInput != null) interactionState = playerInput.ReadState.Interaction;
             if (interactionCamera == null) interactionCamera = Camera.main;
 
-            if (crosshairPrefab != null)
-            {
-                crosshairUI = Instantiate(crosshairPrefab, transform, false);
-                crosshairUI.SetState(false, false);
-            }
+
         }
 
         private void LateUpdate()
@@ -58,15 +54,13 @@ namespace RPG4.Interaction
 
             IInteractable target = CurrentTarget;
             if (playerInput != null) playerInput.RefreshIntentPermissions();
-            if (target != null && CanUseInteraction && blackboard.InteractPressed) target.Interact(this);
+            if (target != null && CanUseInteraction && interactionState.InteractPressed) target.Interact(this);
 
             // 交互事件可能刚打开窗口或禁用了物品，立即刷新共享许可并撤销姿态。
             if (playerInput != null) playerInput.RefreshIntentPermissions();
             if (!CanUseInteraction) targetComponent = null;
-            if (playerInput != null) playerInput.ReportInteraction(targetComponent);
-            if (crosshairUI != null)
-                crosshairUI.SetState(CanUseInteraction, CurrentTarget != null,
-                    (CurrentTarget as IInteractionPrompt)?.InteractionPrompt);
+            if (playerInput != null) playerInput.ReportInteraction(targetComponent, CanUseInteraction,
+                (CurrentTarget as IInteractionPrompt)?.InteractionPrompt);
         }
 
         private MonoBehaviour FindTarget()
@@ -109,12 +103,7 @@ namespace RPG4.Interaction
         {
             targetComponent = null;
             if (playerInput != null) playerInput.ReportInteraction(null);
-            if (crosshairUI != null) crosshairUI.SetState(false, false);
         }
 
-        private void OnDestroy()
-        {
-            if (crosshairUI != null) Destroy(crosshairUI.gameObject);
-        }
     }
 }

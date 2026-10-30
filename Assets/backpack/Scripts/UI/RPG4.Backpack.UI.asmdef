@@ -10,6 +10,7 @@
         "RPG4.Backpack.Runtime",
         "RPG4.Input",
         "RPG4.UI",
+        "RPG4.CharacterAttributes",
         "Mirror",
         "UnityEngine.UI",
         "Unity.TextMeshPro",

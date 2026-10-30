@@ -15,6 +15,7 @@ namespace RPG4.PlayerMovement
         private bool CanStartShot => root.FireInputAvailable && context.Weapon != null
             && context.Weapon.CanFire(root.FirePressed, root.FireHeld);
         private bool WaitingAutomatic => root.FireHeld && context.Weapon != null
+            && context.Weapon.HasUsableRound
             && context.Weapon.Definition.FireMode == WeaponFireMode.Automatic;
         // 自动枪允许长按在冷却中等待；半自动仅响应合格的按下，不排队短按。
         internal bool CanEnter => WaitingAutomatic || CanStartShot;
@@ -40,7 +41,7 @@ namespace RPG4.PlayerMovement
         protected override void OnUpdate(float deltaTime)
         {
             if (deltaTime <= 0f || !root.CanAct) return;
-            context.Weapon.TryFire(root.FirePressed, root.FireHeld, out _);
+            context.Equipment.TryFire(root.FirePressed, root.FireHeld);
             root.AdvanceAction();
         }
         internal void Present(bool aiming)

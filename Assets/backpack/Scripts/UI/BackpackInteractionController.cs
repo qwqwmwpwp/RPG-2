@@ -180,6 +180,27 @@ namespace RPG4.Backpack.UI
         public bool HasMultipleContainers => views.Length > 1;
         public RuntimeItem DisplayedItem => carry != null ? carry.Item
             : hoveredView != null && hoveredView.TryGetItem(hoveredItemId, out RuntimeItem item) ? item : null;
+        private IBackpackView selectedInventory;
+        private ItemId selectedItemId;
+        public RuntimeItem SelectedItem
+        {
+            get
+            {
+                if (!IsInventoryAlive(selectedInventory)) return null;
+                foreach (BackpackContainerUI view in views)
+                    if (view != null && ReferenceEquals(view.Inventory, selectedInventory)
+                        && view.TryGetItem(selectedItemId, out RuntimeItem item)) return item;
+                return null;
+            }
+        }
+
+        public void SelectItem(RuntimeItem item, IBackpackView inventory)
+        {
+            selectedInventory = inventory;
+            selectedItemId = item != null ? item.ItemId : ItemId.None;
+            foreach (BackpackContainerUI view in views)
+                if (view != null) view.SetSelectedItem(ReferenceEquals(view.Inventory, inventory) ? selectedItemId : ItemId.None);
+        }
         public string ContextHint => contextHint;
         public string OperationFeedback => pending != null ? "正在提交操作，请稍候…"
             : Time.unscaledTime < feedbackExpiresAt ? operationFeedback : string.Empty;
@@ -231,11 +252,15 @@ namespace RPG4.Backpack.UI
         {
             CancelInteraction();
             preview.Dispose();
+            foreach (BackpackContainerUI view in views)
+                if (view != null) view.SetSelectedItem(ItemId.None);
             views = Array.Empty<BackpackContainerUI>();
             quickTransferFirst = quickTransferSecond = null;
             quickTransferFirstHint = quickTransferSecondHint = null;
             quickTransferCanReplaceSecondSlot = false;
             HasPointer = false;
+            selectedInventory = null;
+            selectedItemId = ItemId.None;
             operationFeedback = contextHint = string.Empty;
             feedbackExpiresAt = 0f;
         }
@@ -318,6 +343,9 @@ namespace RPG4.Backpack.UI
             Vector2 point = input.PointerPosition;
             BackpackContainerUI target = ResolveView(point, out TileParams tile);
             SetHoveredItem(target, tile.TileIndex);
+            if (carry == null && (input.PrimaryClick || input.SecondaryClick) && target != null
+                && target.TryGetItem(hoveredItemId, out RuntimeItem selected))
+                SelectItem(selected, target.Inventory);
             // 取消与右键先于放下，避免同一帧把取消解释成一次提交。
             if (input.SecondaryClick && input.ChooseSplitQuantity && carry == null) OpenQuantityDialog(target, tile.TileIndex);
             else if (input.SecondaryClick) HandleSecondaryClick(target, tile.TileIndex);
@@ -376,6 +404,19 @@ namespace RPG4.Backpack.UI
                 if (views[i].TryResolveTile(point, GetUICamera(views[i]), out tile)) return views[i];
             tile = TileParams.Empty;
             return null;
+        }
+
+        /// <summary>检查输入使用本帧空间查询，避免借用上一帧悬停或拿取状态。</summary>
+        public bool TryGetItemAtPointer(Vector2 point, out RuntimeItem item, out IBackpackView inventory)
+        {
+            item = null;
+            inventory = null;
+            if (!IsSessionActive || IsCarrying || IsChoosingSplitQuantity || IsWaitingForOperation) return false;
+            BackpackContainerUI view = ResolveView(point, out TileParams tile);
+            if (view == null || !view.IsReady || !view.TryGetCellOwner(tile.TileIndex, out ItemId id, out _)
+                || !view.TryGetItem(id, out item)) return false;
+            inventory = view.Inventory;
+            return true;
         }
 
         private static Camera GetUICamera(BackpackContainerUI view)

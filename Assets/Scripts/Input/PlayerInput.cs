@@ -1,7 +1,10 @@
 using System;
+using System.Runtime.CompilerServices;
 using RPG4.PlayerIntent;
 using RPG4.UI;
 using UnityEngine;
+
+[assembly: InternalsVisibleTo("RPG4.PlayerMovement")]
 
 namespace RPG4.Input
 {
@@ -11,20 +14,20 @@ namespace RPG4.Input
     public sealed class PlayerInput : MonoBehaviour
     {
         public InputIntentProcessor IntentProcessor { get; } = new InputIntentProcessor();
-        public PlayerBlackboard Blackboard => IntentProcessor.Blackboard;
+        public IPlayerReadState ReadState => IntentProcessor.Blackboard;
         private Action refreshIntent;
 
         // 兼容既有入口；读取快照没有门控检查或副作用。
-        public bool CanReadGameplayInput => Blackboard.InputAllowed;
-        public Vector2 Move => Blackboard.Move;
-        public Vector2 Look => Blackboard.Look;
-        public float Zoom => Blackboard.Zoom;
-        public bool InteractPressed => Blackboard.InteractPressed;
-        public bool CrouchHeld => Blackboard.CrouchHeld;
-        public bool ReloadPressed => Blackboard.ReloadPressed;
-        public bool AimHeld => Blackboard.AimHeld;
-        public bool FirePressed => Blackboard.FirePressed;
-        public bool FireHeld => Blackboard.FireHeld;
+        public bool CanReadGameplayInput => ReadState.Input.InputAllowed;
+        public Vector2 Move => ReadState.Input.Move;
+        public Vector2 Look => ReadState.Input.Look;
+        public float Zoom => ReadState.Input.Zoom;
+        public bool InteractPressed => ReadState.Interaction.InteractPressed;
+        public bool CrouchHeld => ReadState.Input.CrouchHeld;
+        public bool ReloadPressed => ReadState.Input.ReloadPressed;
+        public bool AimHeld => ReadState.Input.AimHeld;
+        public bool FirePressed => ReadState.Input.FirePressed;
+        public bool FireHeld => ReadState.Input.FireHeld;
 
         private void Awake() => IntentProcessor.Attach(this);
         private void OnEnable()
@@ -60,7 +63,10 @@ namespace RPG4.Input
             RefreshIntentPermissions();
         }
         public void ClearWeaponInput() => IntentProcessor.ClearWeaponInput();
-        public void ReportInteraction(MonoBehaviour target) => IntentProcessor.ReportInteraction(target);
+        public void ReportInteraction(MonoBehaviour target, bool visible = false, string prompt = null)
+            => IntentProcessor.ReportInteraction(target, visible, prompt);
+        public void ReportInteractionFeedback(string message, bool success)
+            => IntentProcessor.ReportInteractionFeedback(message, success);
         private void OnApplicationFocus(bool focused)
         {
             if (focused) return;
@@ -79,11 +85,13 @@ namespace RPG4.Input
     /// <summary>采样、实时许可、帧脉冲与重按抑制；所有输入快照写入都集中在此。</summary>
     public sealed class InputIntentProcessor
     {
-        public PlayerBlackboard Blackboard { get; } = new PlayerBlackboard();
+        internal PlayerBlackboard Blackboard { get; } = new PlayerBlackboard();
         private PlayerInput host;
         private bool ownerReady;
         private bool bodyReady;
         private bool viewReady;
+        private bool lifeReady = true;
+        private bool weaponReady = true;
         private bool aimArmed;
         private bool fireArmed;
         private int sampledFrame = -1;
@@ -103,11 +111,14 @@ namespace RPG4.Input
             RefreshPermissions();
             if (Blackboard.InputAllowed) SetCursorCaptured(true);
         }
-        public void SetControlAvailability(bool ownerEnabled, bool bodyAvailable, bool viewAvailable)
+        public void SetControlAvailability(bool ownerEnabled, bool bodyAvailable, bool viewAvailable,
+            bool alive = true, bool weaponAvailable = true)
         {
             ownerReady = ownerEnabled;
             bodyReady = bodyAvailable;
             viewReady = viewAvailable;
+            lifeReady = alive;
+            weaponReady = weaponAvailable;
             RefreshPermissions();
         }
         public void RefreshPermissions()
@@ -115,13 +126,13 @@ namespace RPG4.Input
             bool allowed = host != null && host.isActiveAndEnabled && Application.isFocused
                 && Time.timeScale > 0f && InputManager.Instance != null
                 && (UIManager.Instance == null || !UIManager.Instance.BlocksGameplayInput);
-            if (!allowed) Clear();
+            if (!allowed || !lifeReady) Clear();
             ExpireFrameInput();
             Blackboard.InputAllowed = allowed;
-            Blackboard.CanMove = allowed && ownerReady && bodyReady && viewReady;
+            Blackboard.CanMove = allowed && lifeReady && ownerReady && bodyReady && viewReady;
             Blackboard.CanLook = Blackboard.CanMove;
-            Blackboard.CanUseWeapon = Blackboard.CanMove && Cursor.lockState == CursorLockMode.Locked;
-            Blackboard.CanInteract = allowed;
+            Blackboard.CanUseWeapon = Blackboard.CanMove && weaponReady && Cursor.lockState == CursorLockMode.Locked;
+            Blackboard.CanInteract = allowed && lifeReady;
             if (!Blackboard.CanUseWeapon) ClearWeaponInput();
             if (!Blackboard.CanLook || Cursor.lockState != CursorLockMode.Locked)
             {
@@ -142,7 +153,7 @@ namespace RPG4.Input
         internal void Sample()
         {
             RefreshPermissions();
-            if (!Blackboard.InputAllowed) return;
+            if (!Blackboard.InputAllowed || !lifeReady) return;
             InputManager input = InputManager.Instance;
             InputActions.BackpackActions pointer = input.backpackInput;
             bool cursorCapturedThisFrame = false;
@@ -199,6 +210,9 @@ namespace RPG4.Input
             Blackboard.InteractPressed = false;
             Blackboard.CrouchHeld = false;
             Blackboard.InteractionTarget = null;
+            Blackboard.HasInteractionTarget = false;
+            Blackboard.InteractionVisible = false;
+            Blackboard.InteractionPrompt = null;
             ClearWeaponInput();
             lookReady = false;
         }
@@ -222,7 +236,16 @@ namespace RPG4.Input
             ClearWeaponInput();
             lookReady = false;
         }
-        public void ReportInteraction(MonoBehaviour target) => Blackboard.InteractionTarget = target;
+        public void ReportInteraction(MonoBehaviour target, bool visible = false, string prompt = null)
+        {
+            Blackboard.InteractionTarget = target;
+            Blackboard.HasInteractionTarget = target != null;
+            Blackboard.InteractionVisible = visible;
+            Blackboard.InteractionPrompt = prompt;
+        }
+        public void ReportInteractionFeedback(string message, bool success)
+            => Blackboard.RecordEvent(PlayerEventKind.InteractionFeedback, Time.timeAsDouble,
+                message: message, success: success);
         internal void Disable()
         {
             Clear();

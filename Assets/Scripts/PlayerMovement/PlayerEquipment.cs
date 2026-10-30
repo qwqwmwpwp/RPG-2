@@ -3,19 +3,21 @@ using RPG4.Backpack.Core;
 using RPG4.Backpack.Equipment;
 using RPG4.Backpack.Items;
 using RPG4.Backpack.Runtime;
+using RPG4.Combat;
 using UnityEngine;
 
 namespace RPG4.PlayerMovement
 {
-    /// <summary>独立武器槽的角色表现；武器运行时按物品实例身份保留冷却与历史。</summary>
+    /// <summary>武器槽与游戏执行适配；武器表现统一由 PlayerPresenter 管理。</summary>
     [DisallowMultipleComponent]
     [DefaultExecutionOrder(100)]
     [RequireComponent(typeof(BackpackInventory), typeof(EquipmentInventory))]
-    public sealed class PlayerEquipment : MonoBehaviour
+    public sealed partial class PlayerEquipment : MonoBehaviour
     {
         [SerializeField] private BackpackInventory inventory;
         [SerializeField] private EquipmentInventory equipmentInventory;
         [SerializeField] private PlayerWeaponRig weaponRig;
+        [SerializeField] private Camera shootingCamera;
         private readonly Dictionary<ItemId, Weapon> weapons = new Dictionary<ItemId, Weapon>();
         private readonly List<RuntimeItem> items = new List<RuntimeItem>();
         private EventSubscription equipmentChanged;
@@ -27,16 +29,20 @@ namespace RPG4.PlayerMovement
         private GameObject preparedModel;
         private bool confirming;
         private bool synchronizing;
+        private int appliedItemRevision = -1;
+        private readonly WeaponShotExecutor shotExecutor = new WeaponShotExecutor();
+        public IReadOnlyList<WeaponHitResult> LastShotHits { get; private set; } = System.Array.Empty<WeaponHitResult>();
 
         public ItemId CurrentItemId => CurrentWeapon != null ? current.ItemId : ItemId.None;
-        public Weapon CurrentWeapon => PresentationAvailable && current != null && weaponRig.HasEquipment
+        public Weapon CurrentWeapon => RuntimeAvailable && current != null
             && ReferenceEquals(current.Item, equipmentInventory.EquippedItem) ? current : null;
         private bool InventoryAvailable => inventory != null && inventory.gameObject == gameObject
             && inventory.isActiveAndEnabled && inventory.IsInitialized;
         private bool EquipmentAvailable => equipmentInventory != null && equipmentInventory.gameObject == gameObject
             && equipmentInventory.isActiveAndEnabled && equipmentInventory.IsReady;
-        private bool PresentationAvailable => isActiveAndEnabled && EquipmentAvailable
-            && (player == null || player.isActiveAndEnabled) && weaponRig != null && weaponRig.CanBindEquipment;
+        internal PlayerWeaponRig WeaponRig => weaponRig;
+        private bool RuntimeAvailable => isActiveAndEnabled && EquipmentAvailable
+            && (player == null || player.isActiveAndEnabled);
 
         private void Awake()
         {
@@ -49,7 +55,6 @@ namespace RPG4.PlayerMovement
                 equipmentInventory.AdditionalAdmission = CanPresentItem;
                 equipmentInventory.CommitConfirm = ConfirmEquipment;
             }
-            weaponRig?.PrepareEquipment();
         }
 
         private void OnEnable() => SynchronizeEquipment();
@@ -65,7 +70,11 @@ namespace RPG4.PlayerMovement
         }
 
         private void Update() => SynchronizeEquipment();
-        private void LateUpdate() => SynchronizeEquipment();
+        private void LateUpdate()
+        {
+            SynchronizeEquipment();
+            FlushWeaponUi();
+        }
 
         private void BindEquipmentEvents()
         {
@@ -79,21 +88,23 @@ namespace RPG4.PlayerMovement
 
         private void SynchronizeEquipment()
         {
+            BindWeaponUiEvents();
             if (synchronizing || confirming) return;
             synchronizing = true;
             try
             {
                 BindEquipmentEvents(); // OnEnable 可能早于装备容器 Awake。
                 RuntimeItem item = EquipmentAvailable ? equipmentInventory.EquippedItem : null;
-                if (!PresentationAvailable || item == null)
+                if (!RuntimeAvailable || item == null)
                 {
                     ClearPreparedEquipment();
-                    ReleasePresentation();
+                    ReleaseWeapon();
                     return;
                 }
-                if (current != null && ReferenceEquals(current.Item, item) && weaponRig.HasEquipment)
+                if (current != null && ReferenceEquals(current.Item, item))
                 {
                     ClearPreparedEquipment();
+                    RefreshItemView();
                     return;
                 }
                 if (!ReferenceEquals(preparedItem, item) || preparedModel == null)
@@ -101,7 +112,7 @@ namespace RPG4.PlayerMovement
                     // 恢复组件只重建槽内实例的表现，不重新向背包索取物品。
                     if (!ConfirmEquipment(item.ItemId, out _))
                     {
-                        ReleasePresentation();
+                        ReleaseWeapon();
                         return;
                     }
                 }
@@ -111,10 +122,12 @@ namespace RPG4.PlayerMovement
                 preparedWeapon = null;
                 preparedItem = null;
                 preparedModel = null;
-                ReleasePresentation();
+                ReleaseWeapon();
                 weapons[item.ItemId] = next;
                 current = next;
-                weaponRig.BindEquipment(model);
+                BindWeaponUiAction();
+                player.Presenter.BindEquipment(model, item);
+                appliedItemRevision = item.Revision;
             }
             finally { synchronizing = false; }
         }
@@ -123,8 +136,10 @@ namespace RPG4.PlayerMovement
         private bool CanPresentItem(RuntimeItem item, out string error)
         {
             error = null;
-            if (!PresentationAvailable)
+            if (!RuntimeAvailable)
                 error = "角色或武器槽未就绪，或未配置稳定武器挂点与左手目标。";
+            else if (player == null || player.Presenter == null)
+                error = "角色桥接层尚未初始化。";
             else if (item == null || item.GetFragment<WeaponDefinitionFragment>() == null)
                 error = "物品缺少武器定义。";
             else
@@ -133,7 +148,7 @@ namespace RPG4.PlayerMovement
                 catch (System.ArgumentException exception) { error = exception.Message; return false; }
                 catch (System.InvalidOperationException exception) { error = exception.Message; return false; }
                 EquipmentFragment equipment = item.GetFragment<EquipmentFragment>();
-                return weaponRig.CanPrepareEquipment(equipment?.EquipPrefab, out error);
+                return player.Presenter.CanPrepareEquipment(equipment?.EquipPrefab, out error);
             }
             return false;
         }
@@ -156,18 +171,18 @@ namespace RPG4.PlayerMovement
                     return false;
                 }
                 if (!CanPresentItem(item, out error)) return false;
-                if (current != null && ReferenceEquals(current.Item, item) && weaponRig.HasEquipment) return true;
+                if (current != null && ReferenceEquals(current.Item, item)) return true;
                 Weapon candidate;
                 try
                 {
-                    Weapon validated = new Weapon(item);
+                    Weapon validated = new Weapon(item, inventory.Catalog, SelectReloadMagazine, CommitReloadMagazine);
                     candidate = weapons.TryGetValue(item.ItemId, out Weapon cached) ? cached : validated;
                 }
                 catch (System.ArgumentException exception) { error = exception.Message; return false; }
                 catch (System.InvalidOperationException exception) { error = exception.Message; return false; }
-                if (!weaponRig.TryPrepareEquipment(item.GetFragment<EquipmentFragment>().EquipPrefab,
+                if (!player.Presenter.TryPrepareEquipment(item.GetFragment<EquipmentFragment>().EquipPrefab,
                     out GameObject model, out error)) return false;
-                if (!PresentationAvailable || !ReferenceEquals(equipmentInventory.EquippedItem, item))
+                if (!RuntimeAvailable || !ReferenceEquals(equipmentInventory.EquippedItem, item))
                 {
                     Destroy(model);
                     error = "准备武器时角色或装备槽状态发生变化。";
@@ -207,6 +222,96 @@ namespace RPG4.PlayerMovement
             if (!TryUnequip(out string error)) Debug.LogWarning($"卸装失败：{error}", this);
         }
 
+        private void RefreshItemView()
+        {
+            if (current == null || player == null || player.Presenter == null || appliedItemRevision == current.Item.Revision) return;
+            try
+            {
+                player.Presenter.RefreshEquipment(current.Item);
+                appliedItemRevision = current.Item.Revision;
+            }
+            catch (System.Exception exception) { Debug.LogException(exception, this); }
+        }
+
+        private bool SelectReloadMagazine(out ItemId magazineId)
+        {
+            magazineId = ItemId.None;
+            if (!InventoryAvailable || !EquipmentAvailable || current == null) return false;
+            inventory.CopyItems(items);
+            int bestCount = -1;
+            foreach (RuntimeItem candidate in items)
+            {
+                if (candidate.MagazineState == null || candidate.MagazineState.RoundCount <= bestCount
+                    || candidate.MagazineState.RoundCount == 0
+                    || !current.Item.WeaponState.IsCompatibleMagazine(candidate, inventory.Catalog)
+                    || !inventory.CanExchangeWeaponMagazine(equipmentInventory.Container, current.ItemId,
+                        candidate.ItemId, out _)) continue;
+                bestCount = candidate.MagazineState.RoundCount;
+                magazineId = candidate.ItemId;
+            }
+            return magazineId.IsValid;
+        }
+
+        private bool CommitReloadMagazine(ItemId magazineId, out string error)
+        {
+            error = "角色背包或当前武器尚未就绪。";
+            return InventoryAvailable && EquipmentAvailable && current != null
+                && inventory.TryExchangeWeaponMagazine(equipmentInventory.Container,
+                    current.ItemId, magazineId, out error);
+        }
+
+        public bool TryLoadMagazine(ItemId magazineId, ItemId ammoId, int roundCount, out string error)
+        {
+            error = "角色背包尚未就绪。";
+            return InventoryAvailable && inventory.TryLoadMagazine(magazineId, ammoId, roundCount, out error);
+        }
+
+        public bool TryInstallAttachment(WeaponAttachmentSlot slot, ItemId attachmentId, out string error)
+        {
+            error = "当前武器尚未就绪，或正在换弹。";
+            return InventoryAvailable && EquipmentAvailable && CurrentWeapon != null && !current.IsReloading
+                && inventory.TryExchangeWeaponAttachment(equipmentInventory.Container,
+                    current.ItemId, slot, attachmentId, out error);
+        }
+
+        public bool TryRemoveAttachment(WeaponAttachmentSlot slot, out string error)
+            => TryInstallAttachment(slot, ItemId.None, out error);
+
+        public bool TryExchangeMagazine(ItemId magazineId, out string error)
+        {
+            error = "当前武器尚未就绪，或正在换弹。";
+            return CurrentWeapon != null && !current.IsReloading && CommitReloadMagazine(magazineId, out error);
+        }
+
+        internal bool TryFire(bool pressed, bool held)
+        {
+            Weapon weapon = CurrentWeapon;
+            if (player == null || !player.IsAlive || player.ReadState == null
+                || !player.ReadState.Weapon.CanUseWeapon || weapon == null) return false;
+            Ray aim = PlayerWorldAdapter.GetAimRay(transform, shootingCamera,
+                player.ReadState.View.ViewYaw, player.ReadState.View.ViewPitch, player.PresentationEnabled);
+            Vector3 bodyOrigin, muzzleOrigin;
+            if (player.Presenter == null || !player.Presenter.TryGetShotOrigins(out bodyOrigin, out muzzleOrigin))
+            {
+                // 缺少/关闭视觉模型不阻止游戏射击，使用独立于模型的逻辑锚点。
+                bodyOrigin = transform.position + Vector3.up * 1.2f;
+                muzzleOrigin = bodyOrigin + aim.direction * 0.5f;
+            }
+            if (!WeaponShotExecutor.IsValidContext(aim.origin, aim.direction, bodyOrigin, muzzleOrigin)) return false;
+            if (!weapon.TryFire(pressed, held, out WeaponShot shot)) return false;
+            var request = new WeaponShotRequest(shot, gameObject, aim.origin, aim.direction, bodyOrigin, muzzleOrigin);
+            LastShotHits = shotExecutor.Execute(request);
+            player.ApplyShotRecoil(shot.RecoilPitch, shot.RecoilYaw);
+            bool damageApplied = false, obstructed = false;
+            foreach (WeaponHitResult hit in LastShotHits)
+            {
+                damageApplied |= hit.DamageApplied;
+                obstructed |= hit.MuzzleObstructed;
+            }
+            player.RecordShot(shot.WeaponId.Value, shot.Sequence, damageApplied, obstructed);
+            return true;
+        }
+
         private void ClearPreparedEquipment()
         {
             if (preparedModel != null) Destroy(preparedModel);
@@ -215,21 +320,24 @@ namespace RPG4.PlayerMovement
             preparedWeapon = null;
         }
 
-        private void ReleasePresentation()
+        private void ReleaseWeapon()
         {
             bool hadWeapon = current != null;
             current?.CancelAction();
+            player?.Presenter?.ReleaseEquipment();
+            appliedItemRevision = -1;
             current = null;
+            BindWeaponUiAction();
             if (hadWeapon) player?.CancelWeaponAction();
-            weaponRig?.UnbindEquipment();
         }
 
         private void OnDisable()
         {
+            UnbindWeaponUiEvents();
             equipmentChanged.Dispose();
             eventSource = null;
             ClearPreparedEquipment();
-            ReleasePresentation();
+            ReleaseWeapon();
         }
 
         private void OnDestroy()

@@ -6,16 +6,16 @@ using RPG4.Backpack.Core;
 namespace RPG4.Backpack.Items
 {
     /// <summary>运行时数值状态的显式编解码器：把 FragmentNumberState 列表编码为定长二进制载荷（小端布局 [version:1][count:2] + 每节点 [fragmentIndex:2][modifierIndex:2][value:4]）；显式遍历而非反射、版本化且有界、不写日志也不改全局状态。</summary>
-    public static class RuntimeItemSnapshotCodec
+    public static partial class RuntimeItemSnapshotCodec
     {
         public const int HeaderBytes = 3; // 载荷头长度：版本 1 字节 + 节点数量 2 字节。
 
         public const int NodeBytes = 8; // 单个节点长度：片段下标 2 + Modifier 下标 2 + 数值 4。
 
-        public const int MaxPayloadBytes = HeaderBytes + RuntimeItemSnapshot.MaxNumberStateCount * NodeBytes; // 允许的最大载荷长度，超过即判定为异常数据。
+        public const int MaxPayloadBytes = 65536;
 
         /// <summary>从运行时物品抓取完整快照；物品为空或存在仍处于「待随机化」的数值节点时失败。</summary>
-        public static bool TryCapture(RuntimeItem item, out RuntimeItemSnapshot snapshot, out string error)
+        private static bool TryCaptureNumbers(RuntimeItem item, out RuntimeItemSnapshot snapshot, out string error)
         {
             snapshot = default;
             if (item == null)
@@ -117,7 +117,7 @@ namespace RPG4.Backpack.Items
             }
 
             byte[] buffer = new byte[HeaderBytes + numbers.Count * NodeBytes];
-            buffer[0] = RuntimeItemSnapshot.CurrentVersion;
+            buffer[0] = 1; // 旧的纯数值API保持v1线格式。
             WriteUInt16(buffer, 1, (ushort)numbers.Count);
 
             int offset = HeaderBytes;
@@ -172,7 +172,7 @@ namespace RPG4.Backpack.Items
             }
 
             byte version = payload[0];
-            if (version != RuntimeItemSnapshot.CurrentVersion)
+            if (version != 1)
             {
                 error = $"快照版本 {version} 不受支持（期望 {RuntimeItemSnapshot.CurrentVersion}）。";
                 return false;

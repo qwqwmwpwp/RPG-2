@@ -30,3 +30,12 @@ MonoBehaviour:
   - GameItems.Equipment.Weapons.Rifle.RealWood
   - GameItems.Equipment.Weapons.Rifle.RealMetal
   - FragmentTags.Default.Description
+  - FragmentTags.Equip.AmmoDefinition
+  - FragmentTags.Equip.MagazineDefinition
+  - FragmentTags.Equip.AttachmentDefinition
+  - GameItems.Ammo.Rifle
+  - GameItems.Ammo.Rifle.Standard
+  - GameItems.Magazines.Rifle
+  - GameItems.Magazines.Rifle30
+  - GameItems.Attachments.Muzzle
+  - GameItems.Attachments.Muzzle.Basic

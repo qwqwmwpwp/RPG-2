@@ -12,18 +12,19 @@ namespace RPG4.PlayerMovement
         private readonly PlayerContext context;
         private readonly InputIntentProcessor input;
         private readonly LocomotionIntentProcessor locomotion;
-        private readonly PresentationIntentProcessor presentation;
-        internal PlayerBlackboard Blackboard => context.Blackboard;
-        internal bool HasAutomaticShotClip => context.Data.Attack.AutoShotClip != null;
-        internal ShootingPresentationData ShotPresentation => context.Data.Attack.Presentation;
+        private readonly PlayerIntentProcessor decisions;
+        private readonly PlayerBlackboard blackboard;
+        internal IPlayerReadState ReadState => context.ReadState;
+        internal PlayerBlackboard Blackboard => blackboard;
         internal PlayerIntentManager(Player owner, PlayerInput source, PlayerContext context)
         {
             this.owner = owner;
             this.source = source;
             this.context = context;
             input = source.IntentProcessor;
-            locomotion = new LocomotionIntentProcessor(context);
-            presentation = new PresentationIntentProcessor(context);
+            blackboard = input.Blackboard;
+            locomotion = new LocomotionIntentProcessor(context, blackboard);
+            decisions = new PlayerIntentProcessor(context, blackboard);
         }
         internal void Bind() => source.BindIntentManager(RefreshPermissions);
         internal void Dispose()
@@ -33,27 +34,46 @@ namespace RPG4.PlayerMovement
         internal void RefreshPermissions()
         {
             PlayerContentData content = context.Content;
+            blackboard.IsAlive = owner != null && owner.IsAlive;
+            blackboard.IsHurt = owner != null && owner.IsHurt;
             input.SetControlAvailability(owner != null && owner.isActiveAndEnabled,
                 content.Body != null && !content.Body.isKinematic,
-                content.ViewController != null && content.ViewController.isActiveAndEnabled);
+                true,
+                blackboard.IsAlive, !blackboard.IsHurt);
             locomotion.RefreshAvailability();
-            presentation.Refresh();
+            decisions.Refresh();
         }
         internal void ResolveLocomotion(bool crouched, bool canStand) => locomotion.Resolve(crouched, canStand);
         internal void RecordPosture(bool crouched, bool canStand) => locomotion.RecordPosture(crouched, canStand);
-        internal void RecordView(float yaw, float pitch) => presentation.RecordView(yaw, pitch);
+        internal void RecordView(float yaw, float pitch) => decisions.RecordView(yaw, pitch);
         internal void ProcessLook(Vector2 sensitivity, Vector2 pitchRange, float aimMultiplier)
-            => presentation.ProcessLook(sensitivity, pitchRange, aimMultiplier);
-        internal void InitializeCamera(float distance, float minimum, float maximum, float fieldOfView)
-            => presentation.InitializeCamera(distance, minimum, maximum, fieldOfView);
-        internal void ProcessCameraScroll(float minimum, float maximum, float zoomSpeed)
-            => presentation.ProcessCameraScroll(minimum, maximum, zoomSpeed);
-        internal void ProcessCamera(float attackDistance, float attackFieldOfView, float explorationFieldOfView)
-            => presentation.ProcessCamera(attackDistance, attackFieldOfView, explorationFieldOfView);
-        internal void ProcessPose(Vector2 pitchRange) => presentation.ProcessPose(pitchRange);
+            => decisions.ProcessLook(sensitivity, pitchRange, aimMultiplier);
+        internal void ApplyRecoil(float pitch, float yaw, Vector2 pitchRange)
+            => decisions.ApplyRecoil(pitch, yaw, pitchRange);
         internal void RecordWeapon(UpperBodyDemand demand, WeaponActionSnapshot frame, float reloadPhase)
-            => presentation.RecordWeapon(demand, frame, reloadPhase);
+            => decisions.RecordWeapon(demand, frame, reloadPhase);
         internal void ClearWeaponInput() => input.ClearWeaponInput();
-        internal void AcknowledgeWeaponCancellation() => presentation.AcknowledgeWeaponCancellation();
+        internal void AcknowledgeWeaponCancellation() => decisions.AcknowledgeWeaponCancellation();
+        internal void RecordEvent(PlayerEventKind kind, ulong weaponId = 0, ulong shotSequence = 0, float amount = 0f,
+            Vector3 direction = default, bool success = false, bool obstructed = false)
+            => blackboard.RecordEvent(kind, Time.timeAsDouble, weaponId, shotSequence, amount,
+                success: success, direction: direction, obstructed: obstructed);
+        internal void Publish(long tick)
+        {
+            blackboard.OwnerActive = owner != null && owner.SimulationActive;
+            blackboard.HurtUntil = owner != null ? owner.HurtUntil : 0d;
+            blackboard.CurrentHealth = owner != null && owner.Attributes != null ? owner.Attributes.CurrentHealth : 0f;
+            blackboard.MaxHealth = owner != null && owner.Attributes != null ? owner.Attributes.MaxHealth : 0f;
+            blackboard.PlanarVelocity = context.World.PlanarVelocity;
+            blackboard.BodyYaw = context.World.BodyYaw;
+            var weapon = context.Weapon;
+            blackboard.WeaponId = weapon != null ? weapon.ItemId.Value : 0;
+            blackboard.ShotSequence = weapon != null ? weapon.LastShot.Sequence : 0;
+            blackboard.ShotTime = weapon != null ? weapon.LastShot.Time : 0d;
+            blackboard.ShotDuration = weapon != null ? weapon.Definition.ShotDuration : 0.01f;
+            blackboard.FadeDuration = weapon != null ? weapon.Definition.FadeOutDuration : 0f;
+            blackboard.ReloadDuration = weapon != null ? weapon.Definition.ReloadDuration : 1f;
+            blackboard.Publish(tick, Time.timeAsDouble);
+        }
     }
 }

@@ -80,6 +80,19 @@ namespace RPG4.Backpack.Runtime
 
         public object EventSource => Container; // 事件管线键：单机形态恒为权威容器实例（订阅通知与发布意图共用）。
 
+        public void ConfigureWeaponOperations(Func<ItemId, InventoryContainer> resolver, Func<ItemId, string> blockReason)
+        {
+            if (core == null) return;
+            core.WeaponContainerResolver = resolver;
+            core.WeaponOperationBlockReason = blockReason;
+        }
+
+        public bool CanExecuteWeaponOperation(WeaponOperation operation, out string error)
+        {
+            error = "背包尚未初始化。";
+            return core != null && core.CanExecuteWeaponOperation(operation, out error);
+        }
+
         public bool CanSubmitTo(IBackpackView destination) => core != null && core.CanSubmitTo(destination);
 
         public InventoryOperationResult ExecuteOperation(InventoryOperation operation) => core != null
@@ -369,6 +382,46 @@ namespace RPG4.Backpack.Runtime
         #endregion
 
         #region 内部辅助
+
+        public bool CanLoadMagazine(ItemId magazineId, ItemId ammoId, int roundCount, out string error)
+        {
+            if (!EnsureContainer(out error)) return false;
+            return core.CanLoadMagazine(magazineId, ammoId, roundCount, out error);
+        }
+
+        public bool TryLoadMagazine(ItemId magazineId, ItemId ammoId, int roundCount, out string error)
+        {
+            if (!EnsureContainer(out error)) return false;
+            return core.TryLoadMagazine(magazineId, ammoId, roundCount, out error);
+        }
+
+        public bool CanExchangeWeaponMagazine(InventoryContainer weaponContainer, ItemId weaponId,
+            ItemId magazineId, out string error)
+        {
+            if (!EnsureContainer(out error)) return false;
+            return core.CanExchangeWeaponMagazine(weaponContainer, weaponId, magazineId, out error);
+        }
+
+        public bool TryExchangeWeaponMagazine(InventoryContainer weaponContainer, ItemId weaponId,
+            ItemId magazineId, out string error)
+        {
+            if (!EnsureContainer(out error)) return false;
+            return core.TryExchangeWeaponMagazine(weaponContainer, weaponId, magazineId, out error);
+        }
+
+        public bool CanExchangeWeaponAttachment(InventoryContainer weaponContainer, ItemId weaponId,
+            WeaponAttachmentSlot slot, ItemId attachmentId, out string error)
+        {
+            if (!EnsureContainer(out error)) return false;
+            return core.CanExchangeWeaponAttachment(weaponContainer, weaponId, slot, attachmentId, out error);
+        }
+
+        public bool TryExchangeWeaponAttachment(InventoryContainer weaponContainer, ItemId weaponId,
+            WeaponAttachmentSlot slot, ItemId attachmentId, out string error)
+        {
+            if (!EnsureContainer(out error)) return false;
+            return core.TryExchangeWeaponAttachment(weaponContainer, weaponId, slot, attachmentId, out error);
+        }
 
         /// <summary>背包写入共用的初始化守卫。</summary>
         private bool EnsureContainer(out string error)

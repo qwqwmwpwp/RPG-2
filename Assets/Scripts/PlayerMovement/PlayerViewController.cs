@@ -1,4 +1,3 @@
-using RPG4.PlayerIntent;
 using UnityEngine;
 
 namespace RPG4.PlayerMovement
@@ -15,84 +14,42 @@ namespace RPG4.PlayerMovement
         [SerializeField] private Vector2 pitchRange = new Vector2(-35f, 65f);
         [SerializeField, Min(0f)] private float aimSensitivityMultiplier = 0.65f;
 
-        private Player player;
-        private PlayerBlackboard blackboard;
-        private PlayerAimPose aimPose;
         private float viewYaw;
         private float viewPitch;
-
-        /// <summary>移动与瞄准共用的逻辑观察角，不受相机避障、构图或刚体插值影响。</summary>
+        internal PlayerPresenter Presenter { get; private set; }
+        internal Vector2 LookSensitivity => lookSensitivity;
+        internal Vector2 PitchRange => pitchRange;
+        internal float AimSensitivityMultiplier => aimSensitivityMultiplier;
+        internal Vector2 InitialAngles => new Vector2(viewYaw, viewPitch);
         public float ViewYaw => viewYaw;
-        internal PlayerBlackboard Blackboard => blackboard;
-        internal PlayerIntentManager IntentManager => player != null ? player.Intents : null;
 
         private void Awake()
         {
-            if (transform.parent == null)
-            {
-                Debug.LogError("PlayerViewController 必须配置在角色的子节点上。", this);
-                enabled = false;
-                return;
-            }
             Vector3 angles = transform.rotation.eulerAngles;
             viewYaw = Mathf.DeltaAngle(0f, angles.y);
             viewPitch = Mathf.Clamp(Mathf.DeltaAngle(0f, angles.x), pitchRange.x, pitchRange.y);
-            IntentManager?.RecordView(viewYaw, viewPitch);
-            UpdatePivotRotation();
         }
-
-        internal void Initialize(Player owner, PlayerAimPose pose)
+        internal void Initialize(Transform ownerRoot, PlayerPresenter presenter)
         {
-            player = owner;
-            blackboard = owner.Blackboard;
-            aimPose = pose;
-            if (transform.parent != owner.transform || skeletonRoot == null
-                || skeletonRoot == owner.transform || !skeletonRoot.IsChildOf(owner.transform)
-                || transform.IsChildOf(skeletonRoot) || skeletonRoot.GetComponent<Rigidbody>() != null)
+            Presenter = presenter;
+            if (transform.parent != ownerRoot || skeletonRoot == null || skeletonRoot == ownerRoot
+                || !skeletonRoot.IsChildOf(ownerRoot) || transform.IsChildOf(skeletonRoot)
+                || skeletonRoot.GetComponent<Rigidbody>() != null)
             {
                 Debug.LogError("PlayerViewController 需要角色直属子节点和独立的可见骨架引用。", this);
                 enabled = false;
-                return;
             }
-            if (aimPose != null) aimPose.Initialize(owner.transform, blackboard, owner.Intents);
-            owner.Intents.RecordView(viewYaw, viewPitch);
         }
-
-        private void Update()
+        internal void Apply(float yaw, float pitch)
         {
-            player?.Intents?.RefreshPermissions();
-            if (blackboard == null || !blackboard.CanLook) return;
-            player.Intents.ProcessLook(lookSensitivity, pitchRange, aimSensitivityMultiplier);
-            viewYaw = blackboard.ViewYaw;
-            viewPitch = blackboard.ViewPitch;
-            UpdatePivotRotation();
-        }
-
-        private void LateUpdate()
-        {
-            player?.Intents?.RefreshPermissions();
-            // 角色转身和插值完成后，抵消继承的旋转，保持独立的世界观察方向。
-            UpdatePivotRotation();
-        }
-
-        private void UpdatePivotRotation()
-        {
+            if (!isActiveAndEnabled || transform.parent == null) return;
+            viewYaw = yaw;
+            viewPitch = pitch;
             transform.localRotation = Quaternion.Inverse(transform.parent.rotation)
                 * Quaternion.Euler(viewPitch, viewYaw, 0f);
         }
-
-        private void ResetViewPose()
-        {
-            if (aimPose != null) aimPose.ResetPose();
-        }
-
-        private void OnDisable()
-        {
-            ResetViewPose();
-            player?.Intents?.RefreshPermissions();
-        }
-        private void OnApplicationFocus(bool focused) { if (!focused) ResetViewPose(); }
-        private void OnApplicationPause(bool paused) { if (paused) ResetViewPose(); }
+        // 仅提交桥接已捕获的观察角，不再读取输入或逻辑黑板。
+        private void LateUpdate() => Presenter?.ApplyViewPose();
 
         private void OnValidate()
         {

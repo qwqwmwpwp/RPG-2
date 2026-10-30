@@ -23,6 +23,8 @@ namespace RPG4.Backpack.UI
         [SerializeField, Min(1)] private int initialColumns = 4;
         [SerializeField, Min(1)] private int initialRows = 5;
         [SerializeField, Min(1f)] private float cellSize = 100f;
+        [SerializeField] private bool fitColumnsToViewport;
+        [SerializeField, Min(1f)] private float minimumCellSize = 32f;
         [SerializeField] private Vector2 slotSpacing;
         [SerializeField] private RectTransform slotLayer;
         [SerializeField] private RectTransform itemLayer;
@@ -54,7 +56,7 @@ namespace RPG4.Backpack.UI
             public BackpackHoverState hover; // 当前悬停反馈态。
         }
 
-        /// <summary>网格度量（只读值类型）：由序列化字段 cellSize / slotSpacing 现取现建，只承载纯像素换算，保证同一公式只有一处定义。</summary>
+        /// <summary>网格度量：使用当前显示格尺寸与间距，绘制、命中和拖放共用同一像素换算。</summary>
         private readonly struct GridMetrics
         {
             private readonly float cellSize; // 单格边长（像素）。
@@ -234,6 +236,8 @@ namespace RPG4.Backpack.UI
         private bool presentationVisible = true;
         private bool itemPrefabWarned;
         private bool configurationWarned;
+        private ItemId selectedItemId;
+        private float displayedCellSize;
 
         public GameObject ItemPrefab => itemPrefab;
         public int Columns { get; private set; }
@@ -244,7 +248,7 @@ namespace RPG4.Backpack.UI
         public long TotalItemCount { get; private set; }
         public int OccupiedCellCount { get; private set; }
         public int OverflowItemCount => layout != null ? layout.Overflow.Count : 0;
-        private GridMetrics Metrics => new GridMetrics(cellSize, slotSpacing);
+        private GridMetrics Metrics => new GridMetrics(displayedCellSize > 0f ? displayedCellSize : cellSize, slotSpacing);
 
         #endregion
 
@@ -388,7 +392,7 @@ namespace RPG4.Backpack.UI
             int columns = source.Columns;
             int rows = source.Rows;
             if (columns < 1 || rows < 1 || (long)columns * rows > 65536) return false;
-            if (columns == Columns && rows == Rows) return false;
+            if (columns == Columns && rows == Rows && Mathf.Approximately(displayedCellSize, ResolveCellSize(columns))) return false;
             BuildGrid(columns, rows);
             return true;
         }
@@ -396,6 +400,14 @@ namespace RPG4.Backpack.UI
         #endregion
 
         #region 网格构建与图层
+
+        private float ResolveCellSize(int columns)
+        {
+            float maximum = Mathf.Max(1f, cellSize);
+            if (!fitColumnsToViewport || viewport == null || viewport.rect.width <= 0f || columns < 1) return maximum;
+            float available = (viewport.rect.width - slotSpacing.x * Mathf.Max(0, columns - 1)) / columns;
+            return Mathf.Clamp(available, Mathf.Min(maximum, Mathf.Max(1f, minimumCellSize)), maximum);
+        }
 
         /// <summary>按列数、行数重建格子：先调整面板尺寸与布局参数，再销毁旧格子并实例化新格子。</summary>
         private void BuildGrid(int columns, int rows)
@@ -409,6 +421,7 @@ namespace RPG4.Backpack.UI
             Columns = columns;
             Rows = rows;
             cellSize = Mathf.Max(1f, cellSize);
+            displayedCellSize = ResolveCellSize(columns);
 
             GridMetrics metrics = Metrics;
             rectTransform.sizeDelta = metrics.PaneSize(columns, rows);
@@ -423,7 +436,7 @@ namespace RPG4.Backpack.UI
                 gridLayout.childAlignment = TextAnchor.UpperLeft;
                 gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
                 gridLayout.constraintCount = columns;
-                gridLayout.cellSize = new Vector2(cellSize, cellSize);
+                gridLayout.cellSize = new Vector2(displayedCellSize, displayedCellSize);
                 gridLayout.spacing = slotSpacing;
             }
 
@@ -448,7 +461,7 @@ namespace RPG4.Backpack.UI
                 if (gridLayout == null)
                 {
                     rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0, 1);
-                    rect.sizeDelta = new Vector2(cellSize, cellSize);
+                    rect.sizeDelta = new Vector2(displayedCellSize, displayedCellSize);
                     rect.anchoredPosition = metrics.ManualSlotPosition(i, columns);
                 }
 
@@ -832,12 +845,23 @@ namespace RPG4.Backpack.UI
         }
 
         /// <summary>把物品数据写入物品框：有图标用图标（无图标留空），显示数量大于 1 才显示（虚拟部分携带时由调用方传入显示值）。</summary>
-        private static void ApplyWidget(ItemWidget widget, RuntimeItem item, int displayStack)
+        private void ApplyWidget(ItemWidget widget, RuntimeItem item, int displayStack)
         {
             if (widget?.view == null || item == null) return;
             widget.root.name = "Item_" + item.ItemId.Value;
             ImageFragment image = item.GetFragment<ImageFragment>();
             widget.view.SetItem(image != null ? image.Icon : null, displayStack);
+            widget.view.SetSelected(item.ItemId == selectedItemId);
+        }
+
+        public void SetSelectedItem(ItemId id)
+        {
+            if (selectedItemId == id) return;
+            if (render.TryGetWidget(selectedItemId, out ItemWidget previous) && previous?.view != null)
+                previous.view.SetSelected(false);
+            selectedItemId = id;
+            if (render.TryGetWidget(id, out ItemWidget current) && current?.view != null)
+                current.view.SetSelected(true);
         }
 
         /// <summary>切换物品框的悬停底色；取消悬停由视图还原为预制体原色。</summary>

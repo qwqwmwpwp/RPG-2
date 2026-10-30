@@ -1,4 +1,6 @@
 using System.Runtime.CompilerServices;
+using System.Collections.Generic;
+using System.Threading;
 using UnityEngine;
 
 [assembly: InternalsVisibleTo("RPG4.Input")]
@@ -6,9 +8,63 @@ using UnityEngine;
 
 namespace RPG4.PlayerIntent
 {
-    /// <summary>每角色唯一共享快照；只存值，不采样、校验、推进或复位。</summary>
-    public sealed class PlayerBlackboard
+    /// <summary>每角色唯一核心黑板；工作数据由逻辑独占写入，完整版本供桥接读取。</summary>
+    internal sealed class PlayerBlackboard : IPlayerReadState, IPlayerInputState, IPlayerLocomotionState,
+        IPlayerViewState, IPlayerWeaponState, IPlayerPoseState, IPlayerInteractionState
     {
+        private const int EventCapacity = 128;
+        private readonly Queue<PlayerPresentationEvent> events = new Queue<PlayerPresentationEvent>(EventCapacity);
+        private IReadOnlyList<PlayerPresentationEvent> publishedEvents = System.Array.Empty<PlayerPresentationEvent>();
+        private bool eventsChanged;
+        private ulong version, eventSequence;
+        private PlayerPublishedFrame published;
+        internal PlayerPublishedFrame Published => Volatile.Read(ref published);
+        internal bool OwnerActive { get; set; }
+        internal double HurtUntil { get; set; }
+        internal Vector3 PlanarVelocity { get; set; }
+        internal float BodyYaw { get; set; }
+        internal ulong WeaponId { get; set; }
+        internal ulong ShotSequence { get; set; }
+        internal double ShotTime { get; set; }
+        internal float ShotDuration { get; set; }
+        internal float FadeDuration { get; set; }
+        internal float ReloadDuration { get; set; }
+        internal float CurrentHealth { get; set; }
+        internal float MaxHealth { get; set; }
+        internal bool InteractionVisible { get; set; }
+        internal bool HasInteractionTarget { get; set; }
+        internal string InteractionPrompt { get; set; }
+
+        internal void RecordEvent(PlayerEventKind kind, double time, ulong weaponId = 0, ulong shotSequence = 0,
+            float amount = 0f, string message = null, bool success = false,
+            Vector3 direction = default, bool obstructed = false)
+        {
+            if (events.Count == EventCapacity) events.Dequeue();
+            events.Enqueue(new PlayerPresentationEvent(++eventSequence, kind, time, weaponId, shotSequence,
+                amount, message, success, direction, obstructed));
+            eventsChanged = true;
+        }
+
+        internal void Publish(long tick, double time)
+        {
+            if (eventsChanged)
+            {
+                publishedEvents = System.Array.AsReadOnly(events.ToArray());
+                eventsChanged = false;
+            }
+            Volatile.Write(ref published, new PlayerPublishedFrame(++version, tick, time,
+                this, publishedEvents, eventSequence));
+        }
+
+        IPlayerInputState IPlayerReadState.Input => this;
+        IPlayerLocomotionState IPlayerReadState.Locomotion => this;
+        IPlayerViewState IPlayerReadState.View => this;
+        IPlayerWeaponState IPlayerReadState.Weapon => this;
+        IPlayerPoseState IPlayerReadState.Pose => this;
+        IPlayerInteractionState IPlayerReadState.Interaction => this;
+
+        public bool IsAlive { get; internal set; }
+        public bool IsHurt { get; internal set; }
         public bool InputAllowed { get; internal set; }
         public bool CanMove { get; internal set; }
         public bool CanLook { get; internal set; }
@@ -25,25 +81,15 @@ namespace RPG4.PlayerIntent
         public bool InteractPressed { get; internal set; }
         public float ViewYaw { get; internal set; }
         public float ViewPitch { get; internal set; }
-        public float AimPosePitch { get; internal set; }
-        public float CameraExplorationDistance { get; internal set; }
-        public float CameraTargetDistance { get; internal set; }
-        public float CameraTargetFieldOfView { get; internal set; }
-        public bool UseAttackCamera { get; internal set; }
         public bool PhysicallyCrouched { get; internal set; }
         public bool CanStand { get; internal set; }
         public UpperBodyDemand WeaponDemand { get; internal set; }
         public LocomotionPlan Plan { get; internal set; }
         public WeaponActionSnapshot WeaponAction { get; internal set; }
         public float ReloadPhase { get; internal set; }
-        public bool FollowView { get; internal set; }
         public bool IsAiming { get; internal set; }
-        public bool AimPoseEnabled { get; internal set; }
-        public float SupportHandWeight { get; internal set; }
-        public bool WeaponIKEnabled { get; internal set; }
         public bool Reloading { get; internal set; }
         public bool WeaponCancellationRequested { get; internal set; }
-        public float UpperBodyLayerWeight { get; internal set; }
         public MonoBehaviour InteractionTarget { get; internal set; }
     }
 

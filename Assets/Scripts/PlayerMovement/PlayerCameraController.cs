@@ -1,4 +1,3 @@
-using RPG4.PlayerIntent;
 using Cinemachine;
 using UnityEngine;
 using UnityEngine.Serialization;
@@ -35,8 +34,15 @@ namespace RPG4.PlayerMovement
         [FormerlySerializedAs("aimTransitionTime")]
         [SerializeField, Min(0f)] private float transitionTime = 0.15f;
 
-        private PlayerBlackboard blackboard;
-        private PlayerIntentManager intents;
+        private PlayerPresenter presenter;
+        private float explorationDistance;
+        internal float InitialDistance => initialDistance;
+        internal float MinimumDistance => minimumDistance;
+        internal float MaximumDistance => maximumDistance;
+        internal float ZoomSpeed => zoomSpeed;
+        internal float ExplorationFieldOfView => explorationFieldOfView;
+        internal float AttackDistance => attackDistance;
+        internal float AttackFieldOfView => attackFieldOfView;
         private Cinemachine3rdPersonFollow follow;
         private float currentDistance;
         private float fieldOfViewVelocity;
@@ -57,7 +63,7 @@ namespace RPG4.PlayerMovement
                 return;
             }
 
-            currentDistance = Mathf.Clamp(initialDistance, minimumDistance, maximumDistance);
+            currentDistance = explorationDistance = Mathf.Clamp(initialDistance, minimumDistance, maximumDistance);
             follow.CameraDistance = currentDistance;
             follow.ShoulderOffset = explorationShoulderOffset;
             virtualCamera.m_Lens.FieldOfView = explorationFieldOfView;
@@ -67,45 +73,37 @@ namespace RPG4.PlayerMovement
             initialized = true;
         }
 
-        private void BindIntents()
+        private void BindPresenter()
         {
-            if (intents != null || viewController == null) return;
-            intents = viewController.IntentManager;
-            if (intents == null) return;
-            blackboard = intents.Blackboard;
-            intents.InitializeCamera(initialDistance, minimumDistance, maximumDistance, explorationFieldOfView);
+            if (presenter != null || viewController == null) return;
+            presenter = viewController.Presenter;
+            presenter?.RegisterCamera(this);
         }
-        private void Update()
-        {
-            if (!initialized) return;
-            BindIntents();
-            intents?.RefreshPermissions();
-            // 配置仍保留在原组件；滚轮到距离目标的翻译由处理器写入共享黑板。
-            intents?.ProcessCameraScroll(minimumDistance, maximumDistance, zoomSpeed);
-        }
-
+        private void Update() { if (initialized) BindPresenter(); }
         private void LateUpdate()
         {
             if (!initialized) return;
-            BindIntents();
-            if (blackboard == null) return;
-            intents.RefreshPermissions();
-            intents.ProcessCamera(attackDistance, attackFieldOfView, explorationFieldOfView);
-            bool wantsAttack = blackboard.UseAttackCamera;
+            BindPresenter();
+            presenter?.ApplyCamera(this, Time.unscaledDeltaTime);
+        }
+        internal void Apply(PlayerCameraTarget target, float deltaTime)
+        {
+            if (!initialized || !isActiveAndEnabled) return;
+            explorationDistance = target.ExplorationDistance;
+            bool wantsAttack = target.Attacking;
             if (attacking != wantsAttack)
             {
                 attacking = wantsAttack;
                 restoringExploration = !attacking;
             }
-            float deltaTime = Time.unscaledDeltaTime;
             if (deltaTime <= 0f) return;
-            float distance = blackboard.CameraTargetDistance;
+            float distance = target.Distance;
             float smoothTime = attacking || restoringExploration ? transitionTime : zoomSmoothTime;
             // 仅平滑逻辑距离，绝不从 Cinemachine 的实际避障位置回写目标距离。
             currentDistance = smoothTime <= 0f ? distance : Mathf.SmoothDamp(
                 currentDistance, distance, ref zoomVelocity, smoothTime, Mathf.Infinity, deltaTime);
             follow.CameraDistance = currentDistance;
-            float fieldOfView = blackboard.CameraTargetFieldOfView;
+            float fieldOfView = target.FieldOfView;
             virtualCamera.m_Lens.FieldOfView = transitionTime <= 0f ? fieldOfView : Mathf.SmoothDamp(
                 virtualCamera.m_Lens.FieldOfView, fieldOfView, ref fieldOfViewVelocity,
                 transitionTime, Mathf.Infinity, deltaTime);
@@ -113,7 +111,7 @@ namespace RPG4.PlayerMovement
             follow.ShoulderOffset = transitionTime <= 0f ? shoulderOffset : Vector3.SmoothDamp(
                 follow.ShoulderOffset, shoulderOffset, ref shoulderOffsetVelocity,
                 transitionTime, Mathf.Infinity, deltaTime);
-            if (restoringExploration && Mathf.Abs(currentDistance - blackboard.CameraExplorationDistance) < 0.001f
+            if (restoringExploration && Mathf.Abs(currentDistance - explorationDistance) < 0.001f
                 && Mathf.Abs(virtualCamera.m_Lens.FieldOfView - explorationFieldOfView) < 0.001f
                 && (follow.ShoulderOffset - explorationShoulderOffset).sqrMagnitude < 0.000001f)
                 restoringExploration = false;
@@ -121,13 +119,15 @@ namespace RPG4.PlayerMovement
 
         private void OnDisable()
         {
+            presenter?.UnregisterCamera(this);
+            presenter = null;
             attacking = false;
             restoringExploration = false;
             zoomVelocity = 0f;
             fieldOfViewVelocity = 0f;
             shoulderOffsetVelocity = Vector3.zero;
             if (!initialized) return;
-            currentDistance = blackboard != null ? blackboard.CameraExplorationDistance
+            currentDistance = explorationDistance > 0f ? explorationDistance
                 : Mathf.Clamp(initialDistance, minimumDistance, maximumDistance);
             follow.CameraDistance = currentDistance;
             follow.ShoulderOffset = explorationShoulderOffset;

@@ -24,6 +24,9 @@ namespace RPG4.Backpack.UI
         private bool quickTransferClick;
         private bool chooseSplitQuantityClick;
         private bool inputWarningLogged;
+        private UIBase inspectionWindow;
+        private WeaponInspectionPanel inspectionPanel;
+        private CharacterOverviewUI overview;
 
         public string ToggleKeyLabel => toggleAction != null ? toggleAction.GetBindingDisplayString() : "未设置";
 
@@ -51,11 +54,25 @@ namespace RPG4.Backpack.UI
                 || !coordinator.TryGetActiveSession(out UIBase window, out BackpackInteractionController interaction)) return;
             if (interaction == null) return;
             InputActions.BackpackActions actions = inputHost.backpackInput;
+            Vector2 pointer = actions.pointerPosition.ReadValue<Vector2>();
+            if (inspectionWindow != window || inspectionPanel == null)
+            {
+                inspectionWindow = window;
+                inspectionPanel = window.GetComponentInChildren<WeaponInspectionPanel>(true);
+                overview = window.GetComponent<CharacterOverviewUI>();
+            }
+            bool panelActive = inspectionPanel != null && inspectionPanel.IsFor(window);
+            bool panelPointer = panelActive && inspectionPanel.BlocksInventoryPointer(pointer);
+            if (!panelPointer && InputManager.HasPointer && Keyboard.current != null && Keyboard.current.fKey.wasPressedThisFrame)
+            {
+                if (overview != null) overview.InspectAtPointer(pointer);
+                else if (panelActive) inspectionPanel.InspectAtPointer(pointer);
+            }
             interaction.ReceiveInput(new BackpackInteractionController.SessionInput(
-                actions.pointerPosition.ReadValue<Vector2>(), InputManager.HasPointer,
-                clicked == window && clickedSession == interaction.SessionVersion && left,
-                clicked == window && clickedSession == interaction.SessionVersion && right,
-                actions.cancel.WasPressedThisFrame(), quickTransfer, chooseSplitQuantity));
+                pointer, InputManager.HasPointer && !panelPointer,
+                !panelPointer && clicked == window && clickedSession == interaction.SessionVersion && left,
+                !panelPointer && clicked == window && clickedSession == interaction.SessionVersion && right,
+                actions.cancel.WasPressedThisFrame(), !panelPointer && quickTransfer, !panelPointer && chooseSplitQuantity));
         }
 
         private void BindInputActions()
@@ -89,6 +106,9 @@ namespace RPG4.Backpack.UI
             if (primaryAction != null) primaryAction.performed -= OnPrimaryClick;
             if (secondaryAction != null) secondaryAction.performed -= OnSecondaryClick;
             inputHost = null;
+            inspectionWindow = null;
+            inspectionPanel = null;
+            overview = null;
             toggleAction = primaryAction = secondaryAction = null;
             clickWindow = null;
             primaryClick = secondaryClick = false;

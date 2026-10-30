@@ -3,6 +3,10 @@
     "rootNamespace": "RPG4.PlayerMovement",
     "references": [
         "RPG4.Input",
+        "RPG4.Interaction",
+        "RPG4.UI",
+        "RPG4.CharacterAttributes",
+        "RPG4.Combat",
         "RPG4.StateMachine",
         "Cinemachine",
         "RPG4.PlayerIntent",

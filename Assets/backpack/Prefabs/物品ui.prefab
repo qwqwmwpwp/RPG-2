@@ -382,6 +382,7 @@ MonoBehaviour:
   stackText: {fileID: 8259297500555138283}
   iconPadding: 0
   group: {fileID: 7400000000000000000}
+  selectedColor: {r: 0.85, g: 0.95, b: 1, a: 1}
 --- !u!225 &7400000000000000000
 CanvasGroup:
   m_ObjectHideFlags: 0

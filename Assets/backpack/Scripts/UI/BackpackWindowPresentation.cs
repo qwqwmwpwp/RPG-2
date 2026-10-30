@@ -59,11 +59,12 @@ namespace RPG4.Backpack.UI
             secondary.Refresh(ui.secondaryView, ui.secondarySummary);
             BackpackInteractionController interaction = ui.interaction;
             bool active = interaction != null && interaction.IsSessionActive;
-            SetText(ui.actionHint, active ? interaction.ContextHint : "等待库存就绪…");
+            SetText(ui.actionHint, active ? interaction.ContextHint + (!interaction.IsCarrying && !interaction.IsChoosingSplitQuantity ? " · F 检查枪械 / 弹匣" : string.Empty) : "等待库存就绪…");
             SetText(ui.operationStatus, active ? interaction.OperationFeedback : string.Empty);
             if (ui.itemDetails != null)
             {
-                ui.itemDetails.Show(active && interaction.HasPointer && !interaction.IsCarrying && !interaction.IsChoosingSplitQuantity ? interaction.DisplayedItem : null);
+                ui.itemDetails.Show(active && !interaction.IsCarrying && !interaction.IsChoosingSplitQuantity
+                    ? interaction.DisplayedItem ?? interaction.SelectedItem : null);
                 if (active && interaction.HasPointer) ui.itemDetails.SetPointer(interaction.PointerPosition);
             }
         }

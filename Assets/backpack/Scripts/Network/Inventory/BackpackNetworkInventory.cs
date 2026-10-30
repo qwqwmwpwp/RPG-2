@@ -130,6 +130,7 @@ namespace RPG4.Backpack.Network
             core.IsAuthority = () => IsServerInventory;
             core.IdGeneratorProvider = ResolveGenerator;
             core.ForwardOperation = RequestInventoryOperation;
+            core.ForwardWeaponOperation = RequestWeaponOperation;
             core.CommitConfirm = ConfirmInventoryProjection;
 
             authoritativeRows = Container.Rows;
@@ -147,11 +148,13 @@ namespace RPG4.Backpack.Network
                 $"库存网络组件就绪（服务端）：netId={netId}，容器 {core.Container.Rows}×{core.Container.Columns}。");
 
             core.SubscribeCommands(core.Container);
+            BindNetworkWeaponUi();
         }
 
         /// <inheritdoc/>
         public override void OnStopServer()
         {
+            UnbindNetworkWeaponUi();
             if (core != null) core.UnsubscribeCommands();
             core = null;
             fallbackGenerator = null;
@@ -174,14 +177,17 @@ namespace RPG4.Backpack.Network
             core.Catalog = catalog;
             core.IsAuthority = () => false;
             core.ForwardOperation = RequestInventoryOperation;
+            core.ForwardWeaponOperation = RequestWeaponOperation;
 
             RebuildMirror();
             core.SubscribeCommands(this);
+            BindNetworkWeaponUi();
         }
 
         /// <inheritdoc/>
         public override void OnStopClient()
         {
+            UnbindNetworkWeaponUi();
             if (core != null) core.UnsubscribeCommands();
             core = null;
             mirror.Clear();
@@ -589,7 +595,7 @@ namespace RPG4.Backpack.Network
         {
             if (IsServerInventory && Container.Revision != syncedRevision) SyncEntries(out _);
             if (!IsServerInventory && mirrorDirty) RebuildMirror();
-            if (!changedPending) return;
+            if (!changedPending) { FlushNetworkWeaponUi(); return; }
 
             changedPending = false;
             Changed?.Invoke();
@@ -599,6 +605,7 @@ namespace RPG4.Backpack.Network
             {
                 EventBus.Global.Publish(InvChannels.Changed, this);
             }
+            FlushNetworkWeaponUi();
         }
     }
 }

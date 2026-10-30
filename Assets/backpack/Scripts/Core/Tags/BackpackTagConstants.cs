@@ -14,5 +14,8 @@ namespace RPG4.Backpack.Core
         public static readonly BackpackTag EquipmentFragment = new BackpackTag("FragmentTags.Equip.EquipmentFragment"); // 装备容器。
 
         public static readonly BackpackTag WeaponDefinition = new BackpackTag("FragmentTags.Equip.WeaponDefinition"); // 武器动作定义。
+        public static readonly BackpackTag AmmoDefinition = new BackpackTag("FragmentTags.Equip.AmmoDefinition");
+        public static readonly BackpackTag MagazineDefinition = new BackpackTag("FragmentTags.Equip.MagazineDefinition");
+        public static readonly BackpackTag AttachmentDefinition = new BackpackTag("FragmentTags.Equip.AttachmentDefinition");
     }
 }

@@ -78,7 +78,9 @@ namespace RPG4.Backpack.Items
     /// <summary>运行时物品的完整运行时快照：身份 + 类型 + 堆叠数 + 全部可随机化数值节点的当前值；不含 Unity Object 引用与网格位置（位置由本地表现层负责），与网络框架解耦、编码由 RuntimeItemSnapshotCodec 显式完成。</summary>
     public readonly struct RuntimeItemSnapshot : IEquatable<RuntimeItemSnapshot>
     {
-        public const byte CurrentVersion = 1; // 当前快照格式版本；载荷版本不匹配一律按失败处理。
+        public const byte CurrentVersion = 2;
+        public const int MaxDepth = 4;
+        public const int MaxTreeItems = 32;
 
         public const int MaxNumberStateCount = 64; // 单个物品允许携带的数值节点上限（防御异常载荷导致的分配放大）。
 
@@ -88,6 +90,10 @@ namespace RPG4.Backpack.Items
 
         /// <summary>构造快照；数值节点数组为空、数量超限或堆叠数小于 1 时抛出异常。</summary>
         public RuntimeItemSnapshot(ItemId itemId, BackpackTag itemType, int stackCount, FragmentNumberState[] numbers)
+            : this(itemId, itemType, stackCount, numbers, null, null) { Version = 1; }
+
+        public RuntimeItemSnapshot(ItemId itemId, BackpackTag itemType, int stackCount, FragmentNumberState[] numbers,
+            WeaponStateSnapshot weapon, MagazineStateSnapshot magazine)
         {
             if (numbers == null) throw new ArgumentNullException(nameof(numbers));
             if (numbers.Length > MaxNumberStateCount)
@@ -100,10 +106,13 @@ namespace RPG4.Backpack.Items
                 throw new ArgumentOutOfRangeException(nameof(stackCount), stackCount, "堆叠数必须大于 0。");
             }
 
-            this.numbers = numbers;
+            this.numbers = (FragmentNumberState[])numbers.Clone();
             ItemId = itemId;
             ItemType = itemType;
             StackCount = stackCount;
+            Weapon = weapon;
+            Magazine = magazine;
+            Version = CurrentVersion;
         }
 
         public ItemId ItemId { get; } // 运行时实例标识（可能为 ItemId.None，由网络层负责拒绝）。
@@ -111,6 +120,9 @@ namespace RPG4.Backpack.Items
         public BackpackTag ItemType { get; } // 物品类型标签（模板身份）。
 
         public int StackCount { get; } // 快照时刻的堆叠数副本；唯一来源仍是 RuntimeItem.StackCount。
+        public WeaponStateSnapshot Weapon { get; }
+        public MagazineStateSnapshot Magazine { get; }
+        public byte Version { get; }
 
         public IReadOnlyList<FragmentNumberState> Numbers => numbers ?? Array.Empty<FragmentNumberState>(); // 按节点坐标升序排列的数值状态，顺序与模板遍历顺序一致，供确定性比较与载荷编码使用。
 
@@ -119,6 +131,7 @@ namespace RPG4.Backpack.Items
         {
             if (ItemId != other.ItemId || StackCount != other.StackCount) return false;
             if (!string.Equals(ItemType.ToString(), other.ItemType.ToString(), StringComparison.Ordinal)) return false;
+            if (!Equals(Weapon, other.Weapon) || !Equals(Magazine, other.Magazine)) return false;
 
             IReadOnlyList<FragmentNumberState> left = Numbers;
             IReadOnlyList<FragmentNumberState> right = other.Numbers;
@@ -146,6 +159,8 @@ namespace RPG4.Backpack.Items
                 int hash = ItemId.GetHashCode();
                 hash = (hash * 397) ^ StackCount;
                 hash = (hash * 397) ^ ItemType.GetHashCode();
+                hash = (hash * 397) ^ (Weapon?.GetHashCode() ?? 0);
+                hash = (hash * 397) ^ (Magazine?.GetHashCode() ?? 0);
                 IReadOnlyList<FragmentNumberState> list = Numbers;
                 for (int i = 0; i < list.Count; i++)
                 {

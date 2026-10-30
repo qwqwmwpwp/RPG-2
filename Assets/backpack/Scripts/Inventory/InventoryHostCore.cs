@@ -9,7 +9,7 @@ namespace RPG4.Backpack.Inventory
     public delegate bool CommitConfirmHandler(ItemId requiredItem, out string error);
 
     /// <summary>共享库存核心：权威端执行完整意图并返回结果，纯客户端通过宿主转发；容器持有真实数据。</summary>
-    public sealed class InventoryHostCore
+    public sealed partial class InventoryHostCore
     {
         public const int DefaultRows = 6; // 尺寸非法时的回退行数（与联机组件默认一致）。
         public const int DefaultColumns = 8; // 尺寸非法时的回退列数（与联机组件默认一致）。
@@ -22,6 +22,7 @@ namespace RPG4.Backpack.Inventory
 
         private object commandSource;
         private EventSubscription operationSubscription;
+        private EventSubscription weaponOperationSubscription;
 
         /// <summary>非权威端（纯客户端）构造：不创建容器，只承载意图订阅与转发。</summary>
         public InventoryHostCore(LogModule logModule, string ownerName)
@@ -80,6 +81,8 @@ namespace RPG4.Backpack.Inventory
             CommandHosts[sourceKey] = this;
             operationSubscription = EventBus.Global.Subscribe<InventoryOperation>(
                 CmdChannels.InventoryOperation, sourceKey, this, OnOperationCommand);
+            weaponOperationSubscription = EventBus.Global.Subscribe<WeaponOperation>(
+                CmdChannels.WeaponOperation, sourceKey, this, OnWeaponOperationCommand);
         }
 
         /// <summary>释放全部意图订阅（幂等）。</summary>
@@ -87,6 +90,8 @@ namespace RPG4.Backpack.Inventory
         {
             operationSubscription.Dispose();
             operationSubscription = default;
+            weaponOperationSubscription.Dispose();
+            weaponOperationSubscription = default;
             if (commandSource != null && CommandHosts.TryGetValue(commandSource, out InventoryHostCore owner)
                 && ReferenceEquals(owner, this)) CommandHosts.Remove(commandSource);
             commandSource = null;

@@ -8,7 +8,7 @@ namespace RPG4.Backpack.Inventory
     public delegate bool ItemAdmissionHandler(RuntimeItem item, out string error);
 
     /// <summary>库存真相源：统一承担物品集合、格子映射与读写查询，唯一权威地持有「物品集合 + 上左位置 + 格子占用」，两份状态只在提交阶段同源写入、不存在中间态；物品下标按 ItemId 排序并按需缓存，不另建权威数据；堆叠数不缓存（唯一来源 RuntimeItem.StackCount）；纯 C# 数据层，不引用 UI / MonoBehaviour / 网络；按主线程单线程访问、不加锁，查询复用轮次戳缓冲做到零 GC；变更成功后经 F6 事件总线广播（source 为容器实例）。</summary>
-    public sealed class InventoryContainer
+    public sealed partial class InventoryContainer
     {
         public const int NoIndex = InventoryPlacement.NoIndex; // 无效索引常量。
 
@@ -443,6 +443,7 @@ namespace RPG4.Backpack.Inventory
         /// <summary>在指定落点放置物品（不做堆叠合并）：要求物品不在容器内且落点整块为空；失败时容器与物品状态完全不变；已入包物品移动须使用 TryMoveItem。</summary>
         public bool TryPlaceItem(RuntimeItem item, int startIndex, out string error)
         {
+            if (item != null && item.RootOwner != null) return Reject(out error, nameof(TryPlaceItem), "物品已归其他根容器所有，请使用转移事务。");
             if (!CanInsert(item, nameof(TryPlaceItem), out error)) return false;
 
             GridCoord dimensions = ResolveItemDimensions(item);
@@ -479,12 +480,12 @@ namespace RPG4.Backpack.Inventory
             if (previous.UpperLeftIndex == upperLeftIndex) return true;
 
             ClearCells(previous);
-            placements.Remove(item);
+            RemovePlacement(item);
             CommitPlacement(item, upperLeftIndex, previous.Dimensions);
             if (confirm != null && !confirm(item.ItemId, out error))
             {
                 ClearCells(placements[item]);
-                placements.Remove(item);
+                RemovePlacement(item);
                 CommitPlacement(item, previous.UpperLeftIndex, previous.Dimensions);
                 confirm(ItemId.None, out _);
                 return false;
@@ -507,6 +508,7 @@ namespace RPG4.Backpack.Inventory
                 return Reject(out error, nameof(TrySwapItems), "来源与目标必须是各自库存内的不同物品。");
             bool same = ReferenceEquals(this, destination);
             if (!destination.CanAcceptItem(source, out error) || !CanAcceptItem(target, out error)) return false;
+            if (!same && (!destination.CanInsertGraph(source, target, out error) || !CanInsertGraph(target, source, out error))) return false;
             bool changesLayout = !same && SingleCellItems != destination.SingleCellItems;
             GridCoord sourceSize = changesLayout ? destination.ResolveItemDimensions(source) : first.Dimensions;
             GridCoord targetSize = changesLayout ? ResolveItemDimensions(target) : second.Dimensions;
@@ -529,8 +531,8 @@ namespace RPG4.Backpack.Inventory
 
             ClearCells(first);
             destination.ClearCells(second);
-            placements.Remove(source);
-            destination.placements.Remove(target);
+            RemovePlacement(source);
+            destination.RemovePlacement(target);
             CommitPlacement(target, targetIndex, targetSize);
             destination.CommitPlacement(source, sourceIndex, sourceSize);
             itemIndicesDirty = destination.itemIndicesDirty = true;
@@ -541,8 +543,8 @@ namespace RPG4.Backpack.Inventory
             {
                 ClearCells(placements[target]);
                 destination.ClearCells(destination.placements[source]);
-                placements.Remove(target);
-                destination.placements.Remove(source);
+                RemovePlacement(target);
+                destination.RemovePlacement(source);
                 CommitPlacement(source, first.UpperLeftIndex, first.Dimensions);
                 destination.CommitPlacement(target, second.UpperLeftIndex, second.Dimensions);
                 itemIndicesDirty = destination.itemIndicesDirty = true;
@@ -604,7 +606,7 @@ namespace RPG4.Backpack.Inventory
             }
 
             ClearCells(placement);
-            placements.Remove(item);
+            RemovePlacement(item);
             BumpRevision();
             error = null;
             NotifyItemRemoved(item);
@@ -615,6 +617,7 @@ namespace RPG4.Backpack.Inventory
         public bool TryStackItem(RuntimeItem target, RuntimeItem incoming, out int movedCount, out string error)
         {
             movedCount = 0;
+            if (incoming != null && incoming.RootOwner != null) return Reject(out error, nameof(TryStackItem), "来源物品已有根容器。");
 
             if (target == null || incoming == null) return Reject(out error, nameof(TryStackItem), "物品为空。");
             if (ReferenceEquals(target, incoming)) return Reject(out error, nameof(TryStackItem), "目标与来源是同一个物品实例。");
@@ -711,7 +714,7 @@ namespace RPG4.Backpack.Inventory
                 if (movedCount == sourceCount)
                 {
                     ClearCells(sourcePlacement);
-                    placements.Remove(source);
+                    RemovePlacement(source);
                     itemIndicesDirty = true;
                 }
                 else source.SetStackCount(sourceCount - movedCount);
@@ -756,6 +759,7 @@ namespace RPG4.Backpack.Inventory
 
         internal bool TryReceiveItem(RuntimeItem item, CommitConfirmHandler confirm, out string error)
         {
+            if (item != null && item.RootOwner != null) return Reject(out error, nameof(TryReceiveItem), "物品已有根容器，请使用转移事务。");
             if (!TryPlanReceiveItem(item, nameof(TryReceiveItem), out ReceivePlan plan, out error)) return false;
             int previousCount = item.StackCount;
             CommitReceiveItem(item, plan);
@@ -765,7 +769,7 @@ namespace RPG4.Backpack.Inventory
                 if (plan.PlaceIndex != NoIndex)
                 {
                     ClearCells(placements[item]);
-                    placements.Remove(item);
+                    RemovePlacement(item);
                 }
                 for (int i = 0; i < plan.StackSteps.Length; i++)
                 {
@@ -835,7 +839,7 @@ namespace RPG4.Backpack.Inventory
             if (!confirmed)
             {
                 destination.ClearCells(destination.placements[splitItem]);
-                destination.placements.Remove(splitItem);
+                destination.RemovePlacement(splitItem);
                 source.SetStackCount(previousStack);
                 itemIndicesDirty = true;
                 destination.itemIndicesDirty = true;
@@ -872,7 +876,7 @@ namespace RPG4.Backpack.Inventory
 
             // 双方静默提交：此段无回调，不能通过两个公开增删操作拼接转移。
             ClearCells(placement);
-            placements.Remove(item);
+            RemovePlacement(item);
             int previousStack = item.StackCount;
             destination.CommitReceiveItem(item, plan);
             itemIndicesDirty = true;
@@ -886,7 +890,7 @@ namespace RPG4.Backpack.Inventory
                 if (plan.PlaceIndex != NoIndex)
                 {
                     destination.ClearCells(destination.placements[item]);
-                    destination.placements.Remove(item);
+                    destination.RemovePlacement(item);
                 }
                 for (int i = 0; i < plan.StackSteps.Length; i++)
                 {
@@ -1025,8 +1029,10 @@ namespace RPG4.Backpack.Inventory
         private bool CanInsert(RuntimeItem item, string operation, out string error)
         {
             if (item == null) return Reject(out error, operation, "物品为空。");
+            if (item.ParentItem != null) return Reject(out error, operation, "已安装子物品不可作为根条目插入。");
             if (!CanAcceptItem(item, out error)) return false;
             if (placements.ContainsKey(item)) return Reject(out error, operation, "物品已在容器中。");
+            if (!CanInsertGraph(item, null, out error)) return false;
             if (item.ItemId.IsValid && TryGetItemById(item.ItemId, out _))
             {
                 return Reject(out error, operation, $"容器中已有标识为 {item.ItemId} 的另一物品实例。");
@@ -1053,7 +1059,21 @@ namespace RPG4.Backpack.Inventory
         {
             InventoryPlacement placement = new InventoryPlacement(item, startIndex, dimensions);
             placements.Add(item, placement);
+            item.RootOwner = this;
+            item.Changed += OnItemStateChanged;
             FillCells(startIndex, dimensions, placement);
+        }
+
+        private void RemovePlacement(RuntimeItem item)
+        {
+            if (!placements.Remove(item)) return;
+            item.Changed -= OnItemStateChanged;
+            item.RootOwner = null;
+        }
+
+        private void OnItemStateChanged(RuntimeItem item)
+        {
+            if (Contains(item)) BumpRevision();
         }
 
         /// <summary>把放置记录占用的格子清空（用记录内冻结的尺寸，不重新向物品取尺寸）。</summary>

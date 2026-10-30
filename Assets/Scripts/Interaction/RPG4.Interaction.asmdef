@@ -3,6 +3,7 @@
     "rootNamespace": "RPG4.Interaction",
     "references": [
         "RPG4.Input",
+        "RPG4.UI",
         "UnityEngine.UI",
         "Unity.TextMeshPro",
         "RPG4.PlayerIntent"

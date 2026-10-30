@@ -15,6 +15,7 @@ namespace RPG4.PlayerMovement
         [SerializeField] private HipFireData hipFire = new HipFireData();
         [SerializeField] private CrouchData crouch = new CrouchData();
         [SerializeField] private ReloadData reload = new ReloadData();
+        [SerializeField] private HurtData hurt = new HurtData();
         internal PlayerContentData Content => content;
         internal MovementData Movement => movement;
         internal ExplorationData Exploration => exploration;
@@ -23,6 +24,7 @@ namespace RPG4.PlayerMovement
         internal HipFireData HipFire => hipFire;
         internal CrouchData Crouch => crouch;
         internal ReloadData Reload => reload;
+        internal HurtData Hurt => hurt;
     }
 
     [Serializable]
@@ -43,7 +45,6 @@ namespace RPG4.PlayerMovement
             Capsule = player.GetComponent<CapsuleCollider>();
             if (animator == null) animator = player.GetComponentInChildren<Animator>();
             if (aimPose == null && animator != null) aimPose = animator.GetComponent<PlayerAimPose>();
-            if (viewController != null) viewController.Initialize(player, aimPose);
         }
     }
 
@@ -181,6 +182,16 @@ namespace RPG4.PlayerMovement
         [SerializeField, Min(0.1f)] private float height = 1.2f;
         internal float MoveSpeed => moveSpeed;
         internal float Height => height;
+    }
+
+    [Serializable]
+    internal sealed class HurtData
+    {
+        [Tooltip("受击时暂停武器操作的秒数；移动与镜头保持可控。")]
+        [SerializeField, Min(0f)] private float duration = 0.45f;
+        [SerializeField, Min(0f)] private float transitionDuration = 0.08f;
+        internal float Duration => Mathf.Max(0f, duration);
+        internal float TransitionDuration => Mathf.Max(0f, transitionDuration);
     }
 
     [Serializable]

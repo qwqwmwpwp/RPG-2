@@ -18,6 +18,7 @@ namespace RPG4.Backpack.UI
         [SerializeField] private TMP_Text stackText; // 显示数量文本（不大于 1 时不显示）。
         [SerializeField] private float iconPadding; // 图标可用区域相对物品框的内缩量（像素）。
         [SerializeField] private CanvasGroup group; // 预制体上的整体透明度组件（携带预览用）。
+        [SerializeField] private Color selectedColor = new Color(0.85f, 0.95f, 1f, 1f);
 
         #endregion
 
@@ -25,6 +26,7 @@ namespace RPG4.Backpack.UI
 
         private RectTransform rectTransform; // 自身 RectTransform（像素尺寸与内嵌换算的目标）。
         private Color backgroundColor; // 底图常态色：唤醒时取自预制体，取消悬停时原样还原。
+        private bool selected, hovered;
         private Vector2 pixelSize; // 最近一次写入的物品像素尺寸。
         private Sprite icon; // 当前图标。
         private bool warnedIcon; // 图标未接线的警告是否已输出（每实例一条，避免逐帧刷屏）。
@@ -82,8 +84,19 @@ namespace RPG4.Backpack.UI
         /// <summary>切换悬停底色：悬停用反馈高亮色，取消悬停还原预制体的常态色。</summary>
         public void SetHover(bool hovered)
         {
-            if (backgroundImage0 == null) return;
-            backgroundImage0.color = hovered ? BackpackFeedbackPalette.ItemFrameHovered : backgroundColor;
+            this.hovered = hovered;
+            RefreshFrame();
+        }
+
+        public void SetSelected(bool value)
+        {
+            selected = value;
+            RefreshFrame();
+        }
+        private void RefreshFrame()
+        {
+            if (backgroundImage0 != null)
+                backgroundImage0.color = selected ? selectedColor : hovered ? BackpackFeedbackPalette.ItemFrameHovered : backgroundColor;
         }
 
         /// <summary>写入预制体上 CanvasGroup 的整体透明度（携带预览用）。</summary>

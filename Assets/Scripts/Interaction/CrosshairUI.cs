@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using RPG4.UI;
 
 namespace RPG4.Interaction
 {
@@ -15,10 +16,26 @@ namespace RPG4.Interaction
         [SerializeField] private Color interactableColor = new Color(0.3f, 1f, 0.5f, 1f);
         [SerializeField] private TMP_Text promptLabel;
         [SerializeField] private TMP_Text feedbackLabel;
+        [SerializeField] private TMP_Text notificationLabel;
+        [SerializeField] private GameObject hitMarker;
+        [SerializeField] private TMP_Text obstructionLabel;
         [SerializeField] private Color successColor = new Color(0.3f, 1f, 0.5f, 1f);
         [SerializeField] private Color failureColor = new Color(1f, 0.45f, 0.3f, 1f);
         [SerializeField, Min(0.1f)] private float feedbackDuration = 2.5f;
         private float feedbackUntil;
+        private float notificationUntil, hitUntil, obstructionUntil;
+
+        private void OnEnable() => ClearFeedback();
+        private void OnDisable() => ClearFeedback();
+
+        private void Update()
+        {
+            float time = Time.unscaledTime;
+            if (hitMarker != null) hitMarker.SetActive(PlayerUiPreferences.HitFeedback && time < hitUntil);
+            if (obstructionLabel != null) obstructionLabel.gameObject.SetActive(time < obstructionUntil);
+            if (feedbackLabel != null && time >= feedbackUntil) feedbackLabel.text = string.Empty;
+            if (notificationLabel != null && time >= notificationUntil) notificationLabel.text = string.Empty;
+        }
 
         public void SetState(bool visible, bool canInteract, string prompt = null)
         {
@@ -30,10 +47,28 @@ namespace RPG4.Interaction
 
         public void ShowFeedback(string message, bool success)
         {
-            if (feedbackLabel == null) return;
-            feedbackLabel.text = message;
-            feedbackLabel.color = success ? successColor : failureColor;
-            feedbackUntil = Time.unscaledTime + Mathf.Max(0.1f, feedbackDuration);
+            TMP_Text label = success && notificationLabel != null ? notificationLabel : feedbackLabel;
+            if (label == null) return;
+            label.text = message;
+            label.color = success ? successColor : failureColor;
+            float until = Time.unscaledTime + Mathf.Max(0.1f, feedbackDuration);
+            if (label == notificationLabel) notificationUntil = until;
+            else feedbackUntil = until;
+        }
+
+        public void ShowShotFeedback(bool damageApplied, bool obstructed)
+        {
+            if (damageApplied && PlayerUiPreferences.HitFeedback) hitUntil = Time.unscaledTime + 0.15f;
+            if (obstructed) obstructionUntil = Time.unscaledTime + 0.6f;
+        }
+
+        private void ClearFeedback()
+        {
+            feedbackUntil = notificationUntil = hitUntil = obstructionUntil = 0f;
+            if (hitMarker != null) hitMarker.SetActive(false);
+            if (obstructionLabel != null) obstructionLabel.gameObject.SetActive(false);
+            if (feedbackLabel != null) feedbackLabel.text = string.Empty;
+            if (notificationLabel != null) notificationLabel.text = string.Empty;
         }
     }
 }

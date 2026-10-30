@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 574b717d28d94ff5adfd24a6b5158fc5, type: 3}
-  m_Name: 物品清单目录
+  m_Name: "\u7269\u54C1\u6E05\u5355\u76EE\u5F55"
   m_EditorClassIdentifier: 
   manifests:
   - {fileID: 11400000, guid: 1f05e9a00ddfc684cbf3e3a341361c41, type: 2}
@@ -23,3 +23,6 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 415c00e1f9d94233bfaae8e37eb05746, type: 2}
   - {fileID: 11400000, guid: 96e8dd9af2f349158be8fe9b33f96d0e, type: 2}
   - {fileID: 11400000, guid: 42c885270a814363b41bac417923d007, type: 2}
+  - {fileID: 11400000, guid: 9b2a7679438b73045abb2686c957422c, type: 2}
+  - {fileID: 11400000, guid: 8499b17e8f183f340bd0c6de4117ea0a, type: 2}
+  - {fileID: 11400000, guid: 60a0c3dd251cc7b4b8ace8385c3d63b2, type: 2}

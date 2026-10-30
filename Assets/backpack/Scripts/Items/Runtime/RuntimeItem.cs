@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Runtime.CompilerServices;
 using RPG4.Backpack.Core;
+
+[assembly: InternalsVisibleTo("RPG4.Backpack.Inventory")]
 
 namespace RPG4.Backpack.Items
 {
@@ -13,7 +16,7 @@ namespace RPG4.Backpack.Items
         private int stackCount; // 当前堆叠数。
 
         /// <summary>创建运行时物品实例，并校验类型标签与初始堆叠数。</summary>
-        internal RuntimeItem(ItemId id, BackpackTag itemType, List<ItemFragment> fragments, int initialStackCount)
+        internal RuntimeItem(ItemId id, BackpackTag itemType, List<ItemFragment> fragments, int initialStackCount, bool initializeState = true)
         {
             if (itemType.IsEmpty || !itemType.IsValid)
             {
@@ -24,6 +27,8 @@ namespace RPG4.Backpack.Items
             readOnlyFragments = this.fragments.AsReadOnly();
             ItemId = id;
             ItemType = itemType;
+            if (GetFragment<WeaponDefinitionFragment>() != null) WeaponState = new WeaponItemState(this);
+            if (GetFragment<MagazineDefinitionFragment>() != null) MagazineState = new MagazineItemState(this, initializeState);
             SetStackCount(initialStackCount);
         }
 
@@ -34,6 +39,18 @@ namespace RPG4.Backpack.Items
         public IReadOnlyList<ItemFragment> Fragments => readOnlyFragments; // 片段集合（只读）。
 
         public override int StackCount => stackCount; // 当前堆叠数。
+        public WeaponItemState WeaponState { get; }
+        public MagazineItemState MagazineState { get; }
+        public RuntimeItem ParentItem { get; internal set; }
+        internal object RootOwner { get; set; }
+        public int Revision { get; private set; }
+        public event Action<RuntimeItem> Changed;
+
+        internal void NotifyStateChanged()
+        {
+            unchecked { Revision++; }
+            Changed?.Invoke(this);
+        }
 
         // 占格尺寸（X 为宽、Y 为高）：读网格占位片段，缺该片段时按 1×1 处理。
         public override GridCoord Size
@@ -45,11 +62,11 @@ namespace RPG4.Backpack.Items
             }
         }
 
-        public bool IsStackable => GetFragment<StackableFragment>() != null; // 是否可堆叠。
+        public bool IsStackable => WeaponState == null && MagazineState == null && GetFragment<AttachmentDefinitionFragment>() == null && GetFragment<StackableFragment>() != null; // 有状态物品不可合堆或分堆。
 
         public bool IsConsumable => GetFragment<ConsumableFragment>() != null; // 是否可消耗。
 
-        public int MaxStackSize => GetFragment<StackableFragment>()?.MaxStackSize ?? 1; // 单堆上限；不可堆叠时为 1。
+        public int MaxStackSize => IsStackable ? GetFragment<StackableFragment>().MaxStackSize : 1;
 
         /// <summary>按类型返回第一个匹配的片段；无匹配为 null。</summary>
         public T GetFragment<T>() where T : ItemFragment

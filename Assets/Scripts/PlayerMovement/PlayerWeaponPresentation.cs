@@ -1,83 +1,9 @@
 using RPG4.PlayerIntent;
-using RPG4.Backpack.Equipment;
 using UnityEngine;
 
 namespace RPG4.PlayerMovement
 {
-    /// <summary>仅翻译意图与执行回报，所有结果写入共享黑板；不执行动画或骨架。</summary>
-    internal sealed class PresentationIntentProcessor
-    {
-        private readonly PlayerContext context;
-        internal PresentationIntentProcessor(PlayerContext context) { this.context = context; }
-
-        internal void RecordView(float yaw, float pitch)
-        {
-            context.Blackboard.ViewYaw = yaw;
-            context.Blackboard.ViewPitch = pitch;
-        }
-        internal void ProcessLook(Vector2 sensitivity, Vector2 pitchRange, float aimMultiplier)
-        {
-            PlayerBlackboard blackboard = context.Blackboard;
-            if (!blackboard.CanLook) return;
-            float multiplier = blackboard.IsAiming ? aimMultiplier : 1f;
-            blackboard.ViewYaw = Mathf.DeltaAngle(0f,
-                blackboard.ViewYaw + blackboard.Look.x * sensitivity.x * multiplier);
-            blackboard.ViewPitch = Mathf.Clamp(blackboard.ViewPitch
-                - blackboard.Look.y * sensitivity.y * multiplier, pitchRange.x, pitchRange.y);
-        }
-        internal void InitializeCamera(float distance, float minimum, float maximum, float fieldOfView)
-        {
-            context.Blackboard.CameraExplorationDistance = Mathf.Clamp(distance, minimum, maximum);
-            context.Blackboard.CameraTargetDistance = context.Blackboard.CameraExplorationDistance;
-            context.Blackboard.CameraTargetFieldOfView = fieldOfView;
-        }
-        internal void ProcessCameraScroll(float minimum, float maximum, float zoomSpeed)
-        {
-            PlayerBlackboard blackboard = context.Blackboard;
-            if (!blackboard.CanLook || blackboard.UseAttackCamera) return;
-            blackboard.CameraExplorationDistance = Mathf.Clamp(blackboard.CameraExplorationDistance
-                - blackboard.Zoom * zoomSpeed, minimum, maximum);
-        }
-        internal void ProcessCamera(float attackDistance, float attackFieldOfView, float explorationFieldOfView)
-        {
-            PlayerBlackboard blackboard = context.Blackboard;
-            blackboard.CameraTargetDistance = blackboard.UseAttackCamera ? attackDistance : blackboard.CameraExplorationDistance;
-            blackboard.CameraTargetFieldOfView = blackboard.UseAttackCamera ? attackFieldOfView : explorationFieldOfView;
-        }
-        internal void ProcessPose(Vector2 pitchRange)
-        {
-            context.Blackboard.AimPosePitch = context.Blackboard.AimPoseEnabled
-                ? Mathf.Clamp(context.Blackboard.ViewPitch, pitchRange.x, pitchRange.y) : 0f;
-        }
-        internal void RecordWeapon(UpperBodyDemand demand, WeaponActionSnapshot frame, float reloadPhase)
-        {
-            context.Blackboard.WeaponDemand = demand;
-            context.Blackboard.WeaponAction = frame;
-            context.Blackboard.ReloadPhase = reloadPhase;
-            Refresh();
-        }
-        internal void Refresh()
-        {
-            PlayerBlackboard blackboard = context.Blackboard;
-            UpperBodyDemand demand = blackboard.WeaponDemand;
-            bool allowed = context.CanUseWeapon && Time.deltaTime > 0f;
-            if (!allowed && (demand.Strafe || demand.AimCamera || demand.ShotPose || demand.Reloading || demand.AttackCamera))
-                blackboard.WeaponCancellationRequested = true;
-            allowed &= !blackboard.WeaponCancellationRequested;
-            blackboard.FollowView = allowed && demand.Strafe;
-            blackboard.IsAiming = allowed && demand.AimCamera;
-            blackboard.UseAttackCamera = allowed && (demand.AimCamera || demand.AttackCamera);
-            blackboard.AimPoseEnabled = allowed && (demand.AimCamera || demand.ShotPose);
-            blackboard.SupportHandWeight = blackboard.AimPoseEnabled ? 1f : 0f;
-            blackboard.WeaponIKEnabled = blackboard.SupportHandWeight > 0f;
-            if (!blackboard.AimPoseEnabled) blackboard.AimPosePitch = 0f;
-            blackboard.Reloading = allowed && demand.Reloading;
-            blackboard.UpperBodyLayerWeight = allowed && (demand.ShotPose || demand.Reloading) ? 1f : 0f;
-        }
-        internal void AcknowledgeWeaponCancellation() => context.Blackboard.WeaponCancellationRequested = false;
-    }
-
-    /// <summary>上身动画投影；Animator 信息只用于表现连续性，不决定武器逻辑。</summary>
+    /// <summary>上身动画执行器；仅消费桥接目标，不维护武器逻辑时序。</summary>
     internal sealed class PlayerWeaponPresentation
     {
         private static readonly int ShotSpeed = Animator.StringToHash("ShotSpeed");
@@ -90,88 +16,28 @@ namespace RPG4.PlayerMovement
         private static readonly int CrouchReloadAnimation = Animator.StringToHash("UpperBody Shooting.CrouchReload");
         private static readonly int ReloadSpeed = Animator.StringToHash("ReloadSpeed");
         private const int ShootingLayer = 1;
-        private readonly PlayerContext context;
-        private bool hasShotProjection;
-        private bool ads;
-        private bool automatic;
-        private bool fadingProjection;
-        private bool resetAnimator = true;
-        private bool reloadProjection;
-        private bool crouchReload;
-        private Weapon actionWeapon;
-        private ulong observedSequence;
-        private bool actionActive;
-        private bool fadeObserved;
-        private int shotFrame = -1;
-        private int fadeFrame = -1;
-        private Weapon projectedWeapon;
-        private ulong projectedSequence;
-        private int projectedFadeFrame = -1;
-        internal WeaponActionSnapshot Action { get; private set; }
-        private float ShotDuration => context.Weapon != null ? context.Weapon.Definition.ShotDuration : 0.01f;
-        private float FadeDuration => context.Weapon != null ? context.Weapon.Definition.FadeOutDuration : 0f;
-        internal PlayerWeaponPresentation(PlayerContext context) { this.context = context; }
-
-        // 包络只投影武器已发生的射击；取消后记住序号，旧记录不会复活。
-        internal void AdvanceAction(double now)
+        private readonly PlayerStateData data;
+        private bool hasShotProjection, ads, automatic, fadingProjection;
+        private bool resetAnimator = true, reloadProjection, crouchReload;
+        private ulong projectedWeapon, projectedSequence;
+        private float ShotDuration = 0.01f, FadeDuration, reloadDuration = 1f;
+        private Animator Animator => data.Content.Animator;
+        private bool AnimatorAvailable => Animator != null && Animator.runtimeAnimatorController != null
+            && Animator.isActiveAndEnabled && Animator.layerCount > ShootingLayer;
+        internal PlayerWeaponPresentation(PlayerStateData data) { this.data = data; }
+        internal void Apply(PlayerWeaponTarget target)
         {
-            Weapon weapon = context.Weapon;
-            if (!ReferenceEquals(actionWeapon, weapon))
+            ShotDuration = Mathf.Max(0.01f, target.ShotDuration);
+            FadeDuration = Mathf.Max(0f, target.FadeDuration);
+            reloadDuration = Mathf.Max(0.01f, target.ReloadDuration);
+            if (AnimatorAvailable) Animator.SetLayerWeight(ShootingLayer, target.LayerWeight);
+            if (target.Reloading) Reload(target.Crouched, target.ReloadPhase);
+            else
             {
-                actionWeapon = weapon;
-                ClearAction();
+                reloadProjection = false;
+                Fire(target);
             }
-            if (weapon == null) return;
-            WeaponShot shot = weapon.LastShot;
-            if (shot.Sequence != observedSequence)
-            {
-                observedSequence = shot.Sequence;
-                actionActive = true;
-                fadeObserved = false;
-                shotFrame = Time.frameCount;
-                fadeFrame = -1; // 同帧新发替代刚产生的淡出脉冲。
-            }
-            if (!actionActive)
-            {
-                Action = new WeaponActionSnapshot(shotFrame == Time.frameCount,
-                    fadeFrame == Time.frameCount, false, false, false, 0f);
-                return;
-            }
-            double elapsed = System.Math.Max(0d, now - shot.Time);
-            bool active = elapsed < ShotDuration;
-            bool fading = !active && elapsed < ShotDuration + FadeDuration;
-            if (!active && !fadeObserved)
-            {
-                fadeObserved = true;
-                fadeFrame = Time.frameCount;
-            }
-            Action = new WeaponActionSnapshot(shotFrame == Time.frameCount,
-                fadeFrame == Time.frameCount, active, fading, (active || fading) && shot.Sustained,
-                active ? Mathf.Clamp01((float)(elapsed / ShotDuration)) : 0f);
-            if (!active && !fading) actionActive = false;
         }
-        internal void ClearAction()
-        {
-            observedSequence = actionWeapon != null ? actionWeapon.LastShot.Sequence : 0;
-            actionActive = fadeObserved = false;
-            shotFrame = fadeFrame = -1;
-            Action = default;
-        }
-
-        internal void ApplyLayerWeight()
-        {
-            Animator animator = context.Content.Animator;
-            if (animator != null && animator.runtimeAnimatorController != null && animator.layerCount > 1)
-                animator.SetLayerWeight(ShootingLayer, context.Blackboard.UpperBodyLayerWeight);
-        }
-        internal void Sync()
-        {
-            ApplyLayerWeight();
-            PlayerBlackboard blackboard = context.Blackboard;
-            if (blackboard.Reloading) Reload(blackboard.Plan.Crouched, blackboard.ReloadPhase);
-            else Fire(blackboard.WeaponAction, blackboard.IsAiming);
-        }
-
         internal void Reload(bool crouched, float phase)
         {
             if (!AnimatorAvailable)
@@ -180,10 +46,10 @@ namespace RPG4.PlayerMovement
                 resetAnimator = true;
                 return;
             }
-            AnimationClip clip = context.Data.Reload.Clip(crouched);
+            AnimationClip clip = data.Reload.Clip(crouched);
             if (clip == null) return;
-            Animator animator = context.Content.Animator;
-            animator.SetFloat(ReloadSpeed, clip.length / context.Weapon.Definition.ReloadDuration);
+            Animator animator = Animator;
+            animator.SetFloat(ReloadSpeed, clip.length / reloadDuration);
             if (!reloadProjection || crouchReload != crouched)
             {
                 // 逻辑时间控制完成；站蹲互切保留进度，不重复从头换弹。
@@ -194,65 +60,63 @@ namespace RPG4.PlayerMovement
             }
         }
 
-        internal void Cancel()
+        internal void Reset()
         {
-            ClearAction();
-            resetAnimator |= reloadProjection;
+            resetAnimator = true;
             reloadProjection = false;
             ClearPresentation();
+            if (AnimatorAvailable) Animator.SetLayerWeight(ShootingLayer, 0f);
         }
-        private bool AnimatorAvailable => context.AnimatorIsAvailable && context.Content.Animator.layerCount > ShootingLayer;
 
-        internal void Fire(WeaponActionSnapshot frame, bool wantsAds)
+        private void Fire(PlayerWeaponTarget target)
         {
-            Weapon weapon = context.Weapon;
-            ulong sequence = weapon != null ? weapon.LastShot.Sequence : 0;
-            bool shotStarted = frame.ShotStarted && (!ReferenceEquals(projectedWeapon, weapon)
-                || projectedSequence != sequence);
-            bool fadeStarted = frame.FadeStarted && projectedFadeFrame != Time.frameCount;
+            WeaponActionSnapshot frame = target.WeaponAction;
+            bool wantsAds = target.IsAiming;
+            bool shotStarted = frame.ShotActive && (!hasShotProjection || projectedWeapon != target.WeaponId
+                || projectedSequence != target.ShotSequence);
+            bool fadeStarted = frame.FadingOut && hasShotProjection && !fadingProjection;
             if (shotStarted)
             {
-                projectedWeapon = weapon;
-                projectedSequence = sequence;
-                projectedFadeFrame = -1;
+                projectedWeapon = target.WeaponId;
+                projectedSequence = target.ShotSequence;
             }
-            if (fadeStarted) projectedFadeFrame = Time.frameCount;
-            Animator animator = context.Content.Animator;
-            if (!AnimatorAvailable || context.Data.Attack.ShotClip == null)
+            Animator animator = Animator;
+            if (!AnimatorAvailable || data.Attack.ShotClip == null)
             {
-                // 表现不可用不反馈给逻辑；恢复时清空旧画面，只响应恢复当帧的新发。
+                // 表现不可用不反馈给逻辑；恢复时按当前活动阶段重建动画。
                 if (!AnimatorAvailable) resetAnimator = true;
                 ClearPresentation();
                 return;
             }
 
             if (resetAnimator) ClearPresentation();
-            if (hasShotProjection && automatic && context.Data.Attack.AutoShotClip == null) ClearPresentation();
-            bool wantsAutomatic = frame.IsAutomatic && context.Data.Attack.AutoShotClip != null;
+            if (hasShotProjection && automatic && data.Attack.AutoShotClip == null) ClearPresentation();
+            bool wantsAutomatic = frame.IsAutomatic && data.Attack.AutoShotClip != null;
             int state = wantsAutomatic ? (wantsAds ? ADSAutoFire : HipAutoFire)
                 : (wantsAds ? ADSFire : HipFireAnimation);
-            float fadeInDuration = context.Data.Attack.Presentation.Get(wantsAds, wantsAutomatic).FadeInDuration;
+            float fadeInDuration = data.Attack.Presentation.Get(wantsAds, wantsAutomatic).FadeInDuration;
             // A single shot must reach its full pose before its logical duration ends.
             if (!wantsAutomatic && fadeInDuration >= ShotDuration)
                 fadeInDuration = 0f;
             if (shotStarted)
             {
-                AnimationClip clip = wantsAutomatic ? context.Data.Attack.AutoShotClip : context.Data.Attack.ShotClip;
+                float startOffset = frame.ShotPhase * ShotDuration;
+                AnimationClip clip = wantsAutomatic ? data.Attack.AutoShotClip : data.Attack.ShotClip;
                 animator.SetFloat(ShotSpeed, clip.length / ShotDuration);
                 if (wantsAutomatic)
                 {
                     // 连射循环只在进入时过渡，后续每发不重播动画。
                     if (!hasShotProjection || !automatic || fadingProjection)
-                        animator.CrossFadeInFixedTime(state, fadeInDuration, ShootingLayer, 0f);
+                        animator.CrossFadeInFixedTime(state, fadeInDuration, ShootingLayer, startOffset);
                     else if (ads != wantsAds)
                         SwitchAutomaticState(state, fadeInDuration);
                 }
                 else
                 {
                     if (!hasShotProjection || automatic || fadingProjection || ads != wantsAds)
-                        animator.CrossFadeInFixedTime(state, fadeInDuration, ShootingLayer, 0f);
+                        animator.CrossFadeInFixedTime(state, fadeInDuration, ShootingLayer, startOffset);
                     else
-                        animator.Play(state, ShootingLayer, 0f);
+                        animator.Play(state, ShootingLayer, frame.ShotPhase);
                 }
                 hasShotProjection = true;
                 ads = wantsAds;
@@ -285,7 +149,7 @@ namespace RPG4.PlayerMovement
 
         private void SwitchAutomaticState(int state, float fadeInDuration)
         {
-            Animator animator = context.Content.Animator;
+            Animator animator = Animator;
             AnimatorStateInfo source = animator.GetCurrentAnimatorStateInfo(ShootingLayer);
             if (animator.IsInTransition(ShootingLayer))
             {
@@ -310,7 +174,7 @@ namespace RPG4.PlayerMovement
             fadingProjection = false;
             if (resetAnimator && AnimatorAvailable)
             {
-                context.Content.Animator.Play(Empty, ShootingLayer, 0f);
+                Animator.Play(Empty, ShootingLayer, 0f);
                 resetAnimator = false;
             }
         }

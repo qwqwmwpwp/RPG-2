@@ -11,8 +11,10 @@ namespace RPG4.UI
         [SerializeField] private CanvasGroup canvasGroup;
         [Tooltip("同组窗口互斥；留空时可与其他窗口同时打开。")]
         [SerializeField] private string exclusiveGroup;
+        [SerializeField] private bool blocksOtherWindows;
 
         public string ExclusiveGroup => exclusiveGroup;
+        public bool BlocksOtherWindows => blocksOtherWindows;
         public bool IsOpen { get; private set; }
         public UIManager Manager { get; internal set; }
 

@@ -1,0 +1,10 @@
+{
+    "name": "RPG4.Combat",
+    "rootNamespace": "RPG4.Combat",
+    "references": [
+        "RPG4.CharacterAttributes",
+        "RPG4.Backpack.Core",
+        "RPG4.Backpack.Items",
+        "RPG4.Backpack.Equipment"
+    ]
+}

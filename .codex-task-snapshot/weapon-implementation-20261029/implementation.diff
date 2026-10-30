@@ -1,0 +1,3145 @@
+diff --git a/Assets/Scripts/Input/PlayerInput.cs b/Assets/Scripts/Input/PlayerInput.cs
+index b5fe165d..699b505b 100644
+--- a/Assets/Scripts/Input/PlayerInput.cs
++++ b/Assets/Scripts/Input/PlayerInput.cs
+@@ -84,6 +84,7 @@ namespace RPG4.Input
+         private bool ownerReady;
+         private bool bodyReady;
+         private bool viewReady;
++        private bool lifeReady = true;
+         private bool aimArmed;
+         private bool fireArmed;
+         private int sampledFrame = -1;
+@@ -103,11 +104,13 @@ namespace RPG4.Input
+             RefreshPermissions();
+             if (Blackboard.InputAllowed) SetCursorCaptured(true);
+         }
+-        public void SetControlAvailability(bool ownerEnabled, bool bodyAvailable, bool viewAvailable)
++        public void SetControlAvailability(bool ownerEnabled, bool bodyAvailable, bool viewAvailable,
++            bool alive = true)
+         {
+             ownerReady = ownerEnabled;
+             bodyReady = bodyAvailable;
+             viewReady = viewAvailable;
++            lifeReady = alive;
+             RefreshPermissions();
+         }
+         public void RefreshPermissions()
+@@ -115,13 +118,13 @@ namespace RPG4.Input
+             bool allowed = host != null && host.isActiveAndEnabled && Application.isFocused
+                 && Time.timeScale > 0f && InputManager.Instance != null
+                 && (UIManager.Instance == null || !UIManager.Instance.BlocksGameplayInput);
+-            if (!allowed) Clear();
++            if (!allowed || !lifeReady) Clear();
+             ExpireFrameInput();
+             Blackboard.InputAllowed = allowed;
+-            Blackboard.CanMove = allowed && ownerReady && bodyReady && viewReady;
++            Blackboard.CanMove = allowed && lifeReady && ownerReady && bodyReady && viewReady;
+             Blackboard.CanLook = Blackboard.CanMove;
+             Blackboard.CanUseWeapon = Blackboard.CanMove && Cursor.lockState == CursorLockMode.Locked;
+-            Blackboard.CanInteract = allowed;
++            Blackboard.CanInteract = allowed && lifeReady;
+             if (!Blackboard.CanUseWeapon) ClearWeaponInput();
+             if (!Blackboard.CanLook || Cursor.lockState != CursorLockMode.Locked)
+             {
+@@ -142,7 +145,7 @@ namespace RPG4.Input
+         internal void Sample()
+         {
+             RefreshPermissions();
+-            if (!Blackboard.InputAllowed) return;
++            if (!Blackboard.InputAllowed || !lifeReady) return;
+             InputManager input = InputManager.Instance;
+             InputActions.BackpackActions pointer = input.backpackInput;
+             bool cursorCapturedThisFrame = false;
+diff --git a/Assets/Scripts/PlayerIntent/PlayerBlackboard.cs b/Assets/Scripts/PlayerIntent/PlayerBlackboard.cs
+index c1dfd12f..31b59dfc 100644
+--- a/Assets/Scripts/PlayerIntent/PlayerBlackboard.cs
++++ b/Assets/Scripts/PlayerIntent/PlayerBlackboard.cs
+@@ -9,6 +9,7 @@ namespace RPG4.PlayerIntent
+     /// <summary>每角色唯一共享快照；只存值，不采样、校验、推进或复位。</summary>
+     public sealed class PlayerBlackboard
+     {
++        public bool IsAlive { get; internal set; }
+         public bool InputAllowed { get; internal set; }
+         public bool CanMove { get; internal set; }
+         public bool CanLook { get; internal set; }
+diff --git a/Assets/Scripts/PlayerMovement/Player.cs b/Assets/Scripts/PlayerMovement/Player.cs
+index ba408e2f..1feaaccc 100644
+--- a/Assets/Scripts/PlayerMovement/Player.cs
++++ b/Assets/Scripts/PlayerMovement/Player.cs
+@@ -1,6 +1,7 @@
+ using RPG4.Input;
+ using RPG4.PlayerIntent;
+ using UnityEngine;
++using CharacterAttributeComponent = RPG4.CharacterAttributes.CharacterAttributes;
+ using HierarchicalStateMachine = RPG4.StateMachine.StateMachine;
+ 
+ namespace RPG4.PlayerMovement
+@@ -9,6 +10,7 @@ namespace RPG4.PlayerMovement
+     [DisallowMultipleComponent]
+     [DefaultExecutionOrder(150)]
+     [RequireComponent(typeof(Rigidbody), typeof(CapsuleCollider), typeof(PlayerInput))]
++    [RequireComponent(typeof(CharacterAttributeComponent))]
+     public sealed class Player : MonoBehaviour
+     {
+         [SerializeField] private PlayerInput playerInput;
+@@ -19,14 +21,20 @@ namespace RPG4.PlayerMovement
+         private UpperBodyRootState upperRoot;
+         private PlayerIntentManager intents;
+         private LowerBodyRootState lowerRoot;
++        private CharacterAttributeComponent attributes;
+         public PlayerInput Input => playerInput;
++        public CharacterAttributeComponent Attributes => attributes;
++        public bool IsAlive => attributes != null && attributes.IsAlive;
+         public PlayerBlackboard Blackboard => playerInput != null ? playerInput.Blackboard : null;
+         public bool WeaponIKEnabled => Blackboard != null && Blackboard.WeaponIKEnabled;
+         internal PlayerIntentManager Intents => intents;
++        internal void ApplyShotRecoil(float pitch, float yaw)
++            => stateData.Content.ViewController?.ApplyRecoil(pitch, yaw);
+ 
+         private void Awake()
+         {
+             if (playerInput == null) playerInput = GetComponent<PlayerInput>();
++            attributes = GetComponent<CharacterAttributeComponent>();
+             context = new PlayerContext(playerInput.Blackboard, stateData);
+             context.Equipment = GetComponent<PlayerEquipment>();
+             intents = new PlayerIntentManager(this, playerInput, context);
+@@ -42,14 +50,23 @@ namespace RPG4.PlayerMovement
+         }
+         private void OnEnable()
+         {
++            if (attributes != null)
++            {
++                attributes.Died += OnDied;
++                attributes.Revived += OnRevived;
++            }
+             if (playerInput != null) playerInput.Clear();
++            if (!IsAlive) Stop();
+         }
+         private void Update()
+         {
+             intents.RefreshPermissions();
++            if (!IsAlive) return;
+             float deltaTime = Mathf.Max(0f, Time.deltaTime);
+             upperRoot.PrepareFrame(deltaTime, Time.timeAsDouble);
++            if (!IsAlive) return;
+             upperStateMachine.Tick(deltaTime);
++            if (!IsAlive) return;
+             intents.ResolveLocomotion(lowerRoot.PhysicallyCrouched,
+                 !lowerRoot.PhysicallyCrouched || lowerRoot.CanStand());
+             lowerStateMachine.Tick(deltaTime);
+@@ -59,6 +76,11 @@ namespace RPG4.PlayerMovement
+         private void FixedUpdate()
+         {
+             intents.RefreshPermissions();
++            if (!IsAlive)
++            {
++                ClearPlanarMotion();
++                return;
++            }
+             if (Time.fixedDeltaTime > 0f) lowerStateMachine.FixedTick(Time.fixedDeltaTime);
+         }
+         // 角色位移与转向由下身状态机驱动刚体；显式接管 Animator / Rig 的根运动输出。
+@@ -66,6 +88,7 @@ namespace RPG4.PlayerMovement
+         private void LateUpdate()
+         {
+             intents.RefreshPermissions();
++            if (!IsAlive) return;
+             if (context.CanUseWeapon && Time.deltaTime > 0f && !Blackboard.WeaponCancellationRequested) return;
+             bool hadPresentation = HasWeaponPresentation();
+             CancelWeaponAction();
+@@ -91,11 +114,29 @@ namespace RPG4.PlayerMovement
+             if (upperRoot != null) upperRoot.CancelWeaponAction();
+             if (upperStateMachine != null) upperStateMachine.Stop();
+             if (lowerStateMachine != null) lowerStateMachine.Stop();
++            ClearPlanarMotion();
+             if (playerInput != null) playerInput.Clear();
+             ApplyIntentPresentation();
+             upperRoot?.ApplyLayerWeight();
+             if (hadPresentation) stateData.Content.AimPose?.Reevaluate();
+         }
++        private void ClearPlanarMotion()
++        {
++            Rigidbody body = stateData.Content.Body;
++            if (body == null || body.isKinematic) return;
++            body.velocity = new Vector3(0f, body.velocity.y, 0f);
++            body.angularVelocity = Vector3.zero;
++        }
++        private void OnDied()
++        {
++            intents?.RefreshPermissions();
++            Stop();
++        }
++        private void OnRevived()
++        {
++            // 恢复许可前清空按键会话，持续按住开火/瞄准不会自动恢复动作。
++            if (playerInput != null) playerInput.Clear();
++        }
+         private bool HasWeaponPresentation()
+         {
+             Animator animator = stateData.Content.Animator;
+@@ -107,7 +148,15 @@ namespace RPG4.PlayerMovement
+             if (stateData.Content.AimPose != null) stateData.Content.AimPose.ApplyPresentation();
+         }
+         private void OnDestroy() => intents?.Dispose();
+-        private void OnDisable() => Stop();
++        private void OnDisable()
++        {
++            if (attributes != null)
++            {
++                attributes.Died -= OnDied;
++                attributes.Revived -= OnRevived;
++            }
++            Stop();
++        }
+         private void OnApplicationFocus(bool focused) { if (!focused) Stop(); }
+         private void OnApplicationPause(bool paused) { if (paused) Stop(); }
+         private void OnValidate() => stateData?.Attack?.Validate();
+diff --git a/Assets/Scripts/PlayerMovement/PlayerEquipment.cs b/Assets/Scripts/PlayerMovement/PlayerEquipment.cs
+index dc140dac..998fd218 100644
+--- a/Assets/Scripts/PlayerMovement/PlayerEquipment.cs
++++ b/Assets/Scripts/PlayerMovement/PlayerEquipment.cs
+@@ -3,6 +3,7 @@ using RPG4.Backpack.Core;
+ using RPG4.Backpack.Equipment;
+ using RPG4.Backpack.Items;
+ using RPG4.Backpack.Runtime;
++using RPG4.Combat;
+ using UnityEngine;
+ 
+ namespace RPG4.PlayerMovement
+@@ -16,6 +17,7 @@ namespace RPG4.PlayerMovement
+         [SerializeField] private BackpackInventory inventory;
+         [SerializeField] private EquipmentInventory equipmentInventory;
+         [SerializeField] private PlayerWeaponRig weaponRig;
++        [SerializeField] private Camera shootingCamera;
+         private readonly Dictionary<ItemId, Weapon> weapons = new Dictionary<ItemId, Weapon>();
+         private readonly List<RuntimeItem> items = new List<RuntimeItem>();
+         private EventSubscription equipmentChanged;
+@@ -27,6 +29,10 @@ namespace RPG4.PlayerMovement
+         private GameObject preparedModel;
+         private bool confirming;
+         private bool synchronizing;
++        private WeaponView weaponView;
++        private int appliedItemRevision = -1;
++        private readonly WeaponShotExecutor shotExecutor = new WeaponShotExecutor();
++        public IReadOnlyList<WeaponHitResult> LastShotHits { get; private set; } = System.Array.Empty<WeaponHitResult>();
+ 
+         public ItemId CurrentItemId => CurrentWeapon != null ? current.ItemId : ItemId.None;
+         public Weapon CurrentWeapon => PresentationAvailable && current != null && weaponRig.HasEquipment
+@@ -94,6 +100,7 @@ namespace RPG4.PlayerMovement
+                 if (current != null && ReferenceEquals(current.Item, item) && weaponRig.HasEquipment)
+                 {
+                     ClearPreparedEquipment();
++                    RefreshItemView();
+                     return;
+                 }
+                 if (!ReferenceEquals(preparedItem, item) || preparedModel == null)
+@@ -115,6 +122,9 @@ namespace RPG4.PlayerMovement
+                 weapons[item.ItemId] = next;
+                 current = next;
+                 weaponRig.BindEquipment(model);
++                weaponView = model.GetComponentInChildren<WeaponView>(true);
++                if (weaponView != null) weaponView.Bind(item);
++                appliedItemRevision = item.Revision;
+             }
+             finally { synchronizing = false; }
+         }
+@@ -160,7 +170,7 @@ namespace RPG4.PlayerMovement
+                 Weapon candidate;
+                 try
+                 {
+-                    Weapon validated = new Weapon(item);
++                    Weapon validated = new Weapon(item, inventory.Catalog, SelectReloadMagazine, CommitReloadMagazine);
+                     candidate = weapons.TryGetValue(item.ItemId, out Weapon cached) ? cached : validated;
+                 }
+                 catch (System.ArgumentException exception) { error = exception.Message; return false; }
+@@ -207,6 +217,93 @@ namespace RPG4.PlayerMovement
+             if (!TryUnequip(out string error)) Debug.LogWarning($"卸装失败：{error}", this);
+         }
+ 
++        private void RefreshItemView()
++        {
++            if (current == null || weaponView == null || appliedItemRevision == current.Item.Revision) return;
++            try
++            {
++                weaponView.ApplyItemState(current.Item);
++                appliedItemRevision = current.Item.Revision;
++            }
++            catch (System.Exception exception) { Debug.LogException(exception, this); }
++        }
++
++        private bool SelectReloadMagazine(out ItemId magazineId)
++        {
++            magazineId = ItemId.None;
++            if (!InventoryAvailable || !EquipmentAvailable || current == null) return false;
++            inventory.CopyItems(items);
++            int bestCount = -1;
++            foreach (RuntimeItem candidate in items)
++            {
++                if (candidate.MagazineState == null || candidate.MagazineState.RoundCount <= bestCount
++                    || candidate.MagazineState.RoundCount == 0
++                    || !current.Item.WeaponState.IsCompatibleMagazine(candidate, inventory.Catalog)
++                    || !inventory.CanExchangeWeaponMagazine(equipmentInventory.Container, current.ItemId,
++                        candidate.ItemId, out _)) continue;
++                bestCount = candidate.MagazineState.RoundCount;
++                magazineId = candidate.ItemId;
++            }
++            return magazineId.IsValid;
++        }
++
++        private bool CommitReloadMagazine(ItemId magazineId, out string error)
++        {
++            error = "角色背包或当前武器尚未就绪。";
++            return InventoryAvailable && EquipmentAvailable && current != null
++                && inventory.TryExchangeWeaponMagazine(equipmentInventory.Container,
++                    current.ItemId, magazineId, out error);
++        }
++
++        public bool TryLoadMagazine(ItemId magazineId, ItemId ammoId, int roundCount, out string error)
++        {
++            error = "角色背包尚未就绪。";
++            return InventoryAvailable && inventory.TryLoadMagazine(magazineId, ammoId, roundCount, out error);
++        }
++
++        public bool TryInstallAttachment(WeaponAttachmentSlot slot, ItemId attachmentId, out string error)
++        {
++            error = "当前武器尚未就绪，或正在换弹。";
++            return InventoryAvailable && EquipmentAvailable && CurrentWeapon != null && !current.IsReloading
++                && inventory.TryExchangeWeaponAttachment(equipmentInventory.Container,
++                    current.ItemId, slot, attachmentId, out error);
++        }
++
++        public bool TryRemoveAttachment(WeaponAttachmentSlot slot, out string error)
++            => TryInstallAttachment(slot, ItemId.None, out error);
++
++        public bool TryExchangeMagazine(ItemId magazineId, out string error)
++        {
++            error = "当前武器尚未就绪，或正在换弹。";
++            return CurrentWeapon != null && !current.IsReloading && CommitReloadMagazine(magazineId, out error);
++        }
++
++        internal bool TryFire(bool pressed, bool held)
++        {
++            Weapon weapon = CurrentWeapon;
++            if (player == null || !player.IsAlive || player.Blackboard == null || !player.Blackboard.CanUseWeapon
++                || weapon == null || weaponView == null || weaponView.Muzzle == null) return false;
++            WeaponView shotView = weaponView;
++            Camera camera = shootingCamera != null ? shootingCamera : Camera.main;
++            if (camera == null || !camera.isActiveAndEnabled) return false;
++            Ray aim = camera.ViewportPointToRay(new Vector3(0.5f, 0.5f));
++            Vector3 bodyOrigin = shotView.transform.position;
++            Vector3 muzzleOrigin = shotView.Muzzle.position;
++            if (!WeaponShotExecutor.IsValidContext(aim.origin, aim.direction, bodyOrigin, muzzleOrigin)) return false;
++            if (!weapon.TryFire(pressed, held, out WeaponShot shot)) return false;
++            var request = new WeaponShotRequest(shot, gameObject, aim.origin, aim.direction, bodyOrigin, muzzleOrigin);
++            // 命中与扣弹完成之后才触发表现；可选特效失败不能阻止伤害。
++            LastShotHits = shotExecutor.Execute(request);
++            player.ApplyShotRecoil(shot.RecoilPitch, shot.RecoilYaw);
++            try
++            {
++                if (shotView != null) shotView.PlayShot(shot);
++                RefreshItemView();
++            }
++            catch (System.Exception exception) { Debug.LogException(exception, this); }
++            return true;
++        }
++
+         private void ClearPreparedEquipment()
+         {
+             if (preparedModel != null) Destroy(preparedModel);
+@@ -219,6 +316,9 @@ namespace RPG4.PlayerMovement
+         {
+             bool hadWeapon = current != null;
+             current?.CancelAction();
++            if (weaponView != null) weaponView.Unbind();
++            weaponView = null;
++            appliedItemRevision = -1;
+             current = null;
+             if (hadWeapon) player?.CancelWeaponAction();
+             weaponRig?.UnbindEquipment();
+diff --git a/Assets/Scripts/PlayerMovement/PlayerIntentManager.cs b/Assets/Scripts/PlayerMovement/PlayerIntentManager.cs
+index 80c7d7f7..6178b55a 100644
+--- a/Assets/Scripts/PlayerMovement/PlayerIntentManager.cs
++++ b/Assets/Scripts/PlayerMovement/PlayerIntentManager.cs
+@@ -33,9 +33,11 @@ namespace RPG4.PlayerMovement
+         internal void RefreshPermissions()
+         {
+             PlayerContentData content = context.Content;
++            Blackboard.IsAlive = owner != null && owner.IsAlive;
+             input.SetControlAvailability(owner != null && owner.isActiveAndEnabled,
+                 content.Body != null && !content.Body.isKinematic,
+-                content.ViewController != null && content.ViewController.isActiveAndEnabled);
++                content.ViewController != null && content.ViewController.isActiveAndEnabled,
++                Blackboard.IsAlive);
+             locomotion.RefreshAvailability();
+             presentation.Refresh();
+         }
+diff --git a/Assets/Scripts/PlayerMovement/PlayerViewController.cs b/Assets/Scripts/PlayerMovement/PlayerViewController.cs
+index d528e592..cf67def0 100644
+--- a/Assets/Scripts/PlayerMovement/PlayerViewController.cs
++++ b/Assets/Scripts/PlayerMovement/PlayerViewController.cs
+@@ -75,6 +75,15 @@ namespace RPG4.PlayerMovement
+             UpdatePivotRotation();
+         }
+ 
++        internal void ApplyRecoil(float pitch, float yaw)
++        {
++            if (player == null || !player.IsAlive || blackboard == null || !blackboard.CanLook) return;
++            viewPitch = Mathf.Clamp(viewPitch - pitch, pitchRange.x, pitchRange.y);
++            viewYaw = Mathf.DeltaAngle(0f, viewYaw + yaw);
++            player.Intents.RecordView(viewYaw, viewPitch);
++            UpdatePivotRotation();
++        }
++
+         private void UpdatePivotRotation()
+         {
+             transform.localRotation = Quaternion.Inverse(transform.parent.rotation)
+diff --git a/Assets/Scripts/PlayerMovement/PlayerWeaponRig.cs b/Assets/Scripts/PlayerMovement/PlayerWeaponRig.cs
+index c76fcdbe..4f95ac99 100644
+--- a/Assets/Scripts/PlayerMovement/PlayerWeaponRig.cs
++++ b/Assets/Scripts/PlayerMovement/PlayerWeaponRig.cs
+@@ -1,4 +1,5 @@
+ using RPG4.PlayerIntent;
++using RPG4.Combat;
+ using UnityEngine;
+ using UnityEngine.Animations;
+ using UnityEngine.Animations.Rigging;
+@@ -39,6 +40,13 @@ namespace RPG4.PlayerMovement
+             else if (prefab == null) error = "物品缺少装备模型。";
+             else
+             {
++                WeaponView view = prefab.GetComponentInChildren<WeaponView>(true);
++                if (view == null || view.Muzzle == null)
++                {
++                    error = "武器模型缺少 WeaponView 或枪口挂点。";
++                    return false;
++                }
++                if (view.SupportHandGrip != null) return true;
+                 foreach (Transform candidate in prefab.GetComponentsInChildren<Transform>(true))
+                     if (candidate.name == "L_Hand_Position") return true;
+                 error = "武器模型缺少 L_Hand_Position 握点。";
+@@ -63,6 +71,8 @@ namespace RPG4.PlayerMovement
+                     constraint.enabled = false;
+                 model.transform.localPosition = Vector3.zero;
+                 model.transform.localRotation = Quaternion.identity;
++                WeaponView view = model.GetComponentInChildren<WeaponView>(true);
++                if (view != null && view.SupportHandGrip != null) return true;
+                 foreach (Transform candidate in model.GetComponentsInChildren<Transform>(true))
+                     if (candidate.name == "L_Hand_Position") return true;
+                 error = "武器模型缺少 L_Hand_Position 握点。";
+@@ -77,8 +87,11 @@ namespace RPG4.PlayerMovement
+             PrepareEquipment();
+             UnbindEquipment();
+             equipmentModel = preparedModel;
+-            foreach (Transform candidate in equipmentModel.GetComponentsInChildren<Transform>(true))
+-                if (candidate.name == "L_Hand_Position") { equipmentGrip = candidate; break; }
++            WeaponView view = equipmentModel.GetComponentInChildren<WeaponView>(true);
++            equipmentGrip = view != null ? view.SupportHandGrip : null;
++            if (equipmentGrip == null)
++                foreach (Transform candidate in equipmentModel.GetComponentsInChildren<Transform>(true))
++                    if (candidate.name == "L_Hand_Position") { equipmentGrip = candidate; break; }
+             equipmentModel.SetActive(true);
+             UpdateGripTarget();
+         }
+diff --git a/Assets/Scripts/PlayerMovement/RPG4.PlayerMovement.asmdef b/Assets/Scripts/PlayerMovement/RPG4.PlayerMovement.asmdef
+index 3a0b6ba4..787da4fc 100644
+--- a/Assets/Scripts/PlayerMovement/RPG4.PlayerMovement.asmdef
++++ b/Assets/Scripts/PlayerMovement/RPG4.PlayerMovement.asmdef
+@@ -3,6 +3,8 @@
+     "rootNamespace": "RPG4.PlayerMovement",
+     "references": [
+         "RPG4.Input",
++        "RPG4.CharacterAttributes",
++        "RPG4.Combat",
+         "RPG4.StateMachine",
+         "Cinemachine",
+         "RPG4.PlayerIntent",
+diff --git a/Assets/Scripts/PlayerMovement/States/AttackState.cs b/Assets/Scripts/PlayerMovement/States/AttackState.cs
+index 299178af..5f2a6065 100644
+--- a/Assets/Scripts/PlayerMovement/States/AttackState.cs
++++ b/Assets/Scripts/PlayerMovement/States/AttackState.cs
+@@ -15,6 +15,7 @@ namespace RPG4.PlayerMovement
+         private bool CanStartShot => root.FireInputAvailable && context.Weapon != null
+             && context.Weapon.CanFire(root.FirePressed, root.FireHeld);
+         private bool WaitingAutomatic => root.FireHeld && context.Weapon != null
++            && context.Weapon.HasUsableRound
+             && context.Weapon.Definition.FireMode == WeaponFireMode.Automatic;
+         // 自动枪允许长按在冷却中等待；半自动仅响应合格的按下，不排队短按。
+         internal bool CanEnter => WaitingAutomatic || CanStartShot;
+@@ -40,7 +41,7 @@ namespace RPG4.PlayerMovement
+         protected override void OnUpdate(float deltaTime)
+         {
+             if (deltaTime <= 0f || !root.CanAct) return;
+-            context.Weapon.TryFire(root.FirePressed, root.FireHeld, out _);
++            context.Equipment.TryFire(root.FirePressed, root.FireHeld);
+             root.AdvanceAction();
+         }
+         internal void Present(bool aiming)
+diff --git "a/Assets/backpack/Data/Items/\346\236\252\346\242\260/\346\234\250\350\264\250\346\255\245\346\236\252_\345\206\231\345\256\236.asset" "b/Assets/backpack/Data/Items/\346\236\252\346\242\260/\346\234\250\350\264\250\346\255\245\346\236\252_\345\206\231\345\256\236.asset"
+index 5c183b37..88f7c681 100644
+--- "a/Assets/backpack/Data/Items/\346\236\252\346\242\260/\346\234\250\350\264\250\346\255\245\346\236\252_\345\206\231\345\256\236.asset"
++++ "b/Assets/backpack/Data/Items/\346\236\252\346\242\260/\346\234\250\350\264\250\346\255\245\346\236\252_\345\206\231\345\256\236.asset"
+@@ -64,3 +64,17 @@ MonoBehaviour:
+         shotDuration: 0.25
+         fadeOutDuration: 0.12
+         reloadDuration: 1.6
++        ammoType:
++          name: GameItems.Ammo.Rifle
++        magazineType:
++          name: GameItems.Magazines.Rifle
++        maxDurability: 100
++        durabilityPerShot: 1
++        baseDamage: 20
++        range: 100
++        spreadAngle: 0
++        recoilPitch: 1
++        recoilYaw: 0
++        reloadCommitFraction: 0.6
++        chamberFraction: 0.9
++        allowedAttachmentSlots: 00000000
+diff --git "a/Assets/backpack/Data/Items/\346\236\252\346\242\260/\346\234\250\350\264\250\346\255\245\346\236\252_\345\215\241\351\200\232.asset" "b/Assets/backpack/Data/Items/\346\236\252\346\242\260/\346\234\250\350\264\250\346\255\245\346\236\252_\345\215\241\351\200\232.asset"
+index 6b8b2e43..e25f812f 100644
+--- "a/Assets/backpack/Data/Items/\346\236\252\346\242\260/\346\234\250\350\264\250\346\255\245\346\236\252_\345\215\241\351\200\232.asset"
++++ "b/Assets/backpack/Data/Items/\346\236\252\346\242\260/\346\234\250\350\264\250\346\255\245\346\236\252_\345\215\241\351\200\232.asset"
+@@ -64,3 +64,17 @@ MonoBehaviour:
+         shotDuration: 0.25
+         fadeOutDuration: 0.12
+         reloadDuration: 1.6
++        ammoType:
++          name: GameItems.Ammo.Rifle
++        magazineType:
++          name: GameItems.Magazines.Rifle
++        maxDurability: 100
++        durabilityPerShot: 1
++        baseDamage: 20
++        range: 100
++        spreadAngle: 0
++        recoilPitch: 1
++        recoilYaw: 0
++        reloadCommitFraction: 0.6
++        chamberFraction: 0.9
++        allowedAttachmentSlots: 00000000
+diff --git "a/Assets/backpack/Data/Items/\346\236\252\346\242\260/\351\207\221\345\261\236\346\255\245\346\236\252_\345\206\231\345\256\236.asset" "b/Assets/backpack/Data/Items/\346\236\252\346\242\260/\351\207\221\345\261\236\346\255\245\346\236\252_\345\206\231\345\256\236.asset"
+index 2d221650..60251e45 100644
+--- "a/Assets/backpack/Data/Items/\346\236\252\346\242\260/\351\207\221\345\261\236\346\255\245\346\236\252_\345\206\231\345\256\236.asset"
++++ "b/Assets/backpack/Data/Items/\346\236\252\346\242\260/\351\207\221\345\261\236\346\255\245\346\236\252_\345\206\231\345\256\236.asset"
+@@ -64,3 +64,17 @@ MonoBehaviour:
+         shotDuration: 0.25
+         fadeOutDuration: 0.12
+         reloadDuration: 1.6
++        ammoType:
++          name: GameItems.Ammo.Rifle
++        magazineType:
++          name: GameItems.Magazines.Rifle
++        maxDurability: 100
++        durabilityPerShot: 1
++        baseDamage: 20
++        range: 100
++        spreadAngle: 0
++        recoilPitch: 1
++        recoilYaw: 0
++        reloadCommitFraction: 0.6
++        chamberFraction: 0.9
++        allowedAttachmentSlots: 00000000
+diff --git "a/Assets/backpack/Data/Items/\346\236\252\346\242\260/\351\207\221\345\261\236\346\255\245\346\236\252_\345\215\241\351\200\232.asset" "b/Assets/backpack/Data/Items/\346\236\252\346\242\260/\351\207\221\345\261\236\346\255\245\346\236\252_\345\215\241\351\200\232.asset"
+index f0b7bad3..204184ef 100644
+--- "a/Assets/backpack/Data/Items/\346\236\252\346\242\260/\351\207\221\345\261\236\346\255\245\346\236\252_\345\215\241\351\200\232.asset"
++++ "b/Assets/backpack/Data/Items/\346\236\252\346\242\260/\351\207\221\345\261\236\346\255\245\346\236\252_\345\215\241\351\200\232.asset"
+@@ -64,3 +64,17 @@ MonoBehaviour:
+         shotDuration: 0.25
+         fadeOutDuration: 0.12
+         reloadDuration: 1.6
++        ammoType:
++          name: GameItems.Ammo.Rifle
++        magazineType:
++          name: GameItems.Magazines.Rifle
++        maxDurability: 100
++        durabilityPerShot: 1
++        baseDamage: 20
++        range: 100
++        spreadAngle: 0
++        recoilPitch: 1
++        recoilYaw: 0
++        reloadCommitFraction: 0.6
++        chamberFraction: 0.9
++        allowedAttachmentSlots: 00000000
+diff --git "a/Assets/backpack/Data/Items/\347\211\251\345\223\201\346\270\205\345\215\225\347\233\256\345\275\225.asset" "b/Assets/backpack/Data/Items/\347\211\251\345\223\201\346\270\205\345\215\225\347\233\256\345\275\225.asset"
+index b78c3c84..d4322710 100644
+--- "a/Assets/backpack/Data/Items/\347\211\251\345\223\201\346\270\205\345\215\225\347\233\256\345\275\225.asset"
++++ "b/Assets/backpack/Data/Items/\347\211\251\345\223\201\346\270\205\345\215\225\347\233\256\345\275\225.asset"
+@@ -10,7 +10,7 @@ MonoBehaviour:
+   m_Enabled: 1
+   m_EditorHideFlags: 0
+   m_Script: {fileID: 11500000, guid: 574b717d28d94ff5adfd24a6b5158fc5, type: 3}
+-  m_Name: 物品清单目录
++  m_Name: "\u7269\u54C1\u6E05\u5355\u76EE\u5F55"
+   m_EditorClassIdentifier: 
+   manifests:
+   - {fileID: 11400000, guid: 1f05e9a00ddfc684cbf3e3a341361c41, type: 2}
+@@ -23,3 +23,6 @@ MonoBehaviour:
+   - {fileID: 11400000, guid: 415c00e1f9d94233bfaae8e37eb05746, type: 2}
+   - {fileID: 11400000, guid: 96e8dd9af2f349158be8fe9b33f96d0e, type: 2}
+   - {fileID: 11400000, guid: 42c885270a814363b41bac417923d007, type: 2}
++  - {fileID: 11400000, guid: 9b2a7679438b73045abb2686c957422c, type: 2}
++  - {fileID: 11400000, guid: 8499b17e8f183f340bd0c6de4117ea0a, type: 2}
++  - {fileID: 11400000, guid: 60a0c3dd251cc7b4b8ace8385c3d63b2, type: 2}
+diff --git a/Assets/backpack/Data/TagRegistry.asset b/Assets/backpack/Data/TagRegistry.asset
+index bb5e9d91..51ad1b54 100644
+--- a/Assets/backpack/Data/TagRegistry.asset
++++ b/Assets/backpack/Data/TagRegistry.asset
+@@ -30,3 +30,12 @@ MonoBehaviour:
+   - GameItems.Equipment.Weapons.Rifle.RealWood
+   - GameItems.Equipment.Weapons.Rifle.RealMetal
+   - FragmentTags.Default.Description
++  - FragmentTags.Equip.AmmoDefinition
++  - FragmentTags.Equip.MagazineDefinition
++  - FragmentTags.Equip.AttachmentDefinition
++  - GameItems.Ammo.Rifle
++  - GameItems.Ammo.Rifle.Standard
++  - GameItems.Magazines.Rifle
++  - GameItems.Magazines.Rifle30
++  - GameItems.Attachments.Muzzle
++  - GameItems.Attachments.Muzzle.Basic
+diff --git a/Assets/backpack/Prefabs/Weapons/Weapon_Rifle_Real_Metal.prefab b/Assets/backpack/Prefabs/Weapons/Weapon_Rifle_Real_Metal.prefab
+index a48ff42d..e2a711eb 100644
+--- a/Assets/backpack/Prefabs/Weapons/Weapon_Rifle_Real_Metal.prefab
++++ b/Assets/backpack/Prefabs/Weapons/Weapon_Rifle_Real_Metal.prefab
+@@ -1,5 +1,36 @@
+ %YAML 1.1
+ %TAG !u! tag:unity3d.com,2011:
++--- !u!1 &1302626097581530220
++GameObject:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  serializedVersion: 6
++  m_Component:
++  - component: {fileID: 5481220187185054947}
++  m_Layer: 0
++  m_Name: MagazineSocket
++  m_TagString: Untagged
++  m_Icon: {fileID: 0}
++  m_NavMeshLayer: 0
++  m_StaticEditorFlags: 0
++  m_IsActive: 1
++--- !u!4 &5481220187185054947
++Transform:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 1302626097581530220}
++  serializedVersion: 2
++  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
++  m_LocalPosition: {x: -0.32, y: 0.005, z: -0.09}
++  m_LocalScale: {x: 1, y: 1, z: 1}
++  m_ConstrainProportionsScale: 0
++  m_Children: []
++  m_Father: {fileID: 5988301984000406701}
++  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+ --- !u!1 &3497947706990844140
+ GameObject:
+   m_ObjectHideFlags: 0
+@@ -25,13 +56,13 @@ Transform:
+   m_PrefabInstance: {fileID: 0}
+   m_PrefabAsset: {fileID: 0}
+   m_GameObject: {fileID: 3497947706990844140}
++  serializedVersion: 2
+   m_LocalRotation: {x: 0.4992058, y: -0.4964855, z: -0.50346637, w: 0.50081676}
+   m_LocalPosition: {x: -0.1281484, y: 0.019099323, z: 0.04974045}
+   m_LocalScale: {x: 1, y: 1, z: 0.999999}
+   m_ConstrainProportionsScale: 0
+   m_Children: []
+   m_Father: {fileID: 5988301984000406701}
+-  m_RootOrder: 0
+   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+ --- !u!33 &1749237121178811312
+ MeshFilter:
+@@ -83,6 +114,68 @@ MeshRenderer:
+   m_SortingLayer: 0
+   m_SortingOrder: 0
+   m_AdditionalVertexStreams: {fileID: 0}
++--- !u!1 &3737954603040348262
++GameObject:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  serializedVersion: 6
++  m_Component:
++  - component: {fileID: 6813832208907289435}
++  m_Layer: 0
++  m_Name: Muzzle
++  m_TagString: Untagged
++  m_Icon: {fileID: 0}
++  m_NavMeshLayer: 0
++  m_StaticEditorFlags: 0
++  m_IsActive: 1
++--- !u!4 &6813832208907289435
++Transform:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 3737954603040348262}
++  serializedVersion: 2
++  m_LocalRotation: {x: 0, y: -0.7071068, z: -0, w: 0.7071068}
++  m_LocalPosition: {x: -0.66, y: 0.018, z: 0.009}
++  m_LocalScale: {x: 1, y: 1, z: 1}
++  m_ConstrainProportionsScale: 0
++  m_Children: []
++  m_Father: {fileID: 5988301984000406701}
++  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
++--- !u!1 &4545447534368522591
++GameObject:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  serializedVersion: 6
++  m_Component:
++  - component: {fileID: 4420713199012055504}
++  m_Layer: 0
++  m_Name: ShellEjectionPoint
++  m_TagString: Untagged
++  m_Icon: {fileID: 0}
++  m_NavMeshLayer: 0
++  m_StaticEditorFlags: 0
++  m_IsActive: 1
++--- !u!4 &4420713199012055504
++Transform:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 4545447534368522591}
++  serializedVersion: 2
++  m_LocalRotation: {x: 0, y: 0.7071068, z: 0.7071068, w: 0}
++  m_LocalPosition: {x: -0.32, y: 0.04, z: 0.025}
++  m_LocalScale: {x: 1, y: 1, z: 1}
++  m_ConstrainProportionsScale: 0
++  m_Children: []
++  m_Father: {fileID: 5988301984000406701}
++  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+ --- !u!1 &6363982380300774935
+ GameObject:
+   m_ObjectHideFlags: 0
+@@ -93,6 +186,8 @@ GameObject:
+   m_Component:
+   - component: {fileID: 5988301984000406701}
+   - component: {fileID: 6093372014242540394}
++  - component: {fileID: 5194192846494967435}
++  - component: {fileID: 8120079795531786938}
+   m_Layer: 0
+   m_Name: Weapon_Rifle_Real_Metal
+   m_TagString: Untagged
+@@ -107,6 +202,7 @@ Transform:
+   m_PrefabInstance: {fileID: 0}
+   m_PrefabAsset: {fileID: 0}
+   m_GameObject: {fileID: 6363982380300774935}
++  serializedVersion: 2
+   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+   m_LocalPosition: {x: 0, y: 0, z: 0}
+   m_LocalScale: {x: 1, y: 1, z: 1}
+@@ -114,8 +210,11 @@ Transform:
+   m_Children:
+   - {fileID: 4252479338407626706}
+   - {fileID: 7675421235036811142}
++  - {fileID: 6813832208907289435}
++  - {fileID: 4420713199012055504}
++  - {fileID: 5481220187185054947}
++  - {fileID: 7595417003442889325}
+   m_Father: {fileID: 0}
+-  m_RootOrder: 0
+   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+ --- !u!1773428102 &6093372014242540394
+ ParentConstraint:
+@@ -152,6 +251,123 @@ ParentConstraint:
+     weight: 0
+   - sourceTransform: {fileID: 0}
+     weight: 0
++--- !u!114 &5194192846494967435
++MonoBehaviour:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 6363982380300774935}
++  m_Enabled: 1
++  m_EditorHideFlags: 0
++  m_Script: {fileID: 11500000, guid: 1e117ffd4c1242b5b20e52a55a33f71a, type: 3}
++  m_Name:
++  m_EditorClassIdentifier:
++  muzzle: {fileID: 6813832208907289435}
++  supportHandGrip: {fileID: 7675421235036811142}
++  shellEjectionPoint: {fileID: 4420713199012055504}
++  magazineSocket: {fileID: 5481220187185054947}
++  muzzleFlash: {fileID: 5497403875212304683}
++  shellEjectionEffect: {fileID: 0}
++  shotAudioSource: {fileID: 8120079795531786938}
++  shotAudioClip: {fileID: 0}
++  magazineModelPrefab: {fileID: 0}
++--- !u!82 &8120079795531786938
++AudioSource:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 6363982380300774935}
++  m_Enabled: 1
++  serializedVersion: 4
++  OutputAudioMixerGroup: {fileID: 0}
++  m_audioClip: {fileID: 0}
++  m_PlayOnAwake: 0
++  m_Volume: 0.7
++  m_Pitch: 1
++  Loop: 0
++  Mute: 0
++  Spatialize: 0
++  SpatializePostEffects: 0
++  Priority: 128
++  DopplerLevel: 1
++  MinDistance: 3
++  MaxDistance: 25
++  Pan2D: 0
++  rolloffMode: 0
++  BypassEffects: 0
++  BypassListenerEffects: 0
++  BypassReverbZones: 0
++  rolloffCustomCurve:
++    serializedVersion: 2
++    m_Curve:
++    - serializedVersion: 3
++      time: 0
++      value: 1
++      inSlope: 0
++      outSlope: 0
++      tangentMode: 0
++      weightedMode: 0
++      inWeight: 0.33333334
++      outWeight: 0.33333334
++    - serializedVersion: 3
++      time: 1
++      value: 0
++      inSlope: 0
++      outSlope: 0
++      tangentMode: 0
++      weightedMode: 0
++      inWeight: 0.33333334
++      outWeight: 0.33333334
++    m_PreInfinity: 2
++    m_PostInfinity: 2
++    m_RotationOrder: 4
++  panLevelCustomCurve:
++    serializedVersion: 2
++    m_Curve:
++    - serializedVersion: 3
++      time: 0
++      value: 1
++      inSlope: 0
++      outSlope: 0
++      tangentMode: 0
++      weightedMode: 0
++      inWeight: 0.33333334
++      outWeight: 0.33333334
++    m_PreInfinity: 2
++    m_PostInfinity: 2
++    m_RotationOrder: 4
++  spreadCustomCurve:
++    serializedVersion: 2
++    m_Curve:
++    - serializedVersion: 3
++      time: 0
++      value: 0
++      inSlope: 0
++      outSlope: 0
++      tangentMode: 0
++      weightedMode: 0
++      inWeight: 0.33333334
++      outWeight: 0.33333334
++    m_PreInfinity: 2
++    m_PostInfinity: 2
++    m_RotationOrder: 4
++  reverbZoneMixCustomCurve:
++    serializedVersion: 2
++    m_Curve:
++    - serializedVersion: 3
++      time: 0
++      value: 1
++      inSlope: 0
++      outSlope: 0
++      tangentMode: 0
++      weightedMode: 0
++      inWeight: 0.33333334
++      outWeight: 0.33333334
++    m_PreInfinity: 2
++    m_PostInfinity: 2
++    m_RotationOrder: 4
+ --- !u!1 &7401433206013799891
+ GameObject:
+   m_ObjectHideFlags: 0
+@@ -175,11 +391,91 @@ Transform:
+   m_PrefabInstance: {fileID: 0}
+   m_PrefabAsset: {fileID: 0}
+   m_GameObject: {fileID: 7401433206013799891}
++  serializedVersion: 2
+   m_LocalRotation: {x: -0.11277241, y: -0.699467, z: 0.58981377, w: 0.3874894}
+   m_LocalPosition: {x: -0.2737937, y: 0.06736913, z: 0.02475891}
+   m_LocalScale: {x: 1, y: 1, z: 1}
+   m_ConstrainProportionsScale: 0
+   m_Children: []
+   m_Father: {fileID: 5988301984000406701}
+-  m_RootOrder: 1
+   m_LocalEulerAnglesHint: {x: 4.208, y: -92.052, z: 173.843}
++--- !u!1001 &746531109149250
++PrefabInstance:
++  m_ObjectHideFlags: 0
++  serializedVersion: 2
++  m_Modification:
++    serializedVersion: 3
++    m_TransformParent: {fileID: 5988301984000406701}
++    m_Modifications:
++    - target: {fileID: 7555282177127912198, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_Name
++      value: MuzzleFlash
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalPosition.x
++      value: -0.66
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalPosition.y
++      value: 0.018
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalPosition.z
++      value: 0.009
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalRotation.w
++      value: 0.7071068
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalRotation.x
++      value: 0
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalRotation.y
++      value: -0.7071068
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalRotation.z
++      value: -0
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalEulerAnglesHint.x
++      value: 0
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalEulerAnglesHint.y
++      value: 0
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalEulerAnglesHint.z
++      value: 0
++      objectReference: {fileID: 0}
++    m_RemovedComponents: []
++    m_RemovedGameObjects: []
++    m_AddedGameObjects: []
++    m_AddedComponents: []
++  m_SourcePrefab: {fileID: 100100000, guid: c14af62d6d592da42840ff67bcbe9f5e, type: 3}
++--- !u!198 &5497403875212304683 stripped
++ParticleSystem:
++  m_CorrespondingSourceObject: {fileID: 5496666735084944233, guid: c14af62d6d592da42840ff67bcbe9f5e,
++    type: 3}
++  m_PrefabInstance: {fileID: 746531109149250}
++  m_PrefabAsset: {fileID: 0}
++--- !u!4 &7595417003442889325 stripped
++Transform:
++  m_CorrespondingSourceObject: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++    type: 3}
++  m_PrefabInstance: {fileID: 746531109149250}
++  m_PrefabAsset: {fileID: 0}
+diff --git a/Assets/backpack/Prefabs/Weapons/Weapon_Rifle_Real_Wood.prefab b/Assets/backpack/Prefabs/Weapons/Weapon_Rifle_Real_Wood.prefab
+index 1c0053b1..b4122c38 100644
+--- a/Assets/backpack/Prefabs/Weapons/Weapon_Rifle_Real_Wood.prefab
++++ b/Assets/backpack/Prefabs/Weapons/Weapon_Rifle_Real_Wood.prefab
+@@ -1,5 +1,67 @@
+ %YAML 1.1
+ %TAG !u! tag:unity3d.com,2011:
++--- !u!1 &1370412472604450527
++GameObject:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  serializedVersion: 6
++  m_Component:
++  - component: {fileID: 3907112332349227862}
++  m_Layer: 0
++  m_Name: Muzzle
++  m_TagString: Untagged
++  m_Icon: {fileID: 0}
++  m_NavMeshLayer: 0
++  m_StaticEditorFlags: 0
++  m_IsActive: 1
++--- !u!4 &3907112332349227862
++Transform:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 1370412472604450527}
++  serializedVersion: 2
++  m_LocalRotation: {x: 0, y: -0.7071068, z: -0, w: 0.7071068}
++  m_LocalPosition: {x: -0.66, y: 0.018, z: 0.009}
++  m_LocalScale: {x: 1, y: 1, z: 1}
++  m_ConstrainProportionsScale: 0
++  m_Children: []
++  m_Father: {fileID: 5988301984000406701}
++  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
++--- !u!1 &2160755223085421227
++GameObject:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  serializedVersion: 6
++  m_Component:
++  - component: {fileID: 3356325142800550552}
++  m_Layer: 0
++  m_Name: ShellEjectionPoint
++  m_TagString: Untagged
++  m_Icon: {fileID: 0}
++  m_NavMeshLayer: 0
++  m_StaticEditorFlags: 0
++  m_IsActive: 1
++--- !u!4 &3356325142800550552
++Transform:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 2160755223085421227}
++  serializedVersion: 2
++  m_LocalRotation: {x: 0, y: 0.7071068, z: 0.7071068, w: 0}
++  m_LocalPosition: {x: -0.32, y: 0.04, z: 0.025}
++  m_LocalScale: {x: 1, y: 1, z: 1}
++  m_ConstrainProportionsScale: 0
++  m_Children: []
++  m_Father: {fileID: 5988301984000406701}
++  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+ --- !u!1 &3497947706990844140
+ GameObject:
+   m_ObjectHideFlags: 0
+@@ -25,13 +87,13 @@ Transform:
+   m_PrefabInstance: {fileID: 0}
+   m_PrefabAsset: {fileID: 0}
+   m_GameObject: {fileID: 3497947706990844140}
++  serializedVersion: 2
+   m_LocalRotation: {x: 0.4992058, y: -0.4964855, z: -0.50346637, w: 0.50081676}
+   m_LocalPosition: {x: -0.1281484, y: 0.019099323, z: 0.04974045}
+   m_LocalScale: {x: 1, y: 1, z: 0.999999}
+   m_ConstrainProportionsScale: 0
+   m_Children: []
+   m_Father: {fileID: 5988301984000406701}
+-  m_RootOrder: 0
+   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+ --- !u!33 &1749237121178811312
+ MeshFilter:
+@@ -83,6 +145,37 @@ MeshRenderer:
+   m_SortingLayer: 0
+   m_SortingOrder: 0
+   m_AdditionalVertexStreams: {fileID: 0}
++--- !u!1 &3929540195380907340
++GameObject:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  serializedVersion: 6
++  m_Component:
++  - component: {fileID: 8838823742085978266}
++  m_Layer: 0
++  m_Name: MagazineSocket
++  m_TagString: Untagged
++  m_Icon: {fileID: 0}
++  m_NavMeshLayer: 0
++  m_StaticEditorFlags: 0
++  m_IsActive: 1
++--- !u!4 &8838823742085978266
++Transform:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 3929540195380907340}
++  serializedVersion: 2
++  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
++  m_LocalPosition: {x: -0.32, y: 0.005, z: -0.09}
++  m_LocalScale: {x: 1, y: 1, z: 1}
++  m_ConstrainProportionsScale: 0
++  m_Children: []
++  m_Father: {fileID: 5988301984000406701}
++  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+ --- !u!1 &6363982380300774935
+ GameObject:
+   m_ObjectHideFlags: 0
+@@ -93,6 +186,8 @@ GameObject:
+   m_Component:
+   - component: {fileID: 5988301984000406701}
+   - component: {fileID: 6093372014242540394}
++  - component: {fileID: 205515069808649827}
++  - component: {fileID: 4144394417372639462}
+   m_Layer: 0
+   m_Name: Weapon_Rifle_Real_Wood
+   m_TagString: Untagged
+@@ -107,6 +202,7 @@ Transform:
+   m_PrefabInstance: {fileID: 0}
+   m_PrefabAsset: {fileID: 0}
+   m_GameObject: {fileID: 6363982380300774935}
++  serializedVersion: 2
+   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+   m_LocalPosition: {x: 0, y: 0, z: 0}
+   m_LocalScale: {x: 1, y: 1, z: 1}
+@@ -114,8 +210,11 @@ Transform:
+   m_Children:
+   - {fileID: 4252479338407626706}
+   - {fileID: 7675421235036811142}
++  - {fileID: 3907112332349227862}
++  - {fileID: 3356325142800550552}
++  - {fileID: 8838823742085978266}
++  - {fileID: 1700170353949256274}
+   m_Father: {fileID: 0}
+-  m_RootOrder: 0
+   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+ --- !u!1773428102 &6093372014242540394
+ ParentConstraint:
+@@ -152,6 +251,123 @@ ParentConstraint:
+     weight: 0
+   - sourceTransform: {fileID: 0}
+     weight: 0
++--- !u!114 &205515069808649827
++MonoBehaviour:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 6363982380300774935}
++  m_Enabled: 1
++  m_EditorHideFlags: 0
++  m_Script: {fileID: 11500000, guid: 1e117ffd4c1242b5b20e52a55a33f71a, type: 3}
++  m_Name:
++  m_EditorClassIdentifier:
++  muzzle: {fileID: 3907112332349227862}
++  supportHandGrip: {fileID: 7675421235036811142}
++  shellEjectionPoint: {fileID: 3356325142800550552}
++  magazineSocket: {fileID: 8838823742085978266}
++  muzzleFlash: {fileID: 3655466984562616596}
++  shellEjectionEffect: {fileID: 0}
++  shotAudioSource: {fileID: 4144394417372639462}
++  shotAudioClip: {fileID: 0}
++  magazineModelPrefab: {fileID: 0}
++--- !u!82 &4144394417372639462
++AudioSource:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 6363982380300774935}
++  m_Enabled: 1
++  serializedVersion: 4
++  OutputAudioMixerGroup: {fileID: 0}
++  m_audioClip: {fileID: 0}
++  m_PlayOnAwake: 0
++  m_Volume: 0.7
++  m_Pitch: 1
++  Loop: 0
++  Mute: 0
++  Spatialize: 0
++  SpatializePostEffects: 0
++  Priority: 128
++  DopplerLevel: 1
++  MinDistance: 3
++  MaxDistance: 25
++  Pan2D: 0
++  rolloffMode: 0
++  BypassEffects: 0
++  BypassListenerEffects: 0
++  BypassReverbZones: 0
++  rolloffCustomCurve:
++    serializedVersion: 2
++    m_Curve:
++    - serializedVersion: 3
++      time: 0
++      value: 1
++      inSlope: 0
++      outSlope: 0
++      tangentMode: 0
++      weightedMode: 0
++      inWeight: 0.33333334
++      outWeight: 0.33333334
++    - serializedVersion: 3
++      time: 1
++      value: 0
++      inSlope: 0
++      outSlope: 0
++      tangentMode: 0
++      weightedMode: 0
++      inWeight: 0.33333334
++      outWeight: 0.33333334
++    m_PreInfinity: 2
++    m_PostInfinity: 2
++    m_RotationOrder: 4
++  panLevelCustomCurve:
++    serializedVersion: 2
++    m_Curve:
++    - serializedVersion: 3
++      time: 0
++      value: 1
++      inSlope: 0
++      outSlope: 0
++      tangentMode: 0
++      weightedMode: 0
++      inWeight: 0.33333334
++      outWeight: 0.33333334
++    m_PreInfinity: 2
++    m_PostInfinity: 2
++    m_RotationOrder: 4
++  spreadCustomCurve:
++    serializedVersion: 2
++    m_Curve:
++    - serializedVersion: 3
++      time: 0
++      value: 0
++      inSlope: 0
++      outSlope: 0
++      tangentMode: 0
++      weightedMode: 0
++      inWeight: 0.33333334
++      outWeight: 0.33333334
++    m_PreInfinity: 2
++    m_PostInfinity: 2
++    m_RotationOrder: 4
++  reverbZoneMixCustomCurve:
++    serializedVersion: 2
++    m_Curve:
++    - serializedVersion: 3
++      time: 0
++      value: 1
++      inSlope: 0
++      outSlope: 0
++      tangentMode: 0
++      weightedMode: 0
++      inWeight: 0.33333334
++      outWeight: 0.33333334
++    m_PreInfinity: 2
++    m_PostInfinity: 2
++    m_RotationOrder: 4
+ --- !u!1 &7401433206013799891
+ GameObject:
+   m_ObjectHideFlags: 0
+@@ -175,11 +391,91 @@ Transform:
+   m_PrefabInstance: {fileID: 0}
+   m_PrefabAsset: {fileID: 0}
+   m_GameObject: {fileID: 7401433206013799891}
++  serializedVersion: 2
+   m_LocalRotation: {x: -0.11277241, y: -0.699467, z: 0.58981377, w: 0.3874894}
+   m_LocalPosition: {x: -0.2737937, y: 0.06736913, z: 0.02475891}
+   m_LocalScale: {x: 1, y: 1, z: 1}
+   m_ConstrainProportionsScale: 0
+   m_Children: []
+   m_Father: {fileID: 5988301984000406701}
+-  m_RootOrder: 1
+   m_LocalEulerAnglesHint: {x: 4.208, y: -92.052, z: 173.843}
++--- !u!1001 &9147592180392809085
++PrefabInstance:
++  m_ObjectHideFlags: 0
++  serializedVersion: 2
++  m_Modification:
++    serializedVersion: 3
++    m_TransformParent: {fileID: 5988301984000406701}
++    m_Modifications:
++    - target: {fileID: 7555282177127912198, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_Name
++      value: MuzzleFlash
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalPosition.x
++      value: -0.66
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalPosition.y
++      value: 0.018
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalPosition.z
++      value: 0.009
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalRotation.w
++      value: 0.7071068
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalRotation.x
++      value: 0
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalRotation.y
++      value: -0.7071068
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalRotation.z
++      value: -0
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalEulerAnglesHint.x
++      value: 0
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalEulerAnglesHint.y
++      value: 0
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalEulerAnglesHint.z
++      value: 0
++      objectReference: {fileID: 0}
++    m_RemovedComponents: []
++    m_RemovedGameObjects: []
++    m_AddedGameObjects: []
++    m_AddedComponents: []
++  m_SourcePrefab: {fileID: 100100000, guid: c14af62d6d592da42840ff67bcbe9f5e, type: 3}
++--- !u!4 &1700170353949256274 stripped
++Transform:
++  m_CorrespondingSourceObject: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++    type: 3}
++  m_PrefabInstance: {fileID: 9147592180392809085}
++  m_PrefabAsset: {fileID: 0}
++--- !u!198 &3655466984562616596 stripped
++ParticleSystem:
++  m_CorrespondingSourceObject: {fileID: 5496666735084944233, guid: c14af62d6d592da42840ff67bcbe9f5e,
++    type: 3}
++  m_PrefabInstance: {fileID: 9147592180392809085}
++  m_PrefabAsset: {fileID: 0}
+diff --git a/Assets/backpack/Prefabs/Weapons/Weapon_Rifle_Style_Metal.prefab b/Assets/backpack/Prefabs/Weapons/Weapon_Rifle_Style_Metal.prefab
+index e8dc73c3..38d3f527 100644
+--- a/Assets/backpack/Prefabs/Weapons/Weapon_Rifle_Style_Metal.prefab
++++ b/Assets/backpack/Prefabs/Weapons/Weapon_Rifle_Style_Metal.prefab
+@@ -1,5 +1,67 @@
+ %YAML 1.1
+ %TAG !u! tag:unity3d.com,2011:
++--- !u!1 &592032468665996458
++GameObject:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  serializedVersion: 6
++  m_Component:
++  - component: {fileID: 3125459470511139915}
++  m_Layer: 0
++  m_Name: ShellEjectionPoint
++  m_TagString: Untagged
++  m_Icon: {fileID: 0}
++  m_NavMeshLayer: 0
++  m_StaticEditorFlags: 0
++  m_IsActive: 1
++--- !u!4 &3125459470511139915
++Transform:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 592032468665996458}
++  serializedVersion: 2
++  m_LocalRotation: {x: 0, y: 0.7071068, z: 0.7071068, w: 0}
++  m_LocalPosition: {x: -0.32, y: 0.04, z: 0.025}
++  m_LocalScale: {x: 1, y: 1, z: 1}
++  m_ConstrainProportionsScale: 0
++  m_Children: []
++  m_Father: {fileID: 5988301984000406701}
++  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
++--- !u!1 &694888237508237425
++GameObject:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  serializedVersion: 6
++  m_Component:
++  - component: {fileID: 5632400809960579851}
++  m_Layer: 0
++  m_Name: MagazineSocket
++  m_TagString: Untagged
++  m_Icon: {fileID: 0}
++  m_NavMeshLayer: 0
++  m_StaticEditorFlags: 0
++  m_IsActive: 1
++--- !u!4 &5632400809960579851
++Transform:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 694888237508237425}
++  serializedVersion: 2
++  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
++  m_LocalPosition: {x: -0.32, y: 0.005, z: -0.09}
++  m_LocalScale: {x: 1, y: 1, z: 1}
++  m_ConstrainProportionsScale: 0
++  m_Children: []
++  m_Father: {fileID: 5988301984000406701}
++  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+ --- !u!1 &3497947706990844140
+ GameObject:
+   m_ObjectHideFlags: 0
+@@ -25,13 +87,13 @@ Transform:
+   m_PrefabInstance: {fileID: 0}
+   m_PrefabAsset: {fileID: 0}
+   m_GameObject: {fileID: 3497947706990844140}
++  serializedVersion: 2
+   m_LocalRotation: {x: 0.4992058, y: -0.4964855, z: -0.50346637, w: 0.50081676}
+   m_LocalPosition: {x: -0.1281484, y: 0.019099323, z: 0.04974045}
+   m_LocalScale: {x: 1, y: 1, z: 0.999999}
+   m_ConstrainProportionsScale: 0
+   m_Children: []
+   m_Father: {fileID: 5988301984000406701}
+-  m_RootOrder: 0
+   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+ --- !u!33 &1749237121178811312
+ MeshFilter:
+@@ -93,6 +155,8 @@ GameObject:
+   m_Component:
+   - component: {fileID: 5988301984000406701}
+   - component: {fileID: 6093372014242540394}
++  - component: {fileID: 4080546092979771241}
++  - component: {fileID: 8465781629410709850}
+   m_Layer: 0
+   m_Name: Weapon_Rifle_Style_Metal
+   m_TagString: Untagged
+@@ -107,6 +171,7 @@ Transform:
+   m_PrefabInstance: {fileID: 0}
+   m_PrefabAsset: {fileID: 0}
+   m_GameObject: {fileID: 6363982380300774935}
++  serializedVersion: 2
+   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+   m_LocalPosition: {x: 0, y: 0, z: 0}
+   m_LocalScale: {x: 1, y: 1, z: 1}
+@@ -114,8 +179,11 @@ Transform:
+   m_Children:
+   - {fileID: 4252479338407626706}
+   - {fileID: 7675421235036811142}
++  - {fileID: 8546812247760480444}
++  - {fileID: 3125459470511139915}
++  - {fileID: 5632400809960579851}
++  - {fileID: 7871644044703157478}
+   m_Father: {fileID: 0}
+-  m_RootOrder: 0
+   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+ --- !u!1773428102 &6093372014242540394
+ ParentConstraint:
+@@ -152,6 +220,123 @@ ParentConstraint:
+     weight: 0
+   - sourceTransform: {fileID: 0}
+     weight: 0
++--- !u!114 &4080546092979771241
++MonoBehaviour:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 6363982380300774935}
++  m_Enabled: 1
++  m_EditorHideFlags: 0
++  m_Script: {fileID: 11500000, guid: 1e117ffd4c1242b5b20e52a55a33f71a, type: 3}
++  m_Name:
++  m_EditorClassIdentifier:
++  muzzle: {fileID: 8546812247760480444}
++  supportHandGrip: {fileID: 7675421235036811142}
++  shellEjectionPoint: {fileID: 3125459470511139915}
++  magazineSocket: {fileID: 5632400809960579851}
++  muzzleFlash: {fileID: 5196967854038552480}
++  shellEjectionEffect: {fileID: 0}
++  shotAudioSource: {fileID: 8465781629410709850}
++  shotAudioClip: {fileID: 0}
++  magazineModelPrefab: {fileID: 0}
++--- !u!82 &8465781629410709850
++AudioSource:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 6363982380300774935}
++  m_Enabled: 1
++  serializedVersion: 4
++  OutputAudioMixerGroup: {fileID: 0}
++  m_audioClip: {fileID: 0}
++  m_PlayOnAwake: 0
++  m_Volume: 0.7
++  m_Pitch: 1
++  Loop: 0
++  Mute: 0
++  Spatialize: 0
++  SpatializePostEffects: 0
++  Priority: 128
++  DopplerLevel: 1
++  MinDistance: 3
++  MaxDistance: 25
++  Pan2D: 0
++  rolloffMode: 0
++  BypassEffects: 0
++  BypassListenerEffects: 0
++  BypassReverbZones: 0
++  rolloffCustomCurve:
++    serializedVersion: 2
++    m_Curve:
++    - serializedVersion: 3
++      time: 0
++      value: 1
++      inSlope: 0
++      outSlope: 0
++      tangentMode: 0
++      weightedMode: 0
++      inWeight: 0.33333334
++      outWeight: 0.33333334
++    - serializedVersion: 3
++      time: 1
++      value: 0
++      inSlope: 0
++      outSlope: 0
++      tangentMode: 0
++      weightedMode: 0
++      inWeight: 0.33333334
++      outWeight: 0.33333334
++    m_PreInfinity: 2
++    m_PostInfinity: 2
++    m_RotationOrder: 4
++  panLevelCustomCurve:
++    serializedVersion: 2
++    m_Curve:
++    - serializedVersion: 3
++      time: 0
++      value: 1
++      inSlope: 0
++      outSlope: 0
++      tangentMode: 0
++      weightedMode: 0
++      inWeight: 0.33333334
++      outWeight: 0.33333334
++    m_PreInfinity: 2
++    m_PostInfinity: 2
++    m_RotationOrder: 4
++  spreadCustomCurve:
++    serializedVersion: 2
++    m_Curve:
++    - serializedVersion: 3
++      time: 0
++      value: 0
++      inSlope: 0
++      outSlope: 0
++      tangentMode: 0
++      weightedMode: 0
++      inWeight: 0.33333334
++      outWeight: 0.33333334
++    m_PreInfinity: 2
++    m_PostInfinity: 2
++    m_RotationOrder: 4
++  reverbZoneMixCustomCurve:
++    serializedVersion: 2
++    m_Curve:
++    - serializedVersion: 3
++      time: 0
++      value: 1
++      inSlope: 0
++      outSlope: 0
++      tangentMode: 0
++      weightedMode: 0
++      inWeight: 0.33333334
++      outWeight: 0.33333334
++    m_PreInfinity: 2
++    m_PostInfinity: 2
++    m_RotationOrder: 4
+ --- !u!1 &7401433206013799891
+ GameObject:
+   m_ObjectHideFlags: 0
+@@ -175,11 +360,122 @@ Transform:
+   m_PrefabInstance: {fileID: 0}
+   m_PrefabAsset: {fileID: 0}
+   m_GameObject: {fileID: 7401433206013799891}
++  serializedVersion: 2
+   m_LocalRotation: {x: -0.11277241, y: -0.699467, z: 0.58981377, w: 0.3874894}
+   m_LocalPosition: {x: -0.2737937, y: 0.06736913, z: 0.02475891}
+   m_LocalScale: {x: 1, y: 1, z: 1}
+   m_ConstrainProportionsScale: 0
+   m_Children: []
+   m_Father: {fileID: 5988301984000406701}
+-  m_RootOrder: 1
+   m_LocalEulerAnglesHint: {x: 4.208, y: -92.052, z: 173.843}
++--- !u!1 &9188569048744119259
++GameObject:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  serializedVersion: 6
++  m_Component:
++  - component: {fileID: 8546812247760480444}
++  m_Layer: 0
++  m_Name: Muzzle
++  m_TagString: Untagged
++  m_Icon: {fileID: 0}
++  m_NavMeshLayer: 0
++  m_StaticEditorFlags: 0
++  m_IsActive: 1
++--- !u!4 &8546812247760480444
++Transform:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 9188569048744119259}
++  serializedVersion: 2
++  m_LocalRotation: {x: 0, y: -0.7071068, z: -0, w: 0.7071068}
++  m_LocalPosition: {x: -0.66, y: 0.018, z: 0.009}
++  m_LocalScale: {x: 1, y: 1, z: 1}
++  m_ConstrainProportionsScale: 0
++  m_Children: []
++  m_Father: {fileID: 5988301984000406701}
++  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
++--- !u!1001 &312793463238571209
++PrefabInstance:
++  m_ObjectHideFlags: 0
++  serializedVersion: 2
++  m_Modification:
++    serializedVersion: 3
++    m_TransformParent: {fileID: 5988301984000406701}
++    m_Modifications:
++    - target: {fileID: 7555282177127912198, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_Name
++      value: MuzzleFlash
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalPosition.x
++      value: -0.66
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalPosition.y
++      value: 0.018
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalPosition.z
++      value: 0.009
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalRotation.w
++      value: 0.7071068
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalRotation.x
++      value: 0
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalRotation.y
++      value: -0.7071068
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalRotation.z
++      value: -0
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalEulerAnglesHint.x
++      value: 0
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalEulerAnglesHint.y
++      value: 0
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalEulerAnglesHint.z
++      value: 0
++      objectReference: {fileID: 0}
++    m_RemovedComponents: []
++    m_RemovedGameObjects: []
++    m_AddedGameObjects: []
++    m_AddedComponents: []
++  m_SourcePrefab: {fileID: 100100000, guid: c14af62d6d592da42840ff67bcbe9f5e, type: 3}
++--- !u!198 &5196967854038552480 stripped
++ParticleSystem:
++  m_CorrespondingSourceObject: {fileID: 5496666735084944233, guid: c14af62d6d592da42840ff67bcbe9f5e,
++    type: 3}
++  m_PrefabInstance: {fileID: 312793463238571209}
++  m_PrefabAsset: {fileID: 0}
++--- !u!4 &7871644044703157478 stripped
++Transform:
++  m_CorrespondingSourceObject: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++    type: 3}
++  m_PrefabInstance: {fileID: 312793463238571209}
++  m_PrefabAsset: {fileID: 0}
+diff --git a/Assets/backpack/Prefabs/Weapons/Weapon_Rifle_Style_Wood.prefab b/Assets/backpack/Prefabs/Weapons/Weapon_Rifle_Style_Wood.prefab
+index aa264f7a..b8304bc1 100644
+--- a/Assets/backpack/Prefabs/Weapons/Weapon_Rifle_Style_Wood.prefab
++++ b/Assets/backpack/Prefabs/Weapons/Weapon_Rifle_Style_Wood.prefab
+@@ -1,5 +1,67 @@
+ %YAML 1.1
+ %TAG !u! tag:unity3d.com,2011:
++--- !u!1 &208674472163348442
++GameObject:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  serializedVersion: 6
++  m_Component:
++  - component: {fileID: 7186611726796310780}
++  m_Layer: 0
++  m_Name: ShellEjectionPoint
++  m_TagString: Untagged
++  m_Icon: {fileID: 0}
++  m_NavMeshLayer: 0
++  m_StaticEditorFlags: 0
++  m_IsActive: 1
++--- !u!4 &7186611726796310780
++Transform:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 208674472163348442}
++  serializedVersion: 2
++  m_LocalRotation: {x: 0, y: 0.7071068, z: 0.7071068, w: 0}
++  m_LocalPosition: {x: -0.32, y: 0.04, z: 0.025}
++  m_LocalScale: {x: 1, y: 1, z: 1}
++  m_ConstrainProportionsScale: 0
++  m_Children: []
++  m_Father: {fileID: 5988301984000406701}
++  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
++--- !u!1 &2519212177877320315
++GameObject:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  serializedVersion: 6
++  m_Component:
++  - component: {fileID: 6699815411382270933}
++  m_Layer: 0
++  m_Name: MagazineSocket
++  m_TagString: Untagged
++  m_Icon: {fileID: 0}
++  m_NavMeshLayer: 0
++  m_StaticEditorFlags: 0
++  m_IsActive: 1
++--- !u!4 &6699815411382270933
++Transform:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 2519212177877320315}
++  serializedVersion: 2
++  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
++  m_LocalPosition: {x: -0.32, y: 0.005, z: -0.09}
++  m_LocalScale: {x: 1, y: 1, z: 1}
++  m_ConstrainProportionsScale: 0
++  m_Children: []
++  m_Father: {fileID: 5988301984000406701}
++  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+ --- !u!1 &3497947706990844140
+ GameObject:
+   m_ObjectHideFlags: 0
+@@ -25,13 +87,13 @@ Transform:
+   m_PrefabInstance: {fileID: 0}
+   m_PrefabAsset: {fileID: 0}
+   m_GameObject: {fileID: 3497947706990844140}
++  serializedVersion: 2
+   m_LocalRotation: {x: 0.4992058, y: -0.4964855, z: -0.50346637, w: 0.50081676}
+   m_LocalPosition: {x: -0.1281484, y: 0.019099323, z: 0.04974045}
+   m_LocalScale: {x: 1, y: 1, z: 0.999999}
+   m_ConstrainProportionsScale: 0
+   m_Children: []
+   m_Father: {fileID: 5988301984000406701}
+-  m_RootOrder: 0
+   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+ --- !u!33 &1749237121178811312
+ MeshFilter:
+@@ -83,6 +145,37 @@ MeshRenderer:
+   m_SortingLayer: 0
+   m_SortingOrder: 0
+   m_AdditionalVertexStreams: {fileID: 0}
++--- !u!1 &4773007920343106470
++GameObject:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  serializedVersion: 6
++  m_Component:
++  - component: {fileID: 1885447640288071287}
++  m_Layer: 0
++  m_Name: Muzzle
++  m_TagString: Untagged
++  m_Icon: {fileID: 0}
++  m_NavMeshLayer: 0
++  m_StaticEditorFlags: 0
++  m_IsActive: 1
++--- !u!4 &1885447640288071287
++Transform:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 4773007920343106470}
++  serializedVersion: 2
++  m_LocalRotation: {x: 0, y: -0.7071068, z: -0, w: 0.7071068}
++  m_LocalPosition: {x: -0.66, y: 0.018, z: 0.009}
++  m_LocalScale: {x: 1, y: 1, z: 1}
++  m_ConstrainProportionsScale: 0
++  m_Children: []
++  m_Father: {fileID: 5988301984000406701}
++  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+ --- !u!1 &6363982380300774935
+ GameObject:
+   m_ObjectHideFlags: 0
+@@ -93,6 +186,8 @@ GameObject:
+   m_Component:
+   - component: {fileID: 5988301984000406701}
+   - component: {fileID: 6093372014242540394}
++  - component: {fileID: 193427247875744353}
++  - component: {fileID: 1142472434262294553}
+   m_Layer: 0
+   m_Name: Weapon_Rifle_Style_Wood
+   m_TagString: Untagged
+@@ -107,6 +202,7 @@ Transform:
+   m_PrefabInstance: {fileID: 0}
+   m_PrefabAsset: {fileID: 0}
+   m_GameObject: {fileID: 6363982380300774935}
++  serializedVersion: 2
+   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+   m_LocalPosition: {x: 0, y: 0, z: 0}
+   m_LocalScale: {x: 1, y: 1, z: 1}
+@@ -114,8 +210,11 @@ Transform:
+   m_Children:
+   - {fileID: 4252479338407626706}
+   - {fileID: 7675421235036811142}
++  - {fileID: 1885447640288071287}
++  - {fileID: 7186611726796310780}
++  - {fileID: 6699815411382270933}
++  - {fileID: 3441301369008598350}
+   m_Father: {fileID: 0}
+-  m_RootOrder: 0
+   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+ --- !u!1773428102 &6093372014242540394
+ ParentConstraint:
+@@ -152,6 +251,123 @@ ParentConstraint:
+     weight: 0
+   - sourceTransform: {fileID: 0}
+     weight: 0
++--- !u!114 &193427247875744353
++MonoBehaviour:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 6363982380300774935}
++  m_Enabled: 1
++  m_EditorHideFlags: 0
++  m_Script: {fileID: 11500000, guid: 1e117ffd4c1242b5b20e52a55a33f71a, type: 3}
++  m_Name:
++  m_EditorClassIdentifier:
++  muzzle: {fileID: 1885447640288071287}
++  supportHandGrip: {fileID: 7675421235036811142}
++  shellEjectionPoint: {fileID: 7186611726796310780}
++  magazineSocket: {fileID: 6699815411382270933}
++  muzzleFlash: {fileID: 784489914759441928}
++  shellEjectionEffect: {fileID: 0}
++  shotAudioSource: {fileID: 1142472434262294553}
++  shotAudioClip: {fileID: 0}
++  magazineModelPrefab: {fileID: 0}
++--- !u!82 &1142472434262294553
++AudioSource:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 6363982380300774935}
++  m_Enabled: 1
++  serializedVersion: 4
++  OutputAudioMixerGroup: {fileID: 0}
++  m_audioClip: {fileID: 0}
++  m_PlayOnAwake: 0
++  m_Volume: 0.7
++  m_Pitch: 1
++  Loop: 0
++  Mute: 0
++  Spatialize: 0
++  SpatializePostEffects: 0
++  Priority: 128
++  DopplerLevel: 1
++  MinDistance: 3
++  MaxDistance: 25
++  Pan2D: 0
++  rolloffMode: 0
++  BypassEffects: 0
++  BypassListenerEffects: 0
++  BypassReverbZones: 0
++  rolloffCustomCurve:
++    serializedVersion: 2
++    m_Curve:
++    - serializedVersion: 3
++      time: 0
++      value: 1
++      inSlope: 0
++      outSlope: 0
++      tangentMode: 0
++      weightedMode: 0
++      inWeight: 0.33333334
++      outWeight: 0.33333334
++    - serializedVersion: 3
++      time: 1
++      value: 0
++      inSlope: 0
++      outSlope: 0
++      tangentMode: 0
++      weightedMode: 0
++      inWeight: 0.33333334
++      outWeight: 0.33333334
++    m_PreInfinity: 2
++    m_PostInfinity: 2
++    m_RotationOrder: 4
++  panLevelCustomCurve:
++    serializedVersion: 2
++    m_Curve:
++    - serializedVersion: 3
++      time: 0
++      value: 1
++      inSlope: 0
++      outSlope: 0
++      tangentMode: 0
++      weightedMode: 0
++      inWeight: 0.33333334
++      outWeight: 0.33333334
++    m_PreInfinity: 2
++    m_PostInfinity: 2
++    m_RotationOrder: 4
++  spreadCustomCurve:
++    serializedVersion: 2
++    m_Curve:
++    - serializedVersion: 3
++      time: 0
++      value: 0
++      inSlope: 0
++      outSlope: 0
++      tangentMode: 0
++      weightedMode: 0
++      inWeight: 0.33333334
++      outWeight: 0.33333334
++    m_PreInfinity: 2
++    m_PostInfinity: 2
++    m_RotationOrder: 4
++  reverbZoneMixCustomCurve:
++    serializedVersion: 2
++    m_Curve:
++    - serializedVersion: 3
++      time: 0
++      value: 1
++      inSlope: 0
++      outSlope: 0
++      tangentMode: 0
++      weightedMode: 0
++      inWeight: 0.33333334
++      outWeight: 0.33333334
++    m_PreInfinity: 2
++    m_PostInfinity: 2
++    m_RotationOrder: 4
+ --- !u!1 &7401433206013799891
+ GameObject:
+   m_ObjectHideFlags: 0
+@@ -175,11 +391,91 @@ Transform:
+   m_PrefabInstance: {fileID: 0}
+   m_PrefabAsset: {fileID: 0}
+   m_GameObject: {fileID: 7401433206013799891}
++  serializedVersion: 2
+   m_LocalRotation: {x: -0.11277241, y: -0.699467, z: 0.58981377, w: 0.3874894}
+   m_LocalPosition: {x: -0.2737937, y: 0.06736913, z: 0.02475891}
+   m_LocalScale: {x: 1, y: 1, z: 1}
+   m_ConstrainProportionsScale: 0
+   m_Children: []
+   m_Father: {fileID: 5988301984000406701}
+-  m_RootOrder: 1
+   m_LocalEulerAnglesHint: {x: 4.208, y: -92.052, z: 173.843}
++--- !u!1001 &5092168399999292769
++PrefabInstance:
++  m_ObjectHideFlags: 0
++  serializedVersion: 2
++  m_Modification:
++    serializedVersion: 3
++    m_TransformParent: {fileID: 5988301984000406701}
++    m_Modifications:
++    - target: {fileID: 7555282177127912198, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_Name
++      value: MuzzleFlash
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalPosition.x
++      value: -0.66
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalPosition.y
++      value: 0.018
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalPosition.z
++      value: 0.009
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalRotation.w
++      value: 0.7071068
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalRotation.x
++      value: 0
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalRotation.y
++      value: -0.7071068
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalRotation.z
++      value: -0
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalEulerAnglesHint.x
++      value: 0
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalEulerAnglesHint.y
++      value: 0
++      objectReference: {fileID: 0}
++    - target: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++        type: 3}
++      propertyPath: m_LocalEulerAnglesHint.z
++      value: 0
++      objectReference: {fileID: 0}
++    m_RemovedComponents: []
++    m_RemovedGameObjects: []
++    m_AddedGameObjects: []
++    m_AddedComponents: []
++  m_SourcePrefab: {fileID: 100100000, guid: c14af62d6d592da42840ff67bcbe9f5e, type: 3}
++--- !u!198 &784489914759441928 stripped
++ParticleSystem:
++  m_CorrespondingSourceObject: {fileID: 5496666735084944233, guid: c14af62d6d592da42840ff67bcbe9f5e,
++    type: 3}
++  m_PrefabInstance: {fileID: 5092168399999292769}
++  m_PrefabAsset: {fileID: 0}
++--- !u!4 &3441301369008598350 stripped
++Transform:
++  m_CorrespondingSourceObject: {fileID: 7596149197380778031, guid: c14af62d6d592da42840ff67bcbe9f5e,
++    type: 3}
++  m_PrefabInstance: {fileID: 5092168399999292769}
++  m_PrefabAsset: {fileID: 0}
+diff --git a/Assets/backpack/Scripts/Core/Tags/BackpackTagConstants.cs b/Assets/backpack/Scripts/Core/Tags/BackpackTagConstants.cs
+index a9d3ffcb..271fd034 100644
+--- a/Assets/backpack/Scripts/Core/Tags/BackpackTagConstants.cs
++++ b/Assets/backpack/Scripts/Core/Tags/BackpackTagConstants.cs
+@@ -14,5 +14,8 @@ namespace RPG4.Backpack.Core
+         public static readonly BackpackTag EquipmentFragment = new BackpackTag("FragmentTags.Equip.EquipmentFragment"); // 装备容器。
+ 
+         public static readonly BackpackTag WeaponDefinition = new BackpackTag("FragmentTags.Equip.WeaponDefinition"); // 武器动作定义。
++        public static readonly BackpackTag AmmoDefinition = new BackpackTag("FragmentTags.Equip.AmmoDefinition");
++        public static readonly BackpackTag MagazineDefinition = new BackpackTag("FragmentTags.Equip.MagazineDefinition");
++        public static readonly BackpackTag AttachmentDefinition = new BackpackTag("FragmentTags.Equip.AttachmentDefinition");
+     }
+ }
+diff --git a/Assets/backpack/Scripts/Equipment/Weapon.cs b/Assets/backpack/Scripts/Equipment/Weapon.cs
+index 867d6402..91f0cf99 100644
+--- a/Assets/backpack/Scripts/Equipment/Weapon.cs
++++ b/Assets/backpack/Scripts/Equipment/Weapon.cs
+@@ -4,22 +4,37 @@ using RPG4.Backpack.Items;
+ 
+ namespace RPG4.Backpack.Equipment
+ {
+-    /// <summary>一次成功射击的记录；Sustained 表示本次按住中的后续发。</summary>
++    /// <summary>成功扣弹时固定的本发参数；不从后续可变配件或弹匣反查。</summary>
+     public readonly struct WeaponShot
+     {
+-        public WeaponShot(ulong sequence, double time, bool sustained)
++        public WeaponShot(ItemId weaponId, ulong sequence, double time, bool sustained,
++            BackpackTag ammoType, BackpackTag ammoItemType, float damage, float range,
++            float spreadDegrees, int pelletCount, float recoilPitch, float recoilYaw)
+         {
+-            Sequence = sequence;
+-            Time = time;
+-            Sustained = sustained;
++            WeaponId = weaponId; Sequence = sequence; Time = time; Sustained = sustained;
++            AmmoType = ammoType; AmmoItemType = ammoItemType; Damage = damage; Range = range;
++            SpreadDegrees = spreadDegrees; PelletCount = pelletCount;
++            RecoilPitch = recoilPitch; RecoilYaw = recoilYaw;
+         }
+-
++        public ItemId WeaponId { get; }
+         public ulong Sequence { get; }
+         public double Time { get; }
+         public bool Sustained { get; }
++        public BackpackTag AmmoType { get; }
++        public BackpackTag AmmoItemType { get; }
++        public float Damage { get; }
++        public float Range { get; }
++        public float SpreadDegrees { get; }
++        public int PelletCount { get; }
++        public float RecoilPitch { get; }
++        public float RecoilYaw { get; }
+     }
+ 
+-    /// <summary>绑定一个物品实例的无限弹药武器。调用方每帧注入时钟和输入，不依赖角色或 Unity 时钟。</summary>
++    public enum WeaponReloadStage { None, Started, MagazineCommitted, Chambered, Completed }
++    public delegate bool SelectWeaponMagazine(out ItemId magazineId);
++    public delegate bool ExchangeWeaponMagazine(ItemId magazineId, out string error);
++
++    /// <summary>纯 C# 武器时序；弹药、耐久与序号属于物品，库存交换通过事务委托提交。</summary>
+     public sealed class Weapon
+     {
+         private bool hasFrame;
+@@ -29,13 +44,20 @@ namespace RPG4.Backpack.Equipment
+         private double reloadStartTime;
+         private bool hasShotInHold;
+         private bool commandConsumed;
+-
+-        public Weapon(RuntimeItem item)
++        private readonly ItemManifestCatalog catalog;
++        private readonly SelectWeaponMagazine selectMagazine;
++        private readonly ExchangeWeaponMagazine exchangeMagazine;
++        private ItemId selectedMagazine;
++        private bool reloadNeedsExchange;
++
++        public Weapon(RuntimeItem item, ItemManifestCatalog catalog = null,
++            SelectWeaponMagazine selectMagazine = null, ExchangeWeaponMagazine exchangeMagazine = null)
+         {
++            this.catalog = catalog;
++            this.selectMagazine = selectMagazine;
++            this.exchangeMagazine = exchangeMagazine;
+             Bind(item);
+         }
+-
+-        /// <summary>同一物品实例重建后更新引用，不重置冷却或射击历史。</summary>
+         public void Rebind(RuntimeItem item)
+         {
+             if (item == null) throw new ArgumentNullException(nameof(item));
+@@ -43,7 +65,6 @@ namespace RPG4.Backpack.Equipment
+                 throw new ArgumentException("只能重新绑定相同 ItemId 的物品。", nameof(item));
+             Bind(item);
+         }
+-
+         private void Bind(RuntimeItem item)
+         {
+             if (item == null) throw new ArgumentNullException(nameof(item));
+@@ -51,90 +72,151 @@ namespace RPG4.Backpack.Equipment
+             if (equipment == null || !equipment.FragmentTag.MatchesTagExact(FragmentTags.EquipmentFragment)
+                 || equipment.EquipmentType.IsEmpty || !equipment.EquipmentType.IsValid)
+                 throw new ArgumentException("武器物品必须有合法的 EquipmentFragment。", nameof(item));
+-
+             WeaponDefinitionFragment definition = item.GetFragment<WeaponDefinitionFragment>();
+-            if (definition == null)
+-                throw new ArgumentException("武器物品缺少 WeaponDefinitionFragment。", nameof(item));
++            if (definition == null || item.WeaponState == null)
++                throw new ArgumentException("武器物品缺少武器定义或持久状态。", nameof(item));
+             definition.Validate();
+             Item = item;
+             Definition = definition;
+         }
+-
+         public RuntimeItem Item { get; private set; }
+         public ItemId ItemId => Item.ItemId;
+         public WeaponDefinitionFragment Definition { get; private set; }
+         public WeaponShot LastShot { get; private set; }
+         public bool IsReloading { get; private set; }
+         public float ReloadPhase { get; private set; }
++        public WeaponReloadStage ReloadStage { get; private set; }
++        public string LastReloadError { get; private set; }
+         public bool ReloadCompletedThisFrame { get; private set; }
+         public bool ShotStartedThisFrame { get; private set; }
+-        public bool CanReload => hasFrame && !commandConsumed && !IsReloading;
+-
+-        /// <summary>每帧只接收第一次调用；新帧的时钟必须有限、非负且不后退。</summary>
++        public bool HasUsableRound => Item.WeaponState.CanConsumeShot(catalog)
++            && TryGetParameters(out _, out _, out _, out _, out _);
++        public bool CanReload => hasFrame && !commandConsumed && !IsReloading
++            && (CanSelectMagazine(out _) || CanChamber());
++        private bool CanSelectMagazine(out ItemId magazineId)
++        {
++            magazineId = ItemId.None;
++            return selectMagazine != null && exchangeMagazine != null && selectMagazine(out magazineId);
++        }
++        private bool CanChamber() => Item.WeaponState.ChamberAmmo.IsEmpty
++            && Item.WeaponState.Magazine?.MagazineState != null
++            && Item.WeaponState.Magazine.MagazineState.Rounds.Count > 0;
+         public void BeginFrame(double now, int frameId, bool triggerHeld)
+         {
+             if (hasFrame && this.frameId == frameId) return;
+             if (double.IsNaN(now) || double.IsInfinity(now) || now < 0d || (hasFrame && now < this.now))
+                 throw new ArgumentOutOfRangeException(nameof(now), "武器时钟必须有限、非负且不后退。");
+-
+             hasFrame = true;
+             this.frameId = frameId;
+             this.now = now;
+             commandConsumed = false;
+-            ShotStartedThisFrame = false;
+-            ReloadCompletedThisFrame = false;
++            ShotStartedThisFrame = ReloadCompletedThisFrame = false;
+             if (!triggerHeld) hasShotInHold = false;
+             if (!IsReloading) return;
+-
+             double elapsed = now - reloadStartTime;
+             ReloadPhase = (float)Math.Min(1d, elapsed / Definition.ReloadDuration);
++            if (ReloadStage == WeaponReloadStage.Started && ReloadPhase >= Definition.ReloadCommitFraction)
++            {
++                if (reloadNeedsExchange && !exchangeMagazine(selectedMagazine, out string error))
++                {
++                    LastReloadError = error;
++                    CancelAction();
++                    return;
++                }
++                ReloadStage = WeaponReloadStage.MagazineCommitted;
++            }
++            if (ReloadStage == WeaponReloadStage.MagazineCommitted && ReloadPhase >= Definition.ChamberFraction)
++            {
++                if (Item.WeaponState.ChamberAmmo.IsEmpty && !Item.WeaponState.TryChamberRound(catalog, out string error))
++                {
++                    LastReloadError = error;
++                    CancelAction();
++                    return;
++                }
++                ReloadStage = WeaponReloadStage.Chambered;
++            }
+             if (elapsed < Definition.ReloadDuration) return;
+             IsReloading = false;
++            ReloadStage = WeaponReloadStage.Completed;
+             ReloadCompletedThisFrame = true;
+         }
+-
+-        /// <summary>纯查询；按下事件的连续射击重置只在成功射击时消费。</summary>
+-        public bool CanFire(bool pressed, bool held)
++        public bool CanFire(bool pressed, bool held) => hasFrame && !commandConsumed && !IsReloading
++            && now >= nextShotTime && HasUsableRound
++            && (Definition.FireMode == WeaponFireMode.SemiAutomatic ? pressed : pressed || held);
++        private bool TryGetParameters(out AmmoDefinitionFragment ammo, out float damage,
++            out float spread, out float recoil, out float interval)
+         {
+-            return hasFrame && !commandConsumed && !IsReloading && now >= nextShotTime
+-                && (Definition.FireMode == WeaponFireMode.SemiAutomatic ? pressed : pressed || held);
++            ammo = null;
++            damage = Definition.BaseDamage; spread = Definition.SpreadAngle;
++            recoil = 1f; interval = Definition.ShotInterval;
++            BackpackTag type = Item.WeaponState.ChamberAmmo;
++            if (catalog == null || !catalog.TryGet(type, out ItemManifest manifest)) return false;
++            ammo = manifest.GetFragment<AmmoDefinitionFragment>();
++            if (ammo == null) return false;
++            foreach (RuntimeItem attachment in Item.WeaponState.Attachments.Values)
++            {
++                AttachmentDefinitionFragment modifier = attachment.GetFragment<AttachmentDefinitionFragment>();
++                if (modifier == null) continue;
++                damage *= modifier.DamageMultiplier;
++                spread *= modifier.SpreadMultiplier;
++                recoil *= modifier.RecoilMultiplier;
++                interval *= modifier.ShotIntervalMultiplier;
++            }
++            damage *= ammo.DamageMultiplier;
++            spread *= ammo.SpreadMultiplier;
++            return Finite(damage) && damage >= 0f && Finite(spread) && spread >= 0f && spread <= 90f
++                && Finite(recoil) && recoil >= 0f && Finite(interval) && interval > 0f
++                && Finite(Definition.RecoilPitch * recoil) && Finite(Definition.RecoilYaw * recoil);
+         }
+-
++        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
+         public bool TryFire(bool pressed, bool held, out WeaponShot shot)
+         {
+             shot = default;
+-            if (!CanFire(pressed, held)) return false;
+-            if (LastShot.Sequence == ulong.MaxValue)
+-                throw new OverflowException("武器射击序号已耗尽。");
+-
+-            shot = new WeaponShot(LastShot.Sequence + 1, now, held && !pressed && hasShotInHold);
++            if (!CanFire(pressed, held)
++                || !TryGetParameters(out _, out float damage, out float spread, out float recoil, out float interval))
++                return false;
++            float range = Definition.Range;
++            float recoilPitch = Definition.RecoilPitch * recoil, recoilYaw = Definition.RecoilYaw * recoil;
++            // 物品 Changed 会同步通知外部；先占用命令，阻止监听器重入重复扣弹。
++            commandConsumed = true;
++            if (!Item.WeaponState.TryConsumeShot(catalog, out BackpackTag ammoItemType,
++                out AmmoDefinitionFragment ammo, out ulong sequence, out _))
++            {
++                commandConsumed = false;
++                return false;
++            }
++            shot = new WeaponShot(ItemId, sequence, now, held && !pressed && hasShotInHold,
++                ammo.AmmoType, ammoItemType, damage, range,
++                spread, ammo.PelletCount,
++                recoilPitch, recoilYaw);
+             LastShot = shot;
+             hasShotInHold = held;
+-            nextShotTime = now + Definition.EffectiveShotInterval;
+-            ShotStartedThisFrame = true;
+-            commandConsumed = true;
++            nextShotTime = now + interval;
++            ShotStartedThisFrame = commandConsumed = true;
+             return true;
+         }
+-
+         public bool TryBeginReload()
+         {
+             if (!CanReload) return false;
++            reloadNeedsExchange = CanSelectMagazine(out selectedMagazine);
+             IsReloading = true;
++            ReloadStage = WeaponReloadStage.Started;
++            LastReloadError = null;
+             ReloadPhase = 0f;
+             reloadStartTime = now;
+             hasShotInHold = false;
+             commandConsumed = true;
+             return true;
+         }
+-
+-        /// <summary>保留冷却和射击历史；取消后本帧不再消费命令。</summary>
++        /// <summary>提交之前不碰库存；提交之后不回滚真实弹匣及膛内状态。</summary>
+         public void CancelAction()
+         {
+             IsReloading = false;
+             ReloadPhase = 0f;
++            ReloadStage = WeaponReloadStage.None;
++            selectedMagazine = ItemId.None;
+             hasShotInHold = false;
+-            ShotStartedThisFrame = false;
+-            ReloadCompletedThisFrame = false;
++            ShotStartedThisFrame = ReloadCompletedThisFrame = false;
+             commandConsumed = true;
+         }
+     }
+diff --git a/Assets/backpack/Scripts/Inventory/InventoryContainer.cs b/Assets/backpack/Scripts/Inventory/InventoryContainer.cs
+index 52f77a24..e8c168dd 100644
+--- a/Assets/backpack/Scripts/Inventory/InventoryContainer.cs
++++ b/Assets/backpack/Scripts/Inventory/InventoryContainer.cs
+@@ -8,7 +8,7 @@ namespace RPG4.Backpack.Inventory
+     public delegate bool ItemAdmissionHandler(RuntimeItem item, out string error);
+ 
+     /// <summary>库存真相源：统一承担物品集合、格子映射与读写查询，唯一权威地持有「物品集合 + 上左位置 + 格子占用」，两份状态只在提交阶段同源写入、不存在中间态；物品下标按 ItemId 排序并按需缓存，不另建权威数据；堆叠数不缓存（唯一来源 RuntimeItem.StackCount）；纯 C# 数据层，不引用 UI / MonoBehaviour / 网络；按主线程单线程访问、不加锁，查询复用轮次戳缓冲做到零 GC；变更成功后经 F6 事件总线广播（source 为容器实例）。</summary>
+-    public sealed class InventoryContainer
++    public sealed partial class InventoryContainer
+     {
+         public const int NoIndex = InventoryPlacement.NoIndex; // 无效索引常量。
+ 
+@@ -443,6 +443,7 @@ namespace RPG4.Backpack.Inventory
+         /// <summary>在指定落点放置物品（不做堆叠合并）：要求物品不在容器内且落点整块为空；失败时容器与物品状态完全不变；已入包物品移动须使用 TryMoveItem。</summary>
+         public bool TryPlaceItem(RuntimeItem item, int startIndex, out string error)
+         {
++            if (item != null && item.RootOwner != null) return Reject(out error, nameof(TryPlaceItem), "物品已归其他根容器所有，请使用转移事务。");
+             if (!CanInsert(item, nameof(TryPlaceItem), out error)) return false;
+ 
+             GridCoord dimensions = ResolveItemDimensions(item);
+@@ -479,12 +480,12 @@ namespace RPG4.Backpack.Inventory
+             if (previous.UpperLeftIndex == upperLeftIndex) return true;
+ 
+             ClearCells(previous);
+-            placements.Remove(item);
++            RemovePlacement(item);
+             CommitPlacement(item, upperLeftIndex, previous.Dimensions);
+             if (confirm != null && !confirm(item.ItemId, out error))
+             {
+                 ClearCells(placements[item]);
+-                placements.Remove(item);
++                RemovePlacement(item);
+                 CommitPlacement(item, previous.UpperLeftIndex, previous.Dimensions);
+                 confirm(ItemId.None, out _);
+                 return false;
+@@ -507,6 +508,7 @@ namespace RPG4.Backpack.Inventory
+                 return Reject(out error, nameof(TrySwapItems), "来源与目标必须是各自库存内的不同物品。");
+             bool same = ReferenceEquals(this, destination);
+             if (!destination.CanAcceptItem(source, out error) || !CanAcceptItem(target, out error)) return false;
++            if (!same && (!destination.CanInsertGraph(source, target, out error) || !CanInsertGraph(target, source, out error))) return false;
+             bool changesLayout = !same && SingleCellItems != destination.SingleCellItems;
+             GridCoord sourceSize = changesLayout ? destination.ResolveItemDimensions(source) : first.Dimensions;
+             GridCoord targetSize = changesLayout ? ResolveItemDimensions(target) : second.Dimensions;
+@@ -529,8 +531,8 @@ namespace RPG4.Backpack.Inventory
+ 
+             ClearCells(first);
+             destination.ClearCells(second);
+-            placements.Remove(source);
+-            destination.placements.Remove(target);
++            RemovePlacement(source);
++            destination.RemovePlacement(target);
+             CommitPlacement(target, targetIndex, targetSize);
+             destination.CommitPlacement(source, sourceIndex, sourceSize);
+             itemIndicesDirty = destination.itemIndicesDirty = true;
+@@ -541,8 +543,8 @@ namespace RPG4.Backpack.Inventory
+             {
+                 ClearCells(placements[target]);
+                 destination.ClearCells(destination.placements[source]);
+-                placements.Remove(target);
+-                destination.placements.Remove(source);
++                RemovePlacement(target);
++                destination.RemovePlacement(source);
+                 CommitPlacement(source, first.UpperLeftIndex, first.Dimensions);
+                 destination.CommitPlacement(target, second.UpperLeftIndex, second.Dimensions);
+                 itemIndicesDirty = destination.itemIndicesDirty = true;
+@@ -604,7 +606,7 @@ namespace RPG4.Backpack.Inventory
+             }
+ 
+             ClearCells(placement);
+-            placements.Remove(item);
++            RemovePlacement(item);
+             BumpRevision();
+             error = null;
+             NotifyItemRemoved(item);
+@@ -615,6 +617,7 @@ namespace RPG4.Backpack.Inventory
+         public bool TryStackItem(RuntimeItem target, RuntimeItem incoming, out int movedCount, out string error)
+         {
+             movedCount = 0;
++            if (incoming != null && incoming.RootOwner != null) return Reject(out error, nameof(TryStackItem), "来源物品已有根容器。");
+ 
+             if (target == null || incoming == null) return Reject(out error, nameof(TryStackItem), "物品为空。");
+             if (ReferenceEquals(target, incoming)) return Reject(out error, nameof(TryStackItem), "目标与来源是同一个物品实例。");
+@@ -711,7 +714,7 @@ namespace RPG4.Backpack.Inventory
+                 if (movedCount == sourceCount)
+                 {
+                     ClearCells(sourcePlacement);
+-                    placements.Remove(source);
++                    RemovePlacement(source);
+                     itemIndicesDirty = true;
+                 }
+                 else source.SetStackCount(sourceCount - movedCount);
+@@ -756,6 +759,7 @@ namespace RPG4.Backpack.Inventory
+ 
+         internal bool TryReceiveItem(RuntimeItem item, CommitConfirmHandler confirm, out string error)
+         {
++            if (item != null && item.RootOwner != null) return Reject(out error, nameof(TryReceiveItem), "物品已有根容器，请使用转移事务。");
+             if (!TryPlanReceiveItem(item, nameof(TryReceiveItem), out ReceivePlan plan, out error)) return false;
+             int previousCount = item.StackCount;
+             CommitReceiveItem(item, plan);
+@@ -765,7 +769,7 @@ namespace RPG4.Backpack.Inventory
+                 if (plan.PlaceIndex != NoIndex)
+                 {
+                     ClearCells(placements[item]);
+-                    placements.Remove(item);
++                    RemovePlacement(item);
+                 }
+                 for (int i = 0; i < plan.StackSteps.Length; i++)
+                 {
+@@ -835,7 +839,7 @@ namespace RPG4.Backpack.Inventory
+             if (!confirmed)
+             {
+                 destination.ClearCells(destination.placements[splitItem]);
+-                destination.placements.Remove(splitItem);
++                destination.RemovePlacement(splitItem);
+                 source.SetStackCount(previousStack);
+                 itemIndicesDirty = true;
+                 destination.itemIndicesDirty = true;
+@@ -872,7 +876,7 @@ namespace RPG4.Backpack.Inventory
+ 
+             // 双方静默提交：此段无回调，不能通过两个公开增删操作拼接转移。
+             ClearCells(placement);
+-            placements.Remove(item);
++            RemovePlacement(item);
+             int previousStack = item.StackCount;
+             destination.CommitReceiveItem(item, plan);
+             itemIndicesDirty = true;
+@@ -886,7 +890,7 @@ namespace RPG4.Backpack.Inventory
+                 if (plan.PlaceIndex != NoIndex)
+                 {
+                     destination.ClearCells(destination.placements[item]);
+-                    destination.placements.Remove(item);
++                    destination.RemovePlacement(item);
+                 }
+                 for (int i = 0; i < plan.StackSteps.Length; i++)
+                 {
+@@ -1025,8 +1029,10 @@ namespace RPG4.Backpack.Inventory
+         private bool CanInsert(RuntimeItem item, string operation, out string error)
+         {
+             if (item == null) return Reject(out error, operation, "物品为空。");
++            if (item.ParentItem != null) return Reject(out error, operation, "已安装子物品不可作为根条目插入。");
+             if (!CanAcceptItem(item, out error)) return false;
+             if (placements.ContainsKey(item)) return Reject(out error, operation, "物品已在容器中。");
++            if (!CanInsertGraph(item, null, out error)) return false;
+             if (item.ItemId.IsValid && TryGetItemById(item.ItemId, out _))
+             {
+                 return Reject(out error, operation, $"容器中已有标识为 {item.ItemId} 的另一物品实例。");
+@@ -1053,9 +1059,23 @@ namespace RPG4.Backpack.Inventory
+         {
+             InventoryPlacement placement = new InventoryPlacement(item, startIndex, dimensions);
+             placements.Add(item, placement);
++            item.RootOwner = this;
++            item.Changed += OnItemStateChanged;
+             FillCells(startIndex, dimensions, placement);
+         }
+ 
++        private void RemovePlacement(RuntimeItem item)
++        {
++            if (!placements.Remove(item)) return;
++            item.Changed -= OnItemStateChanged;
++            item.RootOwner = null;
++        }
++
++        private void OnItemStateChanged(RuntimeItem item)
++        {
++            if (Contains(item)) BumpRevision();
++        }
++
+         /// <summary>把放置记录占用的格子清空（用记录内冻结的尺寸，不重新向物品取尺寸）。</summary>
+         private void ClearCells(InventoryPlacement placement)
+         {
+diff --git a/Assets/backpack/Scripts/Inventory/InventoryHostCore.cs b/Assets/backpack/Scripts/Inventory/InventoryHostCore.cs
+index 02344764..d2876af3 100644
+--- a/Assets/backpack/Scripts/Inventory/InventoryHostCore.cs
++++ b/Assets/backpack/Scripts/Inventory/InventoryHostCore.cs
+@@ -9,7 +9,7 @@ namespace RPG4.Backpack.Inventory
+     public delegate bool CommitConfirmHandler(ItemId requiredItem, out string error);
+ 
+     /// <summary>共享库存核心：权威端执行完整意图并返回结果，纯客户端通过宿主转发；容器持有真实数据。</summary>
+-    public sealed class InventoryHostCore
++    public sealed partial class InventoryHostCore
+     {
+         public const int DefaultRows = 6; // 尺寸非法时的回退行数（与联机组件默认一致）。
+         public const int DefaultColumns = 8; // 尺寸非法时的回退列数（与联机组件默认一致）。
+diff --git a/Assets/backpack/Scripts/Items/Fragments/WeaponDefinitionFragment.cs b/Assets/backpack/Scripts/Items/Fragments/WeaponDefinitionFragment.cs
+index 26452694..fec1463a 100644
+--- a/Assets/backpack/Scripts/Items/Fragments/WeaponDefinitionFragment.cs
++++ b/Assets/backpack/Scripts/Items/Fragments/WeaponDefinitionFragment.cs
+@@ -1,4 +1,5 @@
+ using System;
++using System.Collections.Generic;
+ using RPG4.Backpack.Core;
+ using UnityEngine;
+ 
+@@ -15,10 +16,22 @@ namespace RPG4.Backpack.Items
+     public sealed class WeaponDefinitionFragment : InventoryItemFragment
+     {
+         [SerializeField] private WeaponFireMode fireMode = WeaponFireMode.Automatic;
+-        [SerializeField, Min(0f)] private float shotInterval = 0.16f;
++        [SerializeField, Min(0.01f)] private float shotInterval = 0.16f;
+         [SerializeField, Min(0.01f)] private float shotDuration = 0.24f;
+         [SerializeField, Min(0f)] private float fadeOutDuration = 0.12f;
+         [SerializeField, Min(0.01f)] private float reloadDuration = 1.6f;
++        [SerializeField] private BackpackTag ammoType;
++        [SerializeField] private BackpackTag magazineType;
++        [SerializeField, Min(0.01f)] private float maxDurability = 100f;
++        [SerializeField, Min(0f)] private float durabilityPerShot = 1f;
++        [SerializeField, Min(0f)] private float baseDamage = 20f;
++        [SerializeField, Min(0.01f)] private float range = 100f;
++        [SerializeField, Min(0f)] private float spreadAngle;
++        [SerializeField, Min(0f)] private float recoilPitch = 1f;
++        [SerializeField, Min(0f)] private float recoilYaw;
++        [SerializeField, Range(0f, 1f)] private float reloadCommitFraction = 0.6f;
++        [SerializeField, Range(0f, 1f)] private float chamberFraction = 0.9f;
++        [SerializeField] private List<WeaponAttachmentSlot> allowedAttachmentSlots = new List<WeaponAttachmentSlot> { WeaponAttachmentSlot.Muzzle };
+ 
+         public WeaponDefinitionFragment() : base(FragmentTags.WeaponDefinition) { }
+ 
+@@ -38,10 +51,43 @@ namespace RPG4.Backpack.Items
+         public float ShotDuration => shotDuration;
+         public float FadeOutDuration => fadeOutDuration;
+         public float ReloadDuration => reloadDuration;
+-        public float EffectiveShotInterval => Math.Max(shotInterval, shotDuration);
++        public float EffectiveShotInterval => shotInterval;
++        public BackpackTag AmmoType => ammoType;
++        public BackpackTag MagazineType => magazineType;
++        public float MaxDurability => maxDurability;
++        public float DurabilityPerShot => durabilityPerShot;
++        public float BaseDamage => baseDamage;
++        public float Range => range;
++        public float SpreadAngle => spreadAngle;
++        public float RecoilPitch => recoilPitch;
++        public float RecoilYaw => recoilYaw;
++        public float ReloadCommitFraction => reloadCommitFraction;
++        public float ChamberFraction => chamberFraction;
++        public IReadOnlyList<WeaponAttachmentSlot> AllowedAttachmentSlots => allowedAttachmentSlots.AsReadOnly();
+ 
+-        public override ItemFragment DeepCopy() => new WeaponDefinitionFragment(
+-            fireMode, shotInterval, shotDuration, fadeOutDuration, reloadDuration);
++        public bool AllowsSlot(WeaponAttachmentSlot slot) => allowedAttachmentSlots != null && allowedAttachmentSlots.Contains(slot);
++
++        public void ConfigureCombat(BackpackTag ammoType, BackpackTag magazineType, float baseDamage = 20f,
++            float range = 100f, float spreadAngle = 0f, float recoilPitch = 1f, float recoilYaw = 0f,
++            float maxDurability = 100f, float durabilityPerShot = 1f,
++            float reloadCommitFraction = 0.6f, float chamberFraction = 0.9f)
++        {
++            this.ammoType = ammoType; this.magazineType = magazineType;
++            this.baseDamage = baseDamage; this.range = range; this.spreadAngle = spreadAngle;
++            this.recoilPitch = recoilPitch; this.recoilYaw = recoilYaw;
++            this.maxDurability = maxDurability; this.durabilityPerShot = durabilityPerShot;
++            this.reloadCommitFraction = reloadCommitFraction; this.chamberFraction = chamberFraction;
++            Validate();
++        }
++
++        public override ItemFragment DeepCopy()
++        {
++            var copy = new WeaponDefinitionFragment(fireMode, shotInterval, shotDuration, fadeOutDuration, reloadDuration);
++            copy.ConfigureCombat(ammoType, magazineType, baseDamage, range, spreadAngle, recoilPitch, recoilYaw,
++                maxDurability, durabilityPerShot, reloadCommitFraction, chamberFraction);
++            copy.allowedAttachmentSlots = new List<WeaponAttachmentSlot>(allowedAttachmentSlots);
++            return copy;
++        }
+ 
+         /// <summary>供装备程序集在绑定运行时物品时验证定义。</summary>
+         public void Validate() => ValidateConfiguration(nameof(WeaponDefinitionFragment));
+@@ -51,10 +97,27 @@ namespace RPG4.Backpack.Items
+             ValidateExpectedTag(FragmentTags.WeaponDefinition, path);
+             if (fireMode != WeaponFireMode.Automatic && fireMode != WeaponFireMode.SemiAutomatic)
+                 throw new InvalidOperationException($"{path}.FireMode 无效。");
+-            ValidateDuration(shotInterval, 0f, path + ".ShotInterval");
++            ValidateDuration(shotInterval, 0.01f, path + ".ShotInterval");
+             ValidateDuration(shotDuration, 0.01f, path + ".ShotDuration");
+             ValidateDuration(fadeOutDuration, 0f, path + ".FadeOutDuration");
+             ValidateDuration(reloadDuration, 0.01f, path + ".ReloadDuration");
++            WeaponDefinitionValidation.Tag(ammoType, true, path + ".AmmoType");
++            WeaponDefinitionValidation.Tag(magazineType, true, path + ".MagazineType");
++            ValidateDuration(maxDurability, 0.01f, path + ".MaxDurability");
++            ValidateDuration(durabilityPerShot, 0f, path + ".DurabilityPerShot");
++            ValidateDuration(baseDamage, 0f, path + ".BaseDamage");
++            ValidateDuration(range, 0.01f, path + ".Range");
++            ValidateDuration(spreadAngle, 0f, path + ".SpreadAngle");
++            ValidateDuration(recoilPitch, 0f, path + ".RecoilPitch");
++            ValidateDuration(recoilYaw, 0f, path + ".RecoilYaw");
++            ValidateDuration(reloadCommitFraction, 0f, path + ".ReloadCommitFraction");
++            ValidateDuration(chamberFraction, 0f, path + ".ChamberFraction");
++            if (reloadCommitFraction > chamberFraction || chamberFraction > 1f || spreadAngle > 90f)
++                throw new InvalidOperationException(path + " 的换弹时点顺序或散布角无效。");
++            if (allowedAttachmentSlots == null || allowedAttachmentSlots.Count > 1)
++                throw new InvalidOperationException(path + " 的配件槽无效。");
++            foreach (WeaponAttachmentSlot slot in allowedAttachmentSlots)
++                if (slot != WeaponAttachmentSlot.Muzzle) throw new InvalidOperationException(path + " 的配件槽无效。");
+         }
+ 
+         private static void ValidateDuration(float value, float minimum, string path)
+diff --git a/Assets/backpack/Scripts/Items/Manifest/ItemManifest.cs b/Assets/backpack/Scripts/Items/Manifest/ItemManifest.cs
+index 2ba8d99a..9f23164a 100644
+--- a/Assets/backpack/Scripts/Items/Manifest/ItemManifest.cs
++++ b/Assets/backpack/Scripts/Items/Manifest/ItemManifest.cs
+@@ -122,8 +122,21 @@ namespace RPG4.Backpack.Items
+ 
+         /// <summary>用权威快照恢复运行时实例（客户端入口）：结构克隆自模板、数值来自快照且不执行任何随机化；快照数值须与模板节点一一对应并落在模板范围内，否则整体失败，不返回部分恢复的实例。</summary>
+         public bool TryRestoreRuntimeItem(RuntimeItemSnapshot snapshot, out RuntimeItem item, out string error)
++            => TryRestoreRuntimeItem(snapshot, null, out item, out error);
++
++        public bool TryRestoreRuntimeItem(RuntimeItemSnapshot snapshot, ItemManifestCatalog catalog, out RuntimeItem item, out string error)
++        {
++            int count = 0;
++            return TryRestoreTree(snapshot, catalog, 0, new HashSet<ulong>(), ref count, out item, out error);
++        }
++
++        internal bool TryRestoreTree(RuntimeItemSnapshot snapshot, ItemManifestCatalog catalog, int depth,
++            HashSet<ulong> ids, ref int count, out RuntimeItem item, out string error)
+         {
+             item = null;
++            if (depth > RuntimeItemSnapshot.MaxDepth || ++count > RuntimeItemSnapshot.MaxTreeItems
++                || (snapshot.ItemId.IsValid && !ids.Add(snapshot.ItemId.Value)) || (depth > 0 && !snapshot.ItemId.IsValid))
++            { error = "物品树超限或有重复/无效子标识。"; return false; }
+             if (!snapshot.ItemType.MatchesTagExact(itemType))
+             {
+                 error = $"快照物品类型 '{snapshot.ItemType}' 与清单类型 '{itemType}' 不一致。";
+@@ -134,7 +147,7 @@ namespace RPG4.Backpack.Items
+             try
+             {
+                 ValidateConfiguration();
+-                item = new RuntimeItem(snapshot.ItemId, itemType, CloneFragments(false, null), snapshot.StackCount);
++                item = new RuntimeItem(snapshot.ItemId, itemType, CloneFragments(false, null), snapshot.StackCount, false);
+             }
+             catch (Exception exception) when (exception is ArgumentException || exception is InvalidOperationException)
+             {
+@@ -151,10 +164,52 @@ namespace RPG4.Backpack.Items
+                 return false;
+             }
+ 
++            if (!TryRestoreItemState(item, snapshot, catalog, depth, ids, ref count, out error))
++            { item = null; return false; }
++
++            error = null;
++            return true;
++        }
++
++        private static bool TryRestoreItemState(RuntimeItem item, RuntimeItemSnapshot snapshot, ItemManifestCatalog catalog,
++            int depth, HashSet<ulong> ids, ref int count, out string error)
++        {
+             error = null;
++            if (snapshot.Version == 1)
++            {
++                // v1首次引入耐久字段时采用默认满耐久；不加载模板初始弹药。v2严格保留记录值。
++                return item.WeaponState == null || item.WeaponState.TryRestore(item.WeaponState.Definition.MaxDurability, default, 0UL, catalog, out error);
++            }
++            if ((item.WeaponState != null) != (snapshot.Weapon != null) || (item.MagazineState != null) != (snapshot.Magazine != null))
++            { error = "快照状态类型与清单不一致。"; return false; }
++            if (item.MagazineState != null && !item.MagazineState.TryRestore(snapshot.Magazine.Rounds, catalog, out error)) return false;
++            if (item.WeaponState == null) return true;
++            WeaponStateSnapshot state = snapshot.Weapon;
++            if (!item.WeaponState.TryRestore(state.Durability, state.ChamberAmmo, state.ShotSequence, catalog, out error)) return false;
++            if (state.Magazine.HasValue)
++            {
++                if (!TryRestoreChild(state.Magazine.Value, catalog, depth, ids, ref count, out RuntimeItem magazine, out error)) return false;
++                if (!item.WeaponState.IsCompatibleMagazine(magazine, catalog)) { error = "不兼容弹匣。"; return false; }
++                item.WeaponState.SetMagazine(magazine);
++            }
++            foreach (AttachmentStateSnapshot attachment in state.Attachments)
++            {
++                if (!TryRestoreChild(attachment.Item, catalog, depth, ids, ref count, out RuntimeItem child, out error)) return false;
++                if (!item.WeaponState.IsCompatibleAttachment(attachment.Slot, child)) { error = "不兼容配件。"; return false; }
++                item.WeaponState.SetAttachment(attachment.Slot, child);
++            }
+             return true;
+         }
+ 
++        private static bool TryRestoreChild(RuntimeItemSnapshot snapshot, ItemManifestCatalog catalog, int depth,
++            HashSet<ulong> ids, ref int count, out RuntimeItem item, out string error)
++        {
++            item = null;
++            if (catalog == null || !catalog.TryGet(snapshot.ItemType, out ItemManifest manifest))
++            { error = "子物品缺少目录或清单。"; return false; }
++            return manifest.TryRestoreTree(snapshot, catalog, depth + 1, ids, ref count, out item, out error);
++        }
++
+         /// <summary>按类型返回第一个匹配的片段；无匹配为 null。</summary>
+         public T GetFragment<T>() where T : ItemFragment
+         {
+@@ -200,6 +255,11 @@ namespace RPG4.Backpack.Items
+                 if (fragment == null) throw new InvalidOperationException($"{path} 为空。");
+                 fragment.ValidateConfiguration(path);
+             }
++            int stateDefinitions = 0;
++            foreach (ItemFragment fragment in fragments)
++                if (fragment is WeaponDefinitionFragment || fragment is MagazineDefinitionFragment || fragment is AttachmentDefinitionFragment) stateDefinitions++;
++            if (stateDefinitions > 1 || (stateDefinitions > 0 && (GetFragment<StackableFragment>() != null || GetFragment<AmmoDefinitionFragment>() != null)))
++                throw new InvalidOperationException("武器、弹匣、配件定义不能共存，也不能配置为堆叠物品。");
+         }
+ 
+         /// <summary>校验初始堆叠数在 1..单堆上限范围内。</summary>
+diff --git a/Assets/backpack/Scripts/Items/Runtime/RuntimeItem.cs b/Assets/backpack/Scripts/Items/Runtime/RuntimeItem.cs
+index 040ae803..8b6eae79 100644
+--- a/Assets/backpack/Scripts/Items/Runtime/RuntimeItem.cs
++++ b/Assets/backpack/Scripts/Items/Runtime/RuntimeItem.cs
+@@ -1,8 +1,11 @@
+ using System;
+ using System.Collections.Generic;
+ using System.Collections.ObjectModel;
++using System.Runtime.CompilerServices;
+ using RPG4.Backpack.Core;
+ 
++[assembly: InternalsVisibleTo("RPG4.Backpack.Inventory")]
++
+ namespace RPG4.Backpack.Items
+ {
+     /// <summary>运行时物品实例：持有标识、类型与克隆自模板的片段集合，堆叠数可变且受单堆上限约束。</summary>
+@@ -13,7 +16,7 @@ namespace RPG4.Backpack.Items
+         private int stackCount; // 当前堆叠数。
+ 
+         /// <summary>创建运行时物品实例，并校验类型标签与初始堆叠数。</summary>
+-        internal RuntimeItem(ItemId id, BackpackTag itemType, List<ItemFragment> fragments, int initialStackCount)
++        internal RuntimeItem(ItemId id, BackpackTag itemType, List<ItemFragment> fragments, int initialStackCount, bool initializeState = true)
+         {
+             if (itemType.IsEmpty || !itemType.IsValid)
+             {
+@@ -24,6 +27,8 @@ namespace RPG4.Backpack.Items
+             readOnlyFragments = this.fragments.AsReadOnly();
+             ItemId = id;
+             ItemType = itemType;
++            if (GetFragment<WeaponDefinitionFragment>() != null) WeaponState = new WeaponItemState(this);
++            if (GetFragment<MagazineDefinitionFragment>() != null) MagazineState = new MagazineItemState(this, initializeState);
+             SetStackCount(initialStackCount);
+         }
+ 
+@@ -34,6 +39,18 @@ namespace RPG4.Backpack.Items
+         public IReadOnlyList<ItemFragment> Fragments => readOnlyFragments; // 片段集合（只读）。
+ 
+         public override int StackCount => stackCount; // 当前堆叠数。
++        public WeaponItemState WeaponState { get; }
++        public MagazineItemState MagazineState { get; }
++        public RuntimeItem ParentItem { get; internal set; }
++        internal object RootOwner { get; set; }
++        public int Revision { get; private set; }
++        public event Action<RuntimeItem> Changed;
++
++        internal void NotifyStateChanged()
++        {
++            unchecked { Revision++; }
++            Changed?.Invoke(this);
++        }
+ 
+         // 占格尺寸（X 为宽、Y 为高）：读网格占位片段，缺该片段时按 1×1 处理。
+         public override GridCoord Size
+@@ -45,11 +62,11 @@ namespace RPG4.Backpack.Items
+             }
+         }
+ 
+-        public bool IsStackable => GetFragment<StackableFragment>() != null; // 是否可堆叠。
++        public bool IsStackable => WeaponState == null && MagazineState == null && GetFragment<AttachmentDefinitionFragment>() == null && GetFragment<StackableFragment>() != null; // 有状态物品不可合堆或分堆。
+ 
+         public bool IsConsumable => GetFragment<ConsumableFragment>() != null; // 是否可消耗。
+ 
+-        public int MaxStackSize => GetFragment<StackableFragment>()?.MaxStackSize ?? 1; // 单堆上限；不可堆叠时为 1。
++        public int MaxStackSize => IsStackable ? GetFragment<StackableFragment>().MaxStackSize : 1;
+ 
+         /// <summary>按类型返回第一个匹配的片段；无匹配为 null。</summary>
+         public T GetFragment<T>() where T : ItemFragment
+diff --git a/Assets/backpack/Scripts/Items/Runtime/RuntimeItemSnapshot.cs b/Assets/backpack/Scripts/Items/Runtime/RuntimeItemSnapshot.cs
+index 572fc31c..9576f928 100644
+--- a/Assets/backpack/Scripts/Items/Runtime/RuntimeItemSnapshot.cs
++++ b/Assets/backpack/Scripts/Items/Runtime/RuntimeItemSnapshot.cs
+@@ -78,7 +78,9 @@ namespace RPG4.Backpack.Items
+     /// <summary>运行时物品的完整运行时快照：身份 + 类型 + 堆叠数 + 全部可随机化数值节点的当前值；不含 Unity Object 引用与网格位置（位置由本地表现层负责），与网络框架解耦、编码由 RuntimeItemSnapshotCodec 显式完成。</summary>
+     public readonly struct RuntimeItemSnapshot : IEquatable<RuntimeItemSnapshot>
+     {
+-        public const byte CurrentVersion = 1; // 当前快照格式版本；载荷版本不匹配一律按失败处理。
++        public const byte CurrentVersion = 2;
++        public const int MaxDepth = 4;
++        public const int MaxTreeItems = 32;
+ 
+         public const int MaxNumberStateCount = 64; // 单个物品允许携带的数值节点上限（防御异常载荷导致的分配放大）。
+ 
+@@ -88,6 +90,10 @@ namespace RPG4.Backpack.Items
+ 
+         /// <summary>构造快照；数值节点数组为空、数量超限或堆叠数小于 1 时抛出异常。</summary>
+         public RuntimeItemSnapshot(ItemId itemId, BackpackTag itemType, int stackCount, FragmentNumberState[] numbers)
++            : this(itemId, itemType, stackCount, numbers, null, null) { Version = 1; }
++
++        public RuntimeItemSnapshot(ItemId itemId, BackpackTag itemType, int stackCount, FragmentNumberState[] numbers,
++            WeaponStateSnapshot weapon, MagazineStateSnapshot magazine)
+         {
+             if (numbers == null) throw new ArgumentNullException(nameof(numbers));
+             if (numbers.Length > MaxNumberStateCount)
+@@ -100,10 +106,13 @@ namespace RPG4.Backpack.Items
+                 throw new ArgumentOutOfRangeException(nameof(stackCount), stackCount, "堆叠数必须大于 0。");
+             }
+ 
+-            this.numbers = numbers;
++            this.numbers = (FragmentNumberState[])numbers.Clone();
+             ItemId = itemId;
+             ItemType = itemType;
+             StackCount = stackCount;
++            Weapon = weapon;
++            Magazine = magazine;
++            Version = CurrentVersion;
+         }
+ 
+         public ItemId ItemId { get; } // 运行时实例标识（可能为 ItemId.None，由网络层负责拒绝）。
+@@ -111,6 +120,9 @@ namespace RPG4.Backpack.Items
+         public BackpackTag ItemType { get; } // 物品类型标签（模板身份）。
+ 
+         public int StackCount { get; } // 快照时刻的堆叠数副本；唯一来源仍是 RuntimeItem.StackCount。
++        public WeaponStateSnapshot Weapon { get; }
++        public MagazineStateSnapshot Magazine { get; }
++        public byte Version { get; }
+ 
+         public IReadOnlyList<FragmentNumberState> Numbers => numbers ?? Array.Empty<FragmentNumberState>(); // 按节点坐标升序排列的数值状态，顺序与模板遍历顺序一致，供确定性比较与载荷编码使用。
+ 
+@@ -119,6 +131,7 @@ namespace RPG4.Backpack.Items
+         {
+             if (ItemId != other.ItemId || StackCount != other.StackCount) return false;
+             if (!string.Equals(ItemType.ToString(), other.ItemType.ToString(), StringComparison.Ordinal)) return false;
++            if (!Equals(Weapon, other.Weapon) || !Equals(Magazine, other.Magazine)) return false;
+ 
+             IReadOnlyList<FragmentNumberState> left = Numbers;
+             IReadOnlyList<FragmentNumberState> right = other.Numbers;
+@@ -146,6 +159,8 @@ namespace RPG4.Backpack.Items
+                 int hash = ItemId.GetHashCode();
+                 hash = (hash * 397) ^ StackCount;
+                 hash = (hash * 397) ^ ItemType.GetHashCode();
++                hash = (hash * 397) ^ (Weapon?.GetHashCode() ?? 0);
++                hash = (hash * 397) ^ (Magazine?.GetHashCode() ?? 0);
+                 IReadOnlyList<FragmentNumberState> list = Numbers;
+                 for (int i = 0; i < list.Count; i++)
+                 {
+diff --git a/Assets/backpack/Scripts/Items/Runtime/RuntimeItemSnapshotCodec.cs b/Assets/backpack/Scripts/Items/Runtime/RuntimeItemSnapshotCodec.cs
+index 8da855d4..3c3c52c9 100644
+--- a/Assets/backpack/Scripts/Items/Runtime/RuntimeItemSnapshotCodec.cs
++++ b/Assets/backpack/Scripts/Items/Runtime/RuntimeItemSnapshotCodec.cs
+@@ -6,16 +6,16 @@ using RPG4.Backpack.Core;
+ namespace RPG4.Backpack.Items
+ {
+     /// <summary>运行时数值状态的显式编解码器：把 FragmentNumberState 列表编码为定长二进制载荷（小端布局 [version:1][count:2] + 每节点 [fragmentIndex:2][modifierIndex:2][value:4]）；显式遍历而非反射、版本化且有界、不写日志也不改全局状态。</summary>
+-    public static class RuntimeItemSnapshotCodec
++    public static partial class RuntimeItemSnapshotCodec
+     {
+         public const int HeaderBytes = 3; // 载荷头长度：版本 1 字节 + 节点数量 2 字节。
+ 
+         public const int NodeBytes = 8; // 单个节点长度：片段下标 2 + Modifier 下标 2 + 数值 4。
+ 
+-        public const int MaxPayloadBytes = HeaderBytes + RuntimeItemSnapshot.MaxNumberStateCount * NodeBytes; // 允许的最大载荷长度，超过即判定为异常数据。
++        public const int MaxPayloadBytes = 65536;
+ 
+         /// <summary>从运行时物品抓取完整快照；物品为空或存在仍处于「待随机化」的数值节点时失败。</summary>
+-        public static bool TryCapture(RuntimeItem item, out RuntimeItemSnapshot snapshot, out string error)
++        private static bool TryCaptureNumbers(RuntimeItem item, out RuntimeItemSnapshot snapshot, out string error)
+         {
+             snapshot = default;
+             if (item == null)
+@@ -117,7 +117,7 @@ namespace RPG4.Backpack.Items
+             }
+ 
+             byte[] buffer = new byte[HeaderBytes + numbers.Count * NodeBytes];
+-            buffer[0] = RuntimeItemSnapshot.CurrentVersion;
++            buffer[0] = 1; // 旧的纯数值API保持v1线格式。
+             WriteUInt16(buffer, 1, (ushort)numbers.Count);
+ 
+             int offset = HeaderBytes;
+@@ -172,7 +172,7 @@ namespace RPG4.Backpack.Items
+             }
+ 
+             byte version = payload[0];
+-            if (version != RuntimeItemSnapshot.CurrentVersion)
++            if (version != 1)
+             {
+                 error = $"快照版本 {version} 不受支持（期望 {RuntimeItemSnapshot.CurrentVersion}）。";
+                 return false;
+diff --git a/Assets/backpack/Scripts/Network/Inventory/InventoryNetworkProjection.cs b/Assets/backpack/Scripts/Network/Inventory/InventoryNetworkProjection.cs
+index 2d630829..e64f0472 100644
+--- a/Assets/backpack/Scripts/Network/Inventory/InventoryNetworkProjection.cs
++++ b/Assets/backpack/Scripts/Network/Inventory/InventoryNetworkProjection.cs
+@@ -52,6 +52,7 @@ namespace RPG4.Backpack.Network
+         private readonly HashSet<ulong> liveIds = new HashSet<ulong>();
+         private readonly Dictionary<ulong, RuntimeItem> itemsById = new Dictionary<ulong, RuntimeItem>();
+         private readonly Dictionary<ulong, int> indexById = new Dictionary<ulong, int>();
++        private readonly HashSet<ulong> treeIds = new HashSet<ulong>();
+ 
+         public int ItemCount => itemsById.Count; // 上一次同步记录的权威物品数量。
+ 
+@@ -63,6 +64,7 @@ namespace RPG4.Backpack.Network
+             liveIds.Clear();
+             itemsById.Clear();
+             indexById.Clear();
++            treeIds.Clear();
+         }
+ 
+         /// <summary>按标识查找上一次同步看到的权威物品（O(1)）。</summary>
+@@ -93,7 +95,7 @@ namespace RPG4.Backpack.Network
+                 return false;
+             }
+ 
+-            if (!RuntimeItemSnapshotCodec.TryEncodeNumbers(snapshot.Numbers, out byte[] payload, out error))
++            if (!RuntimeItemSnapshotCodec.TryEncodeSnapshot(snapshot, out byte[] payload, out error))
+             {
+                 return false;
+             }
+@@ -128,13 +130,13 @@ namespace RPG4.Backpack.Network
+                 return false;
+             }
+ 
+-            if (!RuntimeItemSnapshotCodec.TryDecodeNumbers(entry.fragmentState, out FragmentNumberState[] numbers, out error))
++            if (!RuntimeItemSnapshotCodec.TryDecodeSnapshot(entry.Id, entry.Tag, entry.stackCount, entry.fragmentState,
++                out RuntimeItemSnapshot snapshot, out error))
+             {
+                 return false;
+             }
+ 
+-            RuntimeItemSnapshot snapshot = new RuntimeItemSnapshot(entry.Id, entry.Tag, entry.stackCount, numbers);
+-            if (!manifest.TryRestoreRuntimeItem(snapshot, out item, out error))
++            if (!manifest.TryRestoreRuntimeItem(snapshot, catalog, out item, out error))
+             {
+                 item = null;
+                 return false;
+@@ -164,6 +166,7 @@ namespace RPG4.Backpack.Network
+ 
+             itemsById.Clear();
+             liveIds.Clear();
++            treeIds.Clear();
+ 
+             for (int i = 0; i < orderedItems.Count; i++)
+             {
+@@ -174,6 +177,14 @@ namespace RPG4.Backpack.Network
+                     if (firstError == null) firstError = error;
+                     continue;
+                 }
++                var currentIds = new HashSet<ulong>();
++                CollectTreeIds(item, currentIds);
++                if (treeIds.Overlaps(currentIds))
++                {
++                    rejected++;
++                    if (firstError == null) firstError = "不同根物品图有重复标识。";
++                    continue;
++                }
+ 
+                 if (!container.TryGetPlacement(item, out InventoryPlacement placement))
+                 {
+@@ -191,6 +202,7 @@ namespace RPG4.Backpack.Network
+                     continue;
+                 }
+                 itemsById[entry.itemId] = item;
++                treeIds.UnionWith(currentIds);
+                 liveIds.Add(entry.itemId);
+ 
+                 if (indexById.TryGetValue(entry.itemId, out int index))
+@@ -247,6 +259,7 @@ namespace RPG4.Backpack.Network
+             firstError = null;
+             int rejected = 0;
+             destination.Clear();
++            treeIds.Clear();
+ 
+             for (int i = 0; i < source.Count; i++)
+             {
+@@ -258,7 +271,9 @@ namespace RPG4.Backpack.Network
+                     continue;
+                 }
+ 
+-                if (destination.ContainsKey(entry.itemId))
++                var currentIds = new HashSet<ulong>();
++                CollectTreeIds(item, currentIds);
++                if (destination.ContainsKey(entry.itemId) || treeIds.Overlaps(currentIds))
+                 {
+                     rejected++;
+                     if (firstError == null) firstError = "条目 " + entry.itemId + " 重复出现。";
+@@ -266,6 +281,7 @@ namespace RPG4.Backpack.Network
+                 }
+ 
+                 destination.Add(entry.itemId, item);
++                treeIds.UnionWith(currentIds);
+             }
+ 
+             return rejected;
+@@ -283,5 +299,13 @@ namespace RPG4.Backpack.Network
+                 indexById.Add(id, i);
+             }
+         }
++
++        private static void CollectTreeIds(RuntimeItem item, HashSet<ulong> ids)
++        {
++            if (item.ItemId.IsValid) ids.Add(item.ItemId.Value);
++            if (item.WeaponState == null) return;
++            if (item.WeaponState.Magazine != null) CollectTreeIds(item.WeaponState.Magazine, ids);
++            foreach (RuntimeItem child in item.WeaponState.Attachments.Values) CollectTreeIds(child, ids);
++        }
+     }
+ }
+diff --git a/Assets/backpack/Scripts/Network/Inventory/NetworkInventoryEntry.cs b/Assets/backpack/Scripts/Network/Inventory/NetworkInventoryEntry.cs
+index 206c93fc..9876e169 100644
+--- a/Assets/backpack/Scripts/Network/Inventory/NetworkInventoryEntry.cs
++++ b/Assets/backpack/Scripts/Network/Inventory/NetworkInventoryEntry.cs
+@@ -93,7 +93,7 @@ namespace RPG4.Backpack.Network
+                 return false;
+             }
+ 
+-            if (fragmentState[0] != RuntimeItemSnapshot.CurrentVersion)
++            if (fragmentState[0] != 1 && fragmentState[0] != RuntimeItemSnapshot.CurrentVersion)
+             {
+                 error = $"条目 {itemId} 的快照版本 {fragmentState[0]} 不受支持（期望 {RuntimeItemSnapshot.CurrentVersion}）。";
+                 return false;
+diff --git a/Assets/backpack/Scripts/Runtime/BackpackInventory.cs b/Assets/backpack/Scripts/Runtime/BackpackInventory.cs
+index c8eaced2..7c312a43 100644
+--- a/Assets/backpack/Scripts/Runtime/BackpackInventory.cs
++++ b/Assets/backpack/Scripts/Runtime/BackpackInventory.cs
+@@ -370,6 +370,46 @@ namespace RPG4.Backpack.Runtime
+ 
+         #region 内部辅助
+ 
++        public bool CanLoadMagazine(ItemId magazineId, ItemId ammoId, int roundCount, out string error)
++        {
++            if (!EnsureContainer(out error)) return false;
++            return core.CanLoadMagazine(magazineId, ammoId, roundCount, out error);
++        }
++
++        public bool TryLoadMagazine(ItemId magazineId, ItemId ammoId, int roundCount, out string error)
++        {
++            if (!EnsureContainer(out error)) return false;
++            return core.TryLoadMagazine(magazineId, ammoId, roundCount, out error);
++        }
++
++        public bool CanExchangeWeaponMagazine(InventoryContainer weaponContainer, ItemId weaponId,
++            ItemId magazineId, out string error)
++        {
++            if (!EnsureContainer(out error)) return false;
++            return core.CanExchangeWeaponMagazine(weaponContainer, weaponId, magazineId, out error);
++        }
++
++        public bool TryExchangeWeaponMagazine(InventoryContainer weaponContainer, ItemId weaponId,
++            ItemId magazineId, out string error)
++        {
++            if (!EnsureContainer(out error)) return false;
++            return core.TryExchangeWeaponMagazine(weaponContainer, weaponId, magazineId, out error);
++        }
++
++        public bool CanExchangeWeaponAttachment(InventoryContainer weaponContainer, ItemId weaponId,
++            WeaponAttachmentSlot slot, ItemId attachmentId, out string error)
++        {
++            if (!EnsureContainer(out error)) return false;
++            return core.CanExchangeWeaponAttachment(weaponContainer, weaponId, slot, attachmentId, out error);
++        }
++
++        public bool TryExchangeWeaponAttachment(InventoryContainer weaponContainer, ItemId weaponId,
++            WeaponAttachmentSlot slot, ItemId attachmentId, out string error)
++        {
++            if (!EnsureContainer(out error)) return false;
++            return core.TryExchangeWeaponAttachment(weaponContainer, weaponId, slot, attachmentId, out error);
++        }
++
+         /// <summary>背包写入共用的初始化守卫。</summary>
+         private bool EnsureContainer(out string error)
+         {
+diff --git a/Assets/player/player.prefab b/Assets/player/player.prefab
+index 41d12041..3bb0b1c8 100644
+--- a/Assets/player/player.prefab
++++ b/Assets/player/player.prefab
+@@ -6754,6 +6754,7 @@ GameObject:
+   - component: {fileID: 1648248644971639618}
+   - component: {fileID: 710000009}
+   - component: {fileID: 720000000}
++  - component: {fileID: 3132622325811843717}
+   m_Layer: 0
+   m_Name: player
+   m_TagString: Player
+@@ -7107,6 +7108,19 @@ MonoBehaviour:
+   - m_Rig: {fileID: 720000013}
+     m_Active: 1
+   m_Effectors: []
++--- !u!114 &3132622325811843717
++MonoBehaviour:
++  m_ObjectHideFlags: 0
++  m_CorrespondingSourceObject: {fileID: 0}
++  m_PrefabInstance: {fileID: 0}
++  m_PrefabAsset: {fileID: 0}
++  m_GameObject: {fileID: 5963844012669126346}
++  m_Enabled: 1
++  m_EditorHideFlags: 0
++  m_Script: {fileID: 11500000, guid: af26179df1734b0b9a63ded887ce2176, type: 3}
++  m_Name:
++  m_EditorClassIdentifier:
++  initialMaxHealth: 100
+ --- !u!1 &5964859506687398495
+ GameObject:
+   m_ObjectHideFlags: 0

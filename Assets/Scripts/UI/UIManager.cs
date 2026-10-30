@@ -104,6 +104,8 @@ namespace RPG4.UI
         {
             if (!isActiveAndEnabled || !Register(window)) return false;
             if (window.IsOpen) return true;
+            foreach (UIBase other in registeredWindows)
+                if (other != null && other != window && other.IsOpen && other.BlocksOtherWindows) return false;
             Transform parent = window.transform.parent;
             if ((parent != null && !parent.gameObject.activeInHierarchy) || !window.PrepareOpen()) return false;
 

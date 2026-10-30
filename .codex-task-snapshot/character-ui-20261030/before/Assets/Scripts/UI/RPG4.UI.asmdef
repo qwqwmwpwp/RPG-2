@@ -1,0 +1,9 @@
+{
+    "name": "RPG4.UI",
+    "rootNamespace": "RPG4.UI",
+    "references": [
+        "RPG4.CharacterAttributes",
+        "Unity.TextMeshPro",
+        "UnityEngine.UI"
+    ]
+}

@@ -9,19 +9,19 @@ namespace RPG4.PlayerMovement
     internal sealed class UpperBodyRootState : State
     {
         private readonly PlayerContext context;
-        private readonly PlayerWeaponPresentation presentation;
+        private readonly WeaponActionTimeline timeline;
         private bool frameAvailable;
         private bool fireArmed = true;
         private int fireRearmFrame = -1;
         internal double Now { get; private set; }
         internal bool CanAct => frameAvailable && context.CanUseWeapon;
-        internal bool AimHeld => CanAct && context.Blackboard.AimHeld;
-        internal bool ReloadPressed => CanAct && context.Blackboard.ReloadPressed && context.Weapon.CanReload;
+        internal bool AimHeld => CanAct && context.ReadState.Input.AimHeld;
+        internal bool ReloadPressed => CanAct && context.ReadState.Input.ReloadPressed && context.Weapon.CanReload;
         internal bool FireInputAvailable => CanAct && fireArmed && Time.frameCount > fireRearmFrame;
-        internal bool FireHeld => FireInputAvailable && context.Blackboard.FireHeld;
-        internal bool FirePressed => FireInputAvailable && context.Blackboard.FirePressed;
+        internal bool FireHeld => FireInputAvailable && context.ReadState.Input.FireHeld;
+        internal bool FirePressed => FireInputAvailable && context.ReadState.Input.FirePressed;
         internal bool IsReloading => context.Weapon != null && context.Weapon.IsReloading;
-        internal WeaponActionSnapshot Action => presentation.Action;
+        internal WeaponActionSnapshot Action => timeline.Action;
         internal NormalState Normal { get; }
         internal AimState Aim { get; }
         internal AttackState Attack { get; }
@@ -29,7 +29,7 @@ namespace RPG4.PlayerMovement
         internal UpperBodyRootState(HierarchicalStateMachine machine, PlayerContext context) : base(machine)
         {
             this.context = context;
-            presentation = new PlayerWeaponPresentation(context);
+            timeline = new WeaponActionTimeline();
             Normal = new NormalState(machine, this);
             Aim = new AimState(machine, this);
             Attack = new AttackState(machine, this, context);
@@ -43,17 +43,17 @@ namespace RPG4.PlayerMovement
         {
             Now = now;
             frameAvailable = deltaTime > 0f && context.CanUseWeapon
-                && !context.Blackboard.WeaponCancellationRequested;
+                && !context.ReadState.Weapon.WeaponCancellationRequested;
             if (!frameAvailable) CancelWeaponAction();
             else
             {
-                if (Time.frameCount > fireRearmFrame && !context.Blackboard.FireHeld) fireArmed = true;
+                if (Time.frameCount > fireRearmFrame && !context.ReadState.Input.FireHeld) fireArmed = true;
                 context.Weapon.BeginFrame(now, Time.frameCount, FireHeld);
-                presentation.AdvanceAction(now);
+                timeline.Advance(context.Weapon, now, Time.frameCount);
             }
         }
-        internal void AdvanceAction() => presentation.AdvanceAction(Now);
-        internal void ClearAction() => presentation.ClearAction();
+        internal void AdvanceAction() => timeline.Advance(context.Weapon, Now, Time.frameCount);
+        internal void ClearAction() => timeline.ClearAction();
         private void RequireRelease()
         {
             fireArmed = false;
@@ -70,7 +70,7 @@ namespace RPG4.PlayerMovement
         internal void BeginReload()
         {
             RequireRelease();
-            presentation.Cancel();
+            timeline.ClearAction();
             if (CanAct) context.Weapon.TryBeginReload();
         }
         internal void TickReload()
@@ -82,26 +82,20 @@ namespace RPG4.PlayerMovement
         {
             RequireRelease();
             context.Weapon?.CancelAction();
-            presentation.Cancel();
-            // 换弹素材尾事件可能被完成/中断/站蹲切换跳过，明确恢复右手挂点。
-            Animator animator = context.Content.Animator;
-            if (animator != null)
-                animator.gameObject.SendMessage("SwitchSocketByString", "To_Hand_R_Socket",
-                    SendMessageOptions.DontRequireReceiver);
+            timeline.ClearAction();
+            context.Intents.RecordEvent(PlayerEventKind.WeaponCancelled);
         }
-        internal void ApplyLayerWeight() => presentation.ApplyLayerWeight();
-        internal void SyncPresentation() => presentation.Sync();
+
         internal void CancelWeaponAction()
         {
             frameAvailable = false;
             RequireRelease();
             context.Weapon?.CancelAction();
-            presentation.Cancel();
+            timeline.ClearAction();
             context.Intents.RecordWeapon(new UpperBodyDemand(false, false, false, false,
                 context.Data.Exploration.MoveSpeed, 1f), default, 0f);
             context.Intents.ClearWeaponInput();
             context.Intents.AcknowledgeWeaponCancellation();
-            presentation.ApplyLayerWeight();
         }
         protected override void OnExit() => CancelWeaponAction();
     }

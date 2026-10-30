@@ -64,3 +64,17 @@ MonoBehaviour:
         shotDuration: 0.25
         fadeOutDuration: 0.12
         reloadDuration: 1.6
+        ammoType:
+          name: GameItems.Ammo.Rifle
+        magazineType:
+          name: GameItems.Magazines.Rifle
+        maxDurability: 100
+        durabilityPerShot: 1
+        baseDamage: 20
+        range: 100
+        spreadAngle: 0
+        recoilPitch: 1
+        recoilYaw: 0
+        reloadCommitFraction: 0.6
+        chamberFraction: 0.9
+        allowedAttachmentSlots: 00000000

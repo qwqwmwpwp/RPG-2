@@ -7,17 +7,21 @@ namespace RPG4.PlayerMovement
     internal sealed class LocomotionIntentProcessor
     {
         private readonly PlayerContext context;
-        internal LocomotionIntentProcessor(PlayerContext context) { this.context = context; }
+        private readonly PlayerBlackboard blackboard;
+        internal LocomotionIntentProcessor(PlayerContext context, PlayerBlackboard blackboard)
+        {
+            this.context = context;
+            this.blackboard = blackboard;
+        }
 
         internal void Resolve(bool physicallyCrouched, bool canStand)
         {
-            PlayerBlackboard blackboard = context.Blackboard;
             blackboard.PhysicallyCrouched = physicallyCrouched;
             blackboard.CanStand = canStand;
             bool canMove = blackboard.CanMove && Time.deltaTime > 0f;
             bool crouched = !canMove ? physicallyCrouched : blackboard.CrouchHeld
                 || (physicallyCrouched && !canStand);
-            UpperBodyDemand demand = context.WeaponDemand;
+            UpperBodyDemand demand = blackboard.WeaponDemand;
             float speed = demand.MoveSpeed;
             if (crouched) speed = Mathf.Min(speed, context.Data.Crouch.MoveSpeed);
             Vector2 move = canMove ? Vector2.ClampMagnitude(blackboard.Move, 1f) : Vector2.zero;
@@ -31,18 +35,18 @@ namespace RPG4.PlayerMovement
 
         internal void RefreshAvailability()
         {
-            if (context.Blackboard.CanMove) return;
-            LocomotionPlan plan = context.Plan;
-            context.Blackboard.Plan = new LocomotionPlan(false, context.Blackboard.PhysicallyCrouched,
-                false, Vector2.zero, context.Blackboard.ViewYaw, plan.MoveSpeed, plan.AnimationSpeed);
+            if (blackboard.CanMove) return;
+            LocomotionPlan plan = blackboard.Plan;
+            blackboard.Plan = new LocomotionPlan(false, blackboard.PhysicallyCrouched,
+                false, Vector2.zero, blackboard.ViewYaw, plan.MoveSpeed, plan.AnimationSpeed);
         }
         internal void RecordPosture(bool physicallyCrouched, bool canStand)
         {
-            context.Blackboard.PhysicallyCrouched = physicallyCrouched;
-            context.Blackboard.CanStand = canStand;
-            if (!physicallyCrouched || context.Plan.Crouched) return;
-            LocomotionPlan plan = context.Plan;
-            context.Blackboard.Plan = new LocomotionPlan(plan.CanMove, true, plan.Strafe, plan.Move,
+            blackboard.PhysicallyCrouched = physicallyCrouched;
+            blackboard.CanStand = canStand;
+            if (!physicallyCrouched || blackboard.Plan.Crouched) return;
+            LocomotionPlan plan = blackboard.Plan;
+            blackboard.Plan = new LocomotionPlan(plan.CanMove, true, plan.Strafe, plan.Move,
                 plan.ViewYaw, Mathf.Min(plan.MoveSpeed, context.Data.Crouch.MoveSpeed), plan.AnimationSpeed);
         }
     }
