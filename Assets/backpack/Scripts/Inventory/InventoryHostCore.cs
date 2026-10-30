@@ -251,7 +251,7 @@ namespace RPG4.Backpack.Inventory
 
             if (CommitConfirm != null && !CommitConfirm(item.ItemId, out error))
             {
-                item.SetStackCount(previousStack);
+                Container.SetItemStack(item, previousStack);
                 CommitConfirm(ItemId.None, out _);
                 return false;
             }

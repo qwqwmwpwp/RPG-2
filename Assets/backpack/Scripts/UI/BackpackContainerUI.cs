@@ -11,6 +11,7 @@ namespace RPG4.Backpack.UI
 {
     /// <summary>单个背包容器的可复用显示组件：显式绑定来源，生成格子并显示物品。只读取库存；窗口、玩家输入与物品操作由宿主负责。</summary>
     [DisallowMultipleComponent]
+    [DefaultExecutionOrder(190)]
     [RequireComponent(typeof(RectTransform))]
     public class BackpackContainerUI : MonoBehaviour
     {
@@ -144,6 +145,11 @@ namespace RPG4.Backpack.UI
             public bool ClearStackDisplay(ItemId id) => stackDisplayOverrides.Remove(id);
 
             /// <summary>清除全部显示数量覆盖。</summary>
+            public void CollectStackDisplayIds(ISet<ItemId> destination)
+            {
+                foreach (ItemId id in stackDisplayOverrides.Keys) destination.Add(id);
+            }
+
             public void ClearAllStackDisplays() => stackDisplayOverrides.Clear();
 
             /// <summary>设置携带期间隐藏的物品。</summary>
@@ -199,6 +205,7 @@ namespace RPG4.Backpack.UI
             public readonly List<GridDisplayItem> displayItems = new List<GridDisplayItem>(); // 本帧参与排布的展示项。
             public readonly List<ItemId> obsolete = new List<ItemId>(); // 本帧须回收的物品框标识。
             public readonly Dictionary<ItemId, RuntimeItem> itemsById = new Dictionary<ItemId, RuntimeItem>(); // 标识 → 运行时物品。
+            public readonly Dictionary<ItemId, int> quantities = new Dictionary<ItemId, int>();
             public readonly Dictionary<ItemId, ItemWidget> widgets = new Dictionary<ItemId, ItemWidget>(); // 标识 → 物品框视图。
             public readonly StringBuilder overflowMessage = new StringBuilder(); // 溢出文本拼装缓冲。
 
@@ -207,6 +214,7 @@ namespace RPG4.Backpack.UI
             {
                 displayItems.Clear();
                 itemsById.Clear();
+                quantities.Clear();
             }
 
             /// <summary>取物品框视图；未创建或已被回收时返回 false。</summary>
@@ -216,6 +224,7 @@ namespace RPG4.Backpack.UI
         /// <summary>单个物品的视图引用集合：根节点与预制体上的物品框视图。</summary>
         private sealed class ItemWidget
         {
+            public ItemId id; // 当前物品标识，避免每次刷新重写对象名称。
             public GameObject root; // 物品框根节点（物品预制体实例）。
             public BackpackItemUI view; // 根节点上的物品框视图。
         }
@@ -231,6 +240,19 @@ namespace RPG4.Backpack.UI
         private RectTransform rectTransform;
         private InventoryGridLayout layout;
         private EventSubscription dataSubscription;
+        private EventSubscription itemSubscription;
+        private readonly HashSet<ItemId> dirtyItems = new HashSet<ItemId>();
+        private readonly HashSet<ItemId> localDirtyItems = new HashSet<ItemId>();
+        private readonly HashSet<ItemId> refreshItems = new HashSet<ItemId>();
+        private readonly HashSet<ItemId> dataItems = new HashSet<ItemId>();
+        private readonly HashSet<ItemId> layoutChanges = new HashSet<ItemId>();
+        private readonly Dictionary<ItemId, InventoryPlacement> changedPlacements = new Dictionary<ItemId, InventoryPlacement>();
+        private int pendingDetailedSignals;
+        private bool fullRefreshPending = true;
+        public long RefreshCount { get; private set; }
+        public long FullRefreshCount { get; private set; }
+        public int LastRefreshedItemCount { get; private set; }
+        private bool CanPresent => presentationVisible && isActiveAndEnabled;
         private object subscribedEventSource;
         private bool dataDirty;
         private bool presentationVisible = true;
@@ -243,7 +265,7 @@ namespace RPG4.Backpack.UI
         public int Columns { get; private set; }
         public int Rows { get; private set; }
         public IBackpackView Inventory { get; private set; }
-        public bool IsReady => Inventory != null && Inventory.IsReady && Inventory.EventSource != null && itemLayer != null && Columns > 0 && Rows > 0;
+        public bool IsReady => CanPresent && Inventory != null && Inventory.IsReady && Inventory.EventSource != null && itemLayer != null && Columns > 0 && Rows > 0;
         public int ItemStackCount => render.itemsById.Count;
         public long TotalItemCount { get; private set; }
         public int OccupiedCellCount { get; private set; }
@@ -261,18 +283,22 @@ namespace RPG4.Backpack.UI
             ConfigureOverflowText();
         }
 
-        private void Start() => EnsureInitialized();
+        private void Start()
+        {
+            if (CanPresent && EnsureInitialized()) RequestFullRefresh();
+        }
 
         private void OnEnable()
         {
             // 网格尚未初始化时，等待宿主绑定或 Start 创建。
-            if (Columns < 1 || Rows < 1) return;
+            if (!CanPresent || Columns < 1 || Rows < 1) return;
             UpdateSubscription();
-            Redraw();
+            RequestFullRefresh();
         }
 
         private void Update()
         {
+            if (!CanPresent) return;
             if (Inventory is Component component && component == null)
             {
                 UnbindInventory();
@@ -280,19 +306,22 @@ namespace RPG4.Backpack.UI
             }
 
             if (Inventory == null) return;
-            if (UpdateSubscription()) Redraw();
-            else SyncGridSize(Inventory);
+            if (UpdateSubscription()) RequestFullRefresh();
+            SyncGridSize(Inventory);
         }
 
         private void LateUpdate()
         {
-            if (!dataDirty) return;
-            dataDirty = false;
-            Redraw();
+            if (CanPresent && dataDirty) FlushRefresh();
         }
 
         /// <summary>禁用只暂停订阅；来源保持，重新启用时重新读取并订阅。</summary>
-        private void OnDisable() => ReleaseSubscription();
+        private void OnDisable()
+        {
+            ReleaseSubscription();
+            fullRefreshPending = true;
+            dataDirty = false;
+        }
 
         private void OnDestroy() => ReleaseSubscription();
 
@@ -320,71 +349,110 @@ namespace RPG4.Backpack.UI
         private void ConfigureOverflowText()
         {
             if (overflowText == null) return;
-            overflowText.color = warningColor;
-            if (uiFont != null) overflowText.font = uiFont;
+            if (overflowText.color != warningColor) overflowText.color = warningColor;
+            if (uiFont != null && overflowText.font != uiFont) overflowText.font = uiFont;
         }
 
         /// <summary>显式绑定展示来源；同源重复调用会补接晚初始化的事件键，并保留本地显示状态。</summary>
         public void BindInventory(IBackpackView source)
         {
-            if (!EnsureInitialized()) return;
             bool sameSource = ReferenceEquals(Inventory, source);
-            if (!sameSource)
-            {
-                UnbindInventory();
-                Inventory = source;
-            }
-
-            if (source == null) return;
+            if (!sameSource) { UnbindInventory(); Inventory = source; }
+            if (!CanPresent) { RequestFullRefresh(); return; }
+            if (!EnsureInitialized()) return;
             bool subscriptionChanged = UpdateSubscription();
             bool gridChanged = SyncGridSize(source);
-            // 尺寸改变时 BuildGrid 已重绘；同源、同事件键且同尺寸无需重读物品。
-            if (!gridChanged && (!sameSource || subscriptionChanged)) Refresh();
+            if (!sameSource || subscriptionChanged || gridChanged)
+            {
+                RequestFullRefresh();
+                FlushRefresh(); // 新来源立即就绪，交互会话不读取上一个来源的视图缓存。
+            }
         }
 
-        /// <summary>释放来源与订阅，清空物品显示；占位网格保留供下一次绑定复用。</summary>
+        /// <summary>解除来源并使读取失效；保留物品框供下次打开复用，隐藏时不重画。</summary>
         public void UnbindInventory()
         {
             ReleaseSubscription();
-            dataDirty = false;
             Inventory = null;
             render.snapshot.Clear();
+            render.ClearIndex();
+            changedPlacements.Clear();
+            layout?.Clear();
+            TotalItemCount = 0;
+            OccupiedCellCount = 0;
             local.Clear();
-            ClearHoverHighlight();
-            Refresh();
+            foreach (SlotVisual slot in slotViews) slot.hover = BackpackHoverState.None;
+            dirtyItems.Clear();
+            localDirtyItems.Clear();
+            RequestFullRefresh();
         }
 
-        /// <summary>只控制溢出提示的显示条件；窗口显隐由宿主负责。</summary>
+        /// <summary>隐藏时停止显示订阅与刷新；数据源的网络镜像生命周期保持独立。</summary>
         public void SetPresentationVisible(bool visible)
         {
+            if (presentationVisible == visible) return;
             presentationVisible = visible;
-            UpdateOverflow();
+            if (!visible)
+            {
+                ReleaseSubscription();
+                fullRefreshPending = true;
+                dataDirty = false;
+                dirtyItems.Clear();
+                localDirtyItems.Clear();
+                if (overflowText != null && overflowText.gameObject.activeSelf) overflowText.gameObject.SetActive(false);
+                return;
+            }
+            RequestFullRefresh();
+            if (!CanPresent) return;
+            UpdateSubscription();
+            FlushRefresh();
         }
 
         private bool UpdateSubscription()
         {
+            if (!CanPresent) return false;
             object eventSource = Inventory?.EventSource;
             if (ReferenceEquals(subscribedEventSource, eventSource)
-                && (eventSource == null || dataSubscription.IsAlive || !isActiveAndEnabled)) return false;
-
+                && (eventSource == null || dataSubscription.IsAlive && itemSubscription.IsAlive)) return false;
             ReleaseSubscription();
             subscribedEventSource = eventSource;
-            if (eventSource != null && isActiveAndEnabled)
+            if (eventSource != null)
             {
+                itemSubscription = EventBus.Global.Subscribe<ItemId[]>(InvChannels.ItemsChanged, eventSource, this, OnItemsChanged);
                 dataSubscription = EventBus.Global.Subscribe(InvChannels.Changed, eventSource, this, OnInventoryChanged);
             }
-
             return true;
         }
 
         private void ReleaseSubscription()
         {
             dataSubscription.Dispose();
-            dataSubscription = default;
+            itemSubscription.Dispose();
+            dataSubscription = itemSubscription = default;
             subscribedEventSource = null;
+            pendingDetailedSignals = 0;
         }
 
-        private void OnInventoryChanged() => dataDirty = true;
+        private void OnItemsChanged(ItemId[] ids)
+        {
+            pendingDetailedSignals++;
+            if (ids == null) fullRefreshPending = true;
+            else foreach (ItemId id in ids) dirtyItems.Add(id);
+            dataDirty = true;
+        }
+
+        private void OnInventoryChanged()
+        {
+            if (pendingDetailedSignals > 0) pendingDetailedSignals--;
+            else fullRefreshPending = true; // 兼容只有粗粒度通知的来源。
+            dataDirty = true;
+        }
+
+        private void RequestFullRefresh()
+        {
+            fullRefreshPending = true;
+            dataDirty = true;
+        }
 
         private bool SyncGridSize(IBackpackView source)
         {
@@ -476,7 +544,7 @@ namespace RPG4.Backpack.UI
             }
 
             EnsureItemLayer();
-            Refresh();
+            RequestFullRefresh();
         }
 
         /// <summary>更新预制体中已接线的物品层尺寸。</summary>
@@ -492,22 +560,113 @@ namespace RPG4.Backpack.UI
 
         #region 重绘管线
 
-        /// <summary>本机预览状态（隐藏物、悬停态）变化后重绘一次；数据层变化经 Inv.Changed 广播置脏、帧末合并，不经过此方法。</summary>
+        /// <summary>本机预览变化仅请求刷新；与数据通知合并到帧末，悬停高亮仍直接更新单项。</summary>
         public void Redraw()
         {
-            if (!EnsureInitialized()) return;
-            SyncGridSize(Inventory);
-            Refresh();
+            if (localDirtyItems.Count > 0 || dirtyItems.Count > 0 || fullRefreshPending) dataDirty = true;
         }
 
-        /// <summary>重读数据源并按当前物品重排、重绘格子底色 / 物品框 / 溢出文本；只在绑定、库存变化与格子重建时执行，不逐帧读取物品。</summary>
+        private void FlushRefresh()
+        {
+            if (!CanPresent || !dataDirty) return;
+            dataDirty = false;
+            if (!EnsureInitialized()) return;
+            SyncGridSize(Inventory);
+            bool full = fullRefreshPending || !IsReady || layout == null || layout.Overflow.Count > 0;
+            dataItems.Clear();
+            dataItems.UnionWith(dirtyItems);
+            refreshItems.Clear();
+            refreshItems.UnionWith(dirtyItems);
+            refreshItems.UnionWith(localDirtyItems);
+            dirtyItems.Clear();
+            localDirtyItems.Clear();
+            fullRefreshPending = false;
+            dataDirty = false;
+            if (full || !RefreshChangedItems()) Refresh();
+            RefreshCount++;
+        }
+
+        private bool RefreshChangedItems()
+        {
+            layoutChanges.Clear();
+            changedPlacements.Clear();
+            foreach (ItemId id in dataItems)
+            {
+                if (render.quantities.TryGetValue(id, out int previousCount)) TotalItemCount -= previousCount;
+                bool hadPlacement = layout.TryGetPlacement(id, out GridDisplayPlacement previous);
+                if (Inventory.TryGetPlacement(id, out InventoryPlacement next) && next.IsValid)
+                {
+                    RuntimeItem item = next.Item;
+                    render.itemsById[id] = item;
+                    render.quantities[id] = item.StackCount;
+                    TotalItemCount += item.StackCount;
+                    if (!hadPlacement || previous.Position.x != next.UpperLeftIndex % Columns
+                        || previous.Position.y != next.UpperLeftIndex / Columns
+                        || previous.Item.Width != next.Dimensions.X || previous.Item.Height != next.Dimensions.Y)
+                    {
+                        layoutChanges.Add(id);
+                        changedPlacements[id] = next;
+                    }
+                }
+                else
+                {
+                    render.itemsById.Remove(id);
+                    render.quantities.Remove(id);
+                    local.ClearStackDisplay(id);
+                    if (hadPlacement) layoutChanges.Add(id);
+                }
+            }
+            local.PruneStackDisplayOverrides(render.itemsById);
+            if (layoutChanges.Count > 0)
+            {
+                if (!layout.ProjectChanges(layoutChanges, changedPlacements)) return false;
+                OccupiedCellCount = layout.OccupiedCellCount;
+                foreach (int cell in layout.ChangedCells) ApplySlotColor(cell);
+            }
+            foreach (ItemId id in refreshItems) RefreshItemWidget(id);
+            LastRefreshedItemCount = refreshItems.Count;
+            UpdateOverflow();
+            return true;
+        }
+
+        private void RemoveWidget(ItemId id)
+        {
+            if (!render.widgets.TryGetValue(id, out ItemWidget widget)) return;
+            if (widget.root != null) { widget.root.SetActive(false); Destroy(widget.root); }
+            if (widget.view != null) itemUIList.Remove(widget.view);
+            render.widgets.Remove(id);
+        }
+
+        private void RefreshItemWidget(ItemId id)
+        {
+            if (!layout.TryGetPlacement(id, out GridDisplayPlacement placement)
+                || !render.itemsById.TryGetValue(id, out RuntimeItem item)) { RemoveWidget(id); return; }
+            if (!render.widgets.TryGetValue(id, out ItemWidget widget) || widget.root == null)
+            {
+                widget = CreateWidget(itemLayer);
+                if (widget == null) return;
+                render.widgets[id] = widget;
+                itemUIList.Add(widget.view);
+            }
+            if (widget.id != id) { widget.id = id; widget.root.name = "Item_" + id.Value; }
+            RectTransform rect = (RectTransform)widget.root.transform;
+            Vector2 position = Metrics.CellToPixel(placement.Position);
+            if (rect.anchoredPosition != position) rect.anchoredPosition = position;
+            widget.view.SetSize(Metrics.ItemPixelSize(placement.Item.Width, placement.Item.Height));
+            bool hidden = local.HiddenItemId.IsValid && id == local.HiddenItemId;
+            if (widget.root.activeSelf == hidden) widget.root.SetActive(!hidden);
+            if (hidden) return;
+            ApplyWidget(widget, item, local.ResolveDisplayStack(item));
+            ApplyWidgetHover(widget, id == local.HoveredItemId);
+        }
+
+        /// <summary>完整重读与投影：用于首次显示、改绑、尺寸变化和粗粒度失效；正常变更按物品更新。</summary>
         private void Refresh()
         {
             if (itemLayer == null || Columns < 1 || Rows < 1) return;
-            GridMetrics metrics = Metrics;
             if (layout == null || layout.Columns != Columns || layout.Rows != Rows) layout = new InventoryGridLayout(Columns, Rows);
 
-            // 每次重绘都重取物品列表：堆叠数是活引用会自更新，但增删物品（拆分出的新实例、被移除的源物品）必须重读列表才可见。
+            // 绑定、尺寸变化及粗粒度来源走完整读取；正常物品通知走增量路径。
             if (Inventory != null && Inventory.IsReady) Inventory.CopyItems(render.snapshot);
             else render.snapshot.Clear();
 
@@ -520,14 +679,13 @@ namespace RPG4.Backpack.UI
                 GridFragment grid = item.GetFragment<GridFragment>();
                 render.displayItems.Add(new GridDisplayItem(item.ItemId, Mathf.Max(1, grid?.Width ?? 1), Mathf.Max(1, grid?.Height ?? 1)));
                 render.itemsById[item.ItemId] = item;
+                render.quantities[item.ItemId] = item.StackCount;
             }
 
             // 数量覆盖只服务携带预览；所有落点直接投影权威库存。
             local.PruneStackDisplayOverrides(render.itemsById);
             layout.Project(render.displayItems, Inventory);
-            OccupiedCellCount = 0;
-            for (int i = 0; i < layout.Occupied.Count; i++)
-                if (layout.Occupied[i]) OccupiedCellCount++;
+            OccupiedCellCount = layout.OccupiedCellCount;
 
             // 格子底色：悬停反馈态优先，其次空闲 / 占用两态。
             ApplySlotColors();
@@ -539,56 +697,17 @@ namespace RPG4.Backpack.UI
                 if (!render.itemsById.ContainsKey(pair.Key) || !IsPlaced(pair.Key)) render.obsolete.Add(pair.Key);
             }
 
-            foreach (ItemId id in render.obsolete)
-            {
-                ItemWidget obsolete = render.widgets[id];
-                if (obsolete.root != null)
-                {
-                    obsolete.root.SetActive(false);
-                    Destroy(obsolete.root);
-                }
-                if (obsolete.view != null) itemUIList.Remove(obsolete.view);
-                render.widgets.Remove(id);
-            }
-
-            // 创建或复用物品框，并按落点换算像素位置与尺寸。
-            foreach (GridDisplayPlacement placement in layout.Placed)
-            {
-                if (!render.widgets.TryGetValue(placement.Item.Id, out ItemWidget widget) || widget.root == null)
-                {
-                    widget = CreateWidget(itemLayer);
-                    if (widget == null) continue; // 预制体缺失或不合规：跳过本帧，避免连带异常。
-                    render.widgets[placement.Item.Id] = widget;
-                    itemUIList.Add(widget.view);
-                }
-
-                RectTransform rect = (RectTransform)widget.root.transform;
-                rect.anchoredPosition = metrics.CellToPixel(placement.Position);
-                widget.view.SetSize(metrics.ItemPixelSize(placement.Item.Width, placement.Item.Height));
-
-                // 携带中的物品隐藏但仍占格（位置记录保持不变，放回时可原样复位）。
-                bool hidden = local.HiddenItemId.IsValid && placement.Item.Id == local.HiddenItemId;
-                widget.root.SetActive(!hidden);
-                if (hidden) continue;
-
-                RuntimeItem placed = render.itemsById[placement.Item.Id];
-                ApplyWidget(widget, placed, local.ResolveDisplayStack(placed));
-                if (local.HoveredItemId.IsValid && placement.Item.Id == local.HoveredItemId) ApplyWidgetHover(widget, true);
-            }
+            foreach (ItemId id in render.obsolete) RemoveWidget(id);
+            foreach (GridDisplayPlacement placement in layout.Placed) RefreshItemWidget(placement.Item.Id);
+            FullRefreshCount++;
+            LastRefreshedItemCount = render.itemsById.Count;
+            render.snapshot.Clear();
 
             UpdateOverflow();
         }
 
         /// <summary>物品是否在本帧排布结果中。</summary>
-        private bool IsPlaced(ItemId id)
-        {
-            foreach (GridDisplayPlacement placement in layout.Placed)
-            {
-                if (placement.Item.Id == id) return true;
-            }
-
-            return false;
-        }
+        private bool IsPlaced(ItemId id) => layout.TryGetPlacement(id, out _);
 
         /// <summary>把放不下的物品汇总进溢出文本（仅在窗口打开时显示）。</summary>
         private void UpdateOverflow()
@@ -606,21 +725,27 @@ namespace RPG4.Backpack.UI
                 render.overflowMessage.Append('\n').Append(item.ItemType).Append(" ×").Append(local.ResolveDisplayStack(item));
             }
 
-            overflowText.text = render.overflowMessage.ToString();
-            overflowText.gameObject.SetActive(presentationVisible && render.overflowMessage.Length > 0);
+            string message = render.overflowMessage.ToString();
+            if (overflowText.text != message) overflowText.text = message;
+            bool visible = CanPresent && message.Length > 0;
+            if (overflowText.gameObject.activeSelf != visible) overflowText.gameObject.SetActive(visible);
         }
 
         /// <summary>按当前悬停态与占用态刷新全部格子底色（重绘、解绑时调用）。</summary>
         private void ApplySlotColors()
         {
             if (layout == null) return;
-            for (int i = 0; i < slotViews.Count; i++)
-            {
-                SlotVisual slot = slotViews[i];
-                if (slot.image == null) continue;
-                bool occupied = i < layout.Occupied.Count && layout.Occupied[i];
-                slot.image.color = SlotColor(slot.hover, occupied);
-            }
+            for (int i = 0; i < slotViews.Count; i++) ApplySlotColor(i);
+        }
+
+        private void ApplySlotColor(int index)
+        {
+            if (!CanPresent || layout == null || index < 0 || index >= slotViews.Count) return;
+            SlotVisual slot = slotViews[index];
+            if (slot.image == null) return;
+            bool occupied = index < layout.Occupied.Count && layout.Occupied[index];
+            Color color = SlotColor(slot.hover, occupied);
+            if (slot.image.color != color) slot.image.color = color;
         }
 
         /// <summary>写入单个格子的悬停反馈态；状态未变化时直接返回，避免多余的 Canvas 重建。</summary>
@@ -630,9 +755,7 @@ namespace RPG4.Backpack.UI
             SlotVisual slot = slotViews[index];
             if (slot.hover == state) return;
             slot.hover = state;
-            if (layout == null || slot.image == null) return;
-            bool occupied = index < layout.Occupied.Count && layout.Occupied[index];
-            slot.image.color = SlotColor(state, occupied);
+            ApplySlotColor(index);
         }
 
         /// <summary>悬停反馈色优先于占用 / 空闲底色。</summary>
@@ -652,26 +775,55 @@ namespace RPG4.Backpack.UI
         #region 本机显示状态
 
         /// <summary>写入某物品的显示数量覆盖（右键拆分时源物品显示「总数 − 已取数量」）；只影响本机显示，不改动库存数据。调用方随后自行 <see cref="Redraw"/>。</summary>
-        public void SetStackDisplay(ItemId id, int displayStack) => local.SetStackDisplay(id, displayStack);
+        public void SetStackDisplay(ItemId id, int displayStack)
+        {
+            local.SetStackDisplay(id, displayStack);
+            MarkLocalItem(id);
+        }
 
         /// <summary>清除某物品的显示数量覆盖；返回是否确有覆盖。</summary>
-        public bool ClearStackDisplay(ItemId id) => local.ClearStackDisplay(id);
+        public bool ClearStackDisplay(ItemId id)
+        {
+            if (!local.ClearStackDisplay(id)) return false;
+            MarkLocalItem(id);
+            return true;
+        }
 
         /// <summary>清除全部显示数量覆盖。</summary>
-        public void ClearAllStackDisplays() => local.ClearAllStackDisplays();
+        public void ClearAllStackDisplays()
+        {
+            if (CanPresent) local.CollectStackDisplayIds(localDirtyItems);
+            local.ClearAllStackDisplays();
+            if (localDirtyItems.Count > 0) dataDirty = true;
+        }
 
         /// <summary>携带期间把某物品从网格隐藏（仍占用格子，避免其它物品回流导致抖动）。</summary>
-        public void SetHiddenItem(ItemId id) => local.SetHiddenItem(id);
+        public void SetHiddenItem(ItemId id)
+        {
+            ItemId previous = local.HiddenItemId;
+            local.SetHiddenItem(id);
+            if (previous == local.HiddenItemId) return;
+            MarkLocalItem(previous);
+            MarkLocalItem(local.HiddenItemId);
+        }
 
         /// <summary>取消隐藏。</summary>
-        public void ClearHiddenItem() => local.ClearHiddenItem();
+        public void ClearHiddenItem() => SetHiddenItem(ItemId.None);
+
+        private void MarkLocalItem(ItemId id)
+        {
+            if (!id.IsValid) return;
+            if (!CanPresent) { fullRefreshPending = true; return; }
+            localDirtyItems.Add(id);
+            dataDirty = true;
+        }
 
         /// <summary>切换某物品的悬停高亮（交互层只在悬停目标变化时调用）。</summary>
         public void SetItemHovered(ItemId id, bool hovered)
         {
             if (!id.IsValid) return;
             local.SetHoveredItem(id, hovered);
-            if (render.TryGetWidget(id, out ItemWidget widget) && widget.root != null) ApplyWidgetHover(widget, hovered);
+            if (CanPresent && render.TryGetWidget(id, out ItemWidget widget) && widget.root != null) ApplyWidgetHover(widget, hovered);
         }
 
         /// <summary>清除所有格子的悬停反馈。</summary>
@@ -699,23 +851,16 @@ namespace RPG4.Backpack.UI
         }
 
         /// <summary>按标识取本帧快照中的物品数据。</summary>
-        public bool TryGetItem(ItemId id, out RuntimeItem item) => render.itemsById.TryGetValue(id, out item);
+        public bool TryGetItem(ItemId id, out RuntimeItem item)
+        {
+            item = null;
+            return IsReady && render.itemsById.TryGetValue(id, out item);
+        }
 
         /// <summary>取物品当前的权威落点投影（落点 + 占位尺寸）。</summary>
         public bool TryGetPlacement(ItemId id, out GridDisplayPlacement placement)
         {
-            if (layout != null)
-            {
-                for (int i = 0; i < layout.Placed.Count; i++)
-                {
-                    if (layout.Placed[i].Item.Id == id)
-                    {
-                        placement = layout.Placed[i];
-                        return true;
-                    }
-                }
-            }
-
+            if (IsReady && layout != null) return layout.TryGetPlacement(id, out placement);
             placement = default;
             return false;
         }
@@ -738,7 +883,7 @@ namespace RPG4.Backpack.UI
         /// <summary>取某格当前的占用者（物品标识 + 其上左线性索引）。</summary>
         public bool TryGetCellOwner(int index, out ItemId ownerId, out int upperLeftIndex)
         {
-            if (layout == null)
+            if (!IsReady || layout == null)
             {
                 ownerId = ItemId.None;
                 upperLeftIndex = SpaceQueryResult<RuntimeItem>.NoIndex;
@@ -751,7 +896,7 @@ namespace RPG4.Backpack.UI
         /// <summary>基于权威落点投影预览空间；实际可写性由库存事务最终校验。</summary>
         public SpaceQueryResult<RuntimeItem> QuerySpace(int startIndex, GridCoord dimensions)
         {
-            if (layout == null || dimensions.X < 1 || dimensions.Y < 1) return SpaceQueryResult<RuntimeItem>.Empty;
+            if (!IsReady || layout == null || dimensions.X < 1 || dimensions.Y < 1) return SpaceQueryResult<RuntimeItem>.Empty;
             if (!GridUtils.IsInGridBounds(startIndex, dimensions, Columns, Rows)) return SpaceQueryResult<RuntimeItem>.Empty;
 
             bool hasSpace = true;
@@ -848,7 +993,6 @@ namespace RPG4.Backpack.UI
         private void ApplyWidget(ItemWidget widget, RuntimeItem item, int displayStack)
         {
             if (widget?.view == null || item == null) return;
-            widget.root.name = "Item_" + item.ItemId.Value;
             ImageFragment image = item.GetFragment<ImageFragment>();
             widget.view.SetItem(image != null ? image.Icon : null, displayStack);
             widget.view.SetSelected(item.ItemId == selectedItemId);
@@ -857,6 +1001,7 @@ namespace RPG4.Backpack.UI
         public void SetSelectedItem(ItemId id)
         {
             if (selectedItemId == id) return;
+            if (!CanPresent) { selectedItemId = id; return; }
             if (render.TryGetWidget(selectedItemId, out ItemWidget previous) && previous?.view != null)
                 previous.view.SetSelected(false);
             selectedItemId = id;

@@ -106,11 +106,16 @@ namespace RPG4.Backpack.Network
         /// <summary>状态等价：标识、类型、堆叠数、权威位置、占格尺寸与载荷内容全部一致；用于服务端「只在实际变化时下发」的判断，因此必须比较载荷内容而不是引用。</summary>
         public bool StateEquals(NetworkInventoryEntry other)
         {
-            if (itemId != other.itemId) return false;
-            if (stackCount != other.stackCount) return false;
-            if (upperLeftIndex != other.upperLeftIndex || width != other.width || height != other.height) return false;
-            if (!string.Equals(itemType, other.itemType, StringComparison.Ordinal)) return false;
-            return PayloadEquals(fragmentState, other.fragmentState);
+            return upperLeftIndex == other.upperLeftIndex && width == other.width && height == other.height
+                && ItemStateEquals(other);
+        }
+
+        /// <summary>比较物品载荷；仅移动布局时可保留同一运行时镜像实例。</summary>
+        public bool ItemStateEquals(NetworkInventoryEntry other)
+        {
+            return itemId == other.itemId && stackCount == other.stackCount
+                && string.Equals(itemType, other.itemType, StringComparison.Ordinal)
+                && PayloadEquals(fragmentState, other.fragmentState);
         }
 
         /// <inheritdoc/>

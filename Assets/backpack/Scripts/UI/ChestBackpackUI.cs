@@ -54,7 +54,9 @@ namespace RPG4.Backpack.UI
         protected override void Awake()
         {
             base.Awake();
-            EnsureInitialized();
+            if (ui == null) ui = GetComponent<ChestBackpackUIData>();
+            SuspendViews();
+            if (ui != null && ui.interaction != null) ui.interaction.enabled = false;
         }
 
         private void Update()
@@ -114,6 +116,7 @@ namespace RPG4.Backpack.UI
         /// <summary>隐藏窗口并释放双方显示订阅；保留格子配置，再次 Open 时重新获取与显示库存。</summary>
         protected override void OnClosed()
         {
+            SuspendViews();
             EndInteractionSession();
             if (ui != null && ui.interaction != null)
             {
@@ -124,21 +127,26 @@ namespace RPG4.Backpack.UI
             if (ui != null && ui.playerView != null)
             {
                 ui.playerView.UnbindInventory();
-                ui.playerView.SetPresentationVisible(false);
             }
 
             if (ui != null && ui.chestView != null)
             {
                 ui.chestView.UnbindInventory();
-                ui.chestView.SetPresentationVisible(false);
             }
             if (ui != null && ui.equipmentView != null)
             {
                 ui.equipmentView.UnbindInventory();
-                ui.equipmentView.SetPresentationVisible(false);
             }
 
             inputScope.Release();
+        }
+
+        private void SuspendViews()
+        {
+            if (ui == null) return;
+            if (ui.playerView != null) ui.playerView.SetPresentationVisible(false);
+            if (ui.chestView != null) ui.chestView.SetPresentationVisible(false);
+            if (ui.equipmentView != null) ui.equipmentView.SetPresentationVisible(false);
         }
 
         private void EndInteractionSession()
@@ -188,10 +196,12 @@ namespace RPG4.Backpack.UI
             ui.playerView.SetPresentationVisible(true);
             ui.chestView.SetPresentationVisible(true);
             ui.equipmentView.SetPresentationVisible(true);
-            ui.playerTitle.text = player != null ? playerTitleText : waitingPlayerTitleText;
-            ui.chestTitle.text = chest != null ? chestTitleText : unboundChestTitleText;
+            string playerTitle = player != null ? playerTitleText : waitingPlayerTitleText;
+            string chestTitle = chest != null ? chestTitleText : unboundChestTitleText;
+            if (ui.playerTitle.text != playerTitle) ui.playerTitle.text = playerTitle;
+            if (ui.chestTitle.text != chestTitle) ui.chestTitle.text = chestTitle;
             inputScope.SetSource(PlayerInventory);
-            layoutDirty = true;
+            layoutDirty |= sourceChanged;
         }
 
         private IBackpackView ResolvePlayer()

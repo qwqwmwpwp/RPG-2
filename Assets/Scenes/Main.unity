@@ -474,6 +474,26 @@ PrefabInstance:
       propertyPath: attributes
       value: 
       objectReference: {fileID: 960000020}
+    - target: {fileID: 970000103, guid: b74c1e75a6e14535a428e1a8c94285d4, type: 3}
+      propertyPath: m_textAlignment
+      value: 65535
+      objectReference: {fileID: 0}
+    - target: {fileID: 970000123, guid: b74c1e75a6e14535a428e1a8c94285d4, type: 3}
+      propertyPath: m_textAlignment
+      value: 65535
+      objectReference: {fileID: 0}
+    - target: {fileID: 970001123, guid: b74c1e75a6e14535a428e1a8c94285d4, type: 3}
+      propertyPath: m_textAlignment
+      value: 65535
+      objectReference: {fileID: 0}
+    - target: {fileID: 970001143, guid: b74c1e75a6e14535a428e1a8c94285d4, type: 3}
+      propertyPath: m_textAlignment
+      value: 65535
+      objectReference: {fileID: 0}
+    - target: {fileID: 970001213, guid: b74c1e75a6e14535a428e1a8c94285d4, type: 3}
+      propertyPath: m_textAlignment
+      value: 65535
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -937,7 +957,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 330585545, guid: 3a3cc0360af447918940eb53044c927f, type: 3}
       propertyPath: field of view
-      value: 59.99999
+      value: 60
       objectReference: {fileID: 0}
     - target: {fileID: 330585546, guid: 3a3cc0360af447918940eb53044c927f, type: 3}
       propertyPath: m_LocalPosition.x
@@ -973,7 +993,7 @@ PrefabInstance:
       objectReference: {fileID: 740000003}
     - target: {fileID: 1956070572, guid: 3a3cc0360af447918940eb53044c927f, type: 3}
       propertyPath: m_Lens.FieldOfView
-      value: 59.99999
+      value: 60
       objectReference: {fileID: 0}
     - target: {fileID: 1956070573, guid: 3a3cc0360af447918940eb53044c927f, type: 3}
       propertyPath: m_LocalPosition.x
@@ -1005,7 +1025,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1956070584, guid: 3a3cc0360af447918940eb53044c927f, type: 3}
       propertyPath: ShoulderOffset.x
-      value: 2.297026e-12
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 1956070584, guid: 3a3cc0360af447918940eb53044c927f, type: 3}
       propertyPath: ShoulderOffset.y

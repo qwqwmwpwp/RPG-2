@@ -93,12 +93,14 @@ namespace RPG4.Backpack.Inventory
             InventoryPlacement previous = incoming != null ? placements[incoming] : InventoryPlacement.Invalid;
             if (incoming != null) { ClearCells(previous); RemovePlacement(incoming); }
             if (magazine) weapon.WeaponState.SetMagazine(incoming); else weapon.WeaponState.SetAttachment(slot, incoming);
+            weaponContainer.TouchItem(weapon, true);
             if (outgoing != null) CommitPlacement(outgoing, index, ResolveItemDimensions(outgoing));
             itemIndicesDirty = true;
             if (confirm != null && !confirm(outgoing?.ItemId ?? ItemId.None, out error))
             {
                 if (outgoing != null) { ClearCells(placements[outgoing]); RemovePlacement(outgoing); }
                 if (magazine) weapon.WeaponState.SetMagazine(outgoing); else weapon.WeaponState.SetAttachment(slot, outgoing);
+                weaponContainer.TouchItem(weapon, true);
                 if (incoming != null) CommitPlacement(incoming, previous.UpperLeftIndex, previous.Dimensions);
                 itemIndicesDirty = true;
                 confirm(ItemId.None, out _);
@@ -136,14 +138,16 @@ namespace RPG4.Backpack.Inventory
             var previousRounds = new List<BackpackTag>(magazine.MagazineState.Rounds);
             bool consumed = count == ammo.StackCount;
             if (consumed) { ClearCells(placements[ammo]); RemovePlacement(ammo); }
-            else ammo.SetStackCount(ammo.StackCount - count);
+            else SetItemStack(ammo, ammo.StackCount - count);
             magazine.MagazineState.AddRounds(ammo.ItemType, count);
+            TouchItem(magazine, true);
             itemIndicesDirty = true;
             if (confirm != null && !confirm(magazine.ItemId, out error))
             {
                 magazine.MagazineState.TryRestore(previousRounds, catalog, out _);
+                TouchItem(magazine, true);
                 if (consumed) CommitPlacement(ammo, previousPlacement.UpperLeftIndex, previousPlacement.Dimensions);
-                else ammo.SetStackCount(previousCount);
+                else SetItemStack(ammo, previousCount);
                 itemIndicesDirty = true;
                 confirm(ItemId.None, out _);
                 return false;

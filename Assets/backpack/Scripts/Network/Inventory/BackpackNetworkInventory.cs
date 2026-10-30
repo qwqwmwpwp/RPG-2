@@ -37,6 +37,9 @@ namespace RPG4.Backpack.Network
         [SyncVar(hook = nameof(OnGridSizeChanged))] private int authoritativeRows;
         [SyncVar(hook = nameof(OnGridSizeChanged))] private int authoritativeColumns;
         private readonly Dictionary<ulong, InventoryPlacement> mirrorPlacements = new Dictionary<ulong, InventoryPlacement>();
+        private readonly InventoryNetworkMirror mirrorProjection = new InventoryNetworkMirror();
+        private readonly HashSet<ItemId> pendingViewChanges = new HashSet<ItemId>();
+        private bool fullViewRefreshPending = true;
         private bool mirrorDirty;
         private bool mirrorReady;
 
@@ -60,6 +63,26 @@ namespace RPG4.Backpack.Network
         public string LastError { get; private set; } // 最近一次失败原因；无失败为 null。
 
         public int DesyncCount { get; private set; } // 累计被拒绝的条目数量（载荷非法 / 模板缺失等），用于诊断。
+
+        public ProjectionSyncReport LastProjectionReport => projection.LastSyncReport;
+        public long ProjectionSyncCount => projection.SyncCount;
+        public long ProjectionFullSyncCount => projection.FullSyncCount;
+        public long ConsideredItemCount => projection.ConsideredItemCount;
+        public long EncodedItemCount => projection.EncodedItemCount;
+        public long EncodedPayloadBytes => projection.EncodedPayloadBytes;
+        public long ProjectionCacheHits => projection.CacheHitCount;
+        public long MirrorBatchCount => mirrorProjection.BatchCount;
+        public long MirrorFullRefreshCount => mirrorProjection.FullRefreshCount;
+        public long RestoredMirrorItemCount => mirrorProjection.RestoredItemCount;
+        public long ReusedMirrorItemCount => mirrorProjection.ReusedItemCount;
+        public int LastRestoredMirrorItemCount => mirrorProjection.LastRestoredItemCount;
+        public int LastChangedMirrorItemCount => mirrorProjection.LastChangedItemCount;
+
+        public void ResetSynchronizationStatistics()
+        {
+            projection.ResetStatistics();
+            mirrorProjection.ResetStatistics();
+        }
 
         public IReadOnlyList<NetworkInventoryEntry> Entries => entries; // 当前同步条目（只读观察用；服务端写入，客户端只读）。
 
@@ -103,10 +126,17 @@ namespace RPG4.Backpack.Network
         {
             catalog = value;
             if (core != null) core.Catalog = value;
+            projection.Clear();
+            if (IsServerInventory) { projection.Bind(Container, entries); syncedRevision = -1; }
+            else
+            {
+                mirrorProjection.RequestFullRefresh(true);
+                if (isClient) mirrorDirty = true;
+            }
             CatalogChanged?.Invoke(value);
         }
 
-        /// <summary>订阅同步列表回调，客户端在同批变更接收后统一重建镜像。</summary>
+        /// <summary>订阅同步列表回调，客户端在同批变更接收后原子应用镜像增量。</summary>
         private void Awake()
         {
             entries.Callback += OnEntryChanged;
@@ -116,6 +146,8 @@ namespace RPG4.Backpack.Network
         private void OnDestroy()
         {
             entries.Callback -= OnEntryChanged;
+            projection.Clear();
+            mirrorProjection.Clear();
         }
 
         /// <inheritdoc/>
@@ -142,6 +174,9 @@ namespace RPG4.Backpack.Network
             DesyncCount = 0;
             LastError = null;
             entries.Clear();
+            projection.Bind(Container, entries);
+            mirrorProjection.Clear();
+            ResetSynchronizationStatistics();
 
             BackpackLog.Info(
                 LogModule.Network,
@@ -179,6 +214,8 @@ namespace RPG4.Backpack.Network
             core.ForwardOperation = RequestInventoryOperation;
             core.ForwardWeaponOperation = RequestWeaponOperation;
 
+            mirrorProjection.Clear();
+            ResetSynchronizationStatistics();
             RebuildMirror();
             core.SubscribeCommands(this);
             BindNetworkWeaponUi();
@@ -193,7 +230,10 @@ namespace RPG4.Backpack.Network
             mirror.Clear();
             mirrorPlacements.Clear();
             mirrorReady = false;
+            mirrorProjection.Clear();
             projection.Clear();
+            pendingViewChanges.Clear();
+            fullViewRefreshPending = true;
             RaiseChanged();
             base.OnStopClient();
         }
@@ -314,6 +354,7 @@ namespace RPG4.Backpack.Network
                 return false;
             }
 
+            projection.Bind(Container, entries);
             if (requiredItem.IsValid)
             {
                 if (!Container.TryGetItemById(requiredItem, out RuntimeItem item))
@@ -321,8 +362,7 @@ namespace RPG4.Backpack.Network
                     error = $"库存中不存在待确认物品 {requiredItem}。";
                     return false;
                 }
-                if (!projection.TryBuildEntry(item, out NetworkInventoryEntry entry, out error)) return false;
-                if (!projection.TryRestoreItem(entry, catalog, out _, out error)) return false;
+                if (!projection.TryValidateRestoration(item, catalog, out error)) return false;
             }
 
             return SyncEntries(out error, requiredItem);
@@ -375,7 +415,7 @@ namespace RPG4.Backpack.Network
                 return false;
             }
 
-            if (Container.Revision == syncedRevision)
+            if (Container.Revision == syncedRevision && !projection.HasPendingChanges && LastError == null)
             {
                 error = null;
                 return true;
@@ -388,6 +428,7 @@ namespace RPG4.Backpack.Network
         public bool RefreshClientMirror()
         {
             if (!isClient || IsServerInventory) return false;
+            mirrorProjection.RequestFullRefresh(true);
             RebuildMirror();
             return true;
         }
@@ -436,7 +477,10 @@ namespace RPG4.Backpack.Network
         public string DescribeState()
         {
             string mode = IsServerInventory ? "服务端（权威容器）" : (isClient ? "客户端（镜像）" : "未启动");
-            string text = $"{mode} 物品={ItemCount} 条目={entries.Count} 拒绝={DesyncCount}";
+            string text = $"{mode} 物品={ItemCount} 条目={entries.Count} 拒绝={DesyncCount}"
+                + $" 检查={ConsideredItemCount} 编码={EncodedItemCount} 缓存命中={ProjectionCacheHits}"
+                + $" 编码载荷字节={EncodedPayloadBytes} 镜像恢复={RestoredMirrorItemCount} 镜像复用={ReusedMirrorItemCount}"
+                + $" 最近批次变化={LastChangedMirrorItemCount} 恢复={LastRestoredMirrorItemCount}";
             return LastError == null ? text : text + " 最近错误=" + LastError;
         }
 
@@ -483,68 +527,32 @@ namespace RPG4.Backpack.Network
             return true;
         }
 
-        /// <summary>客户端按当前目录与同步条目整体重建镜像，并汇总被拒绝的条目。</summary>
+        /// <summary>初始/恢复时读取完整条目，正常变更仅处理暂存增量；失败保留上一完整镜像。</summary>
         private void RebuildMirror()
         {
             mirrorDirty = false;
-            mirrorReady = false;
-            mirrorPlacements.Clear();
-            mirror.Clear();
-            if (Rows < 1 || Columns < 1 || (long)Rows * Columns > InventoryContainer.MaxSlotCount)
+            mirrorReady = mirrorProjection.TryApply(entries, catalog, Rows, Columns, projection,
+                mirror, mirrorPlacements, out string error);
+            if (!mirrorReady)
             {
-                RegisterFailure("同步的容器行列非法或尚未就绪。");
-                RaiseChanged();
-                return;
-            }
-            int rejected = projection.RestoreAll(entries, catalog, mirror, out string firstError);
-            var occupied = new bool[Rows * Columns];
-            if (rejected == 0)
-            {
-                for (int i = 0; i < entries.Count; i++)
-                {
-                    NetworkInventoryEntry entry = entries[i];
-                    GridCoord dimensions = new GridCoord(entry.width, entry.height);
-                    if (!GridUtils.IsInGridBounds(entry.upperLeftIndex, dimensions, Columns, Rows))
-                    {
-                        firstError = $"物品 {entry.itemId} 的同步位置越界。";
-                        rejected++;
-                        break;
-                    }
-                    int originX = entry.upperLeftIndex % Columns, originY = entry.upperLeftIndex / Columns;
-                    for (int y = 0; y < entry.height && rejected == 0; y++)
-                    for (int x = 0; x < entry.width; x++)
-                    {
-                        int cell = (originY + y) * Columns + originX + x;
-                        if (occupied[cell])
-                        {
-                            firstError = $"物品 {entry.itemId} 的同步占格与其他物品重叠。";
-                            rejected++;
-                            break;
-                        }
-                        occupied[cell] = true;
-                    }
-                    if (rejected != 0) break;
-                    mirrorPlacements.Add(entry.itemId, new InventoryPlacement(mirror[entry.itemId], entry.upperLeftIndex, dimensions));
-                }
-            }
-            if (rejected > 0)
-            {
-                mirror.Clear();
-                mirrorPlacements.Clear();
-                RegisterFailure("镜像恢复被拒绝：" + firstError);
+                RegisterFailure("镜像恢复被拒绝：" + error);
                 BackpackLog.Error(LogModule.Network, LastError);
             }
-            else
+            else LastError = null;
+            if (!mirrorReady || mirrorProjection.LastFullRefresh)
             {
-                LastError = null;
-                mirrorReady = true;
+                fullViewRefreshPending = true;
+                pendingViewChanges.Clear();
             }
+            else if (!fullViewRefreshPending)
+                foreach (ItemId id in mirrorProjection.LastChangedItems) pendingViewChanges.Add(id);
             RaiseChanged();
         }
 
         private void OnGridSizeChanged(int previous, int current)
         {
             if (isServer) return;
+            mirrorProjection.RequestFullRefresh();
             mirrorDirty = true;
             RaiseChanged();
         }
@@ -554,6 +562,22 @@ namespace RPG4.Backpack.Network
             NetworkInventoryEntry oldItem, NetworkInventoryEntry newItem)
         {
             if (isServer) return;
+            switch (op)
+            {
+                case SyncList<NetworkInventoryEntry>.Operation.OP_ADD:
+                case SyncList<NetworkInventoryEntry>.Operation.OP_INSERT:
+                    mirrorProjection.Added(newItem);
+                    break;
+                case SyncList<NetworkInventoryEntry>.Operation.OP_SET:
+                    mirrorProjection.Replaced(oldItem, newItem);
+                    break;
+                case SyncList<NetworkInventoryEntry>.Operation.OP_REMOVEAT:
+                    mirrorProjection.Removed(oldItem);
+                    break;
+                case SyncList<NetworkInventoryEntry>.Operation.OP_CLEAR:
+                    mirrorProjection.RequestFullRefresh();
+                    break;
+            }
             mirrorDirty = true;
             RaiseChanged();
         }
@@ -593,16 +617,27 @@ namespace RPG4.Backpack.Network
         /// <summary>帧末统一派发一次视图变化通知；纯客户端没有容器，额外由宿主自身补发粗粒度变更信号供表现层订阅。</summary>
         private void LateUpdate()
         {
-            if (IsServerInventory && Container.Revision != syncedRevision) SyncEntries(out _);
+            if (IsServerInventory && (Container.Revision != syncedRevision || projection.HasPendingChanges)) SyncEntries(out _);
             if (!IsServerInventory && mirrorDirty) RebuildMirror();
             if (!changedPending) { FlushNetworkWeaponUi(); return; }
 
             changedPending = false;
+            bool detailed = !IsServerInventory && (EventBus.Global.SubscriptionCount(InvChannels.ItemsChanged, this) > 0
+                || EventBus.Global.SubscriptionCount(InvChannels.ItemsChanged, EventBus.AnySource) > 0);
+            ItemId[] changed = null;
+            if (detailed && !fullViewRefreshPending && pendingViewChanges.Count > 0)
+            {
+                changed = new ItemId[pendingViewChanges.Count];
+                pendingViewChanges.CopyTo(changed);
+            }
+            pendingViewChanges.Clear();
+            fullViewRefreshPending = false;
             Changed?.Invoke();
 
             // 权威端由容器自行广播 Inv.Changed（source = 容器），客户端只能由宿主代发。
             if (!IsServerInventory)
             {
+                if (detailed) EventBus.Global.Publish<ItemId[]>(InvChannels.ItemsChanged, this, changed);
                 EventBus.Global.Publish(InvChannels.Changed, this);
             }
             FlushNetworkWeaponUi();

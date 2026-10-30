@@ -21,7 +21,7 @@ namespace RPG4.Backpack.Network
     /// <summary>背包网络生命周期入口（网络基座）：只负责「生命周期诊断日志 + 服务端物品标识生成器托管」，不含背包业务规则也不持有库存状态；物品列表同步见 <see cref="BackpackNetworkInventory"/>，玩家对象只负责身份与归属（见 <see cref="BackpackNetworkPlayer"/>）。</summary>
     [DisallowMultipleComponent]
     [AddComponentMenu("RPG4/Backpack Network Manager")]
-    public class BackpackNetworkManager : NetworkManager
+    public partial class BackpackNetworkManager : NetworkManager
     {
         [Tooltip("场景启动时自动进入的网络模式；None 表示由 HUD 或外部代码手动启动。")]
         [SerializeField]
@@ -51,6 +51,8 @@ namespace RPG4.Backpack.Network
         public override void OnStartServer()
         {
             base.OnStartServer();
+            statisticsServerRunning = true;
+            StartTrafficCapture();
             ServerItemIds = new ItemIdGenerator();
             BackpackLog.Info(LogModule.Network, "服务端已启动：" + DescribeTransport() + "，物品标识从 " + ItemIdGenerator.FirstValue + " 开始发放。");
         }
@@ -59,12 +61,16 @@ namespace RPG4.Backpack.Network
         public override void OnStartClient()
         {
             base.OnStartClient();
+            statisticsClientRunning = true;
+            StartTrafficCapture();
             BackpackLog.Info(LogModule.Network, "客户端已启动，目标地址 " + networkAddress + "。");
         }
 
         /// <inheritdoc/>
         public override void OnStopServer()
         {
+            statisticsServerRunning = false;
+            StopTrafficCaptureIfIdle();
             if (ServerItemIds != null)
             {
                 BackpackLog.Info(LogModule.Network, "服务端已停止，本次会话最后发放的物品标识 " + ServerItemIds.LastIssued + "。");
@@ -81,6 +87,8 @@ namespace RPG4.Backpack.Network
         /// <inheritdoc/>
         public override void OnStopClient()
         {
+            statisticsClientRunning = false;
+            StopTrafficCaptureIfIdle();
             BackpackLog.Info(LogModule.Network, "客户端已停止。");
             base.OnStopClient();
         }

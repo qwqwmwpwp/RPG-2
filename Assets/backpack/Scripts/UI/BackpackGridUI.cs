@@ -57,7 +57,6 @@ namespace RPG4.Backpack.UI
 
         private void Start()
         {
-            if (EnsureDisplay()) SyncWindowSize();
             RefreshClosedHint();
         }
 
@@ -102,7 +101,8 @@ namespace RPG4.Backpack.UI
         private void SyncWindowSize()
         {
             if (usePrefabLayout) return;
-            if (windowRect != null && containerRect != null) windowRect.sizeDelta = containerRect.sizeDelta;
+            if (windowRect != null && containerRect != null && windowRect.sizeDelta != containerRect.sizeDelta)
+                windowRect.sizeDelta = containerRect.sizeDelta;
         }
 
         private void BindInventory(IBackpackView source)
@@ -148,15 +148,17 @@ namespace RPG4.Backpack.UI
             preparedInventory = null;
             BindInventory(source);
             nextBindingCheck = Time.unscaledTime + Mathf.Max(0.05f, bindingCheckInterval);
-            SyncWindowSize();
-            inputScope.Capture(Inventory);
             containerUI.SetPresentationVisible(true);
             equipmentView.SetPresentationVisible(true);
+            SyncWindowSize();
+            inputScope.Capture(Inventory);
             if (hudHint != null) hudHint.gameObject.SetActive(false);
         }
 
         protected override void OnClosed()
         {
+            if (containerUI != null) containerUI.SetPresentationVisible(false);
+            if (equipmentView != null) equipmentView.SetPresentationVisible(false);
             if (interaction != null) interaction.EndSession();
             inputScope.Release();
             preparedInventory = boundInventory = null;
@@ -166,12 +168,10 @@ namespace RPG4.Backpack.UI
             if (containerUI != null)
             {
                 containerUI.UnbindInventory();
-                containerUI.SetPresentationVisible(false);
             }
             if (equipmentView != null)
             {
                 equipmentView.UnbindInventory();
-                equipmentView.SetPresentationVisible(false);
             }
             nextBindingCheck = 0f;
             RefreshClosedHint();
@@ -188,8 +188,8 @@ namespace RPG4.Backpack.UI
         private void SetHint(string text)
         {
             if (hudHint == null) return;
-            hudHint.text = text;
-            hudHint.gameObject.SetActive(!IsOpen);
+            if (hudHint.text != text) hudHint.text = text;
+            if (hudHint.gameObject.activeSelf == IsOpen) hudHint.gameObject.SetActive(!IsOpen);
         }
     }
 }

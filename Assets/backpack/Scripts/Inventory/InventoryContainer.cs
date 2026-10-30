@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using RPG4.Backpack.Core;
 using RPG4.Backpack.Items;
+
+[assembly: InternalsVisibleTo("RPG4.Backpack.Network")]
 
 namespace RPG4.Backpack.Inventory
 {
@@ -22,6 +25,8 @@ namespace RPG4.Backpack.Inventory
         private readonly List<RuntimeItem> indexedItems = new List<RuntimeItem>(); // 按 ItemId 排序的查询缓存，下标口径与 FillItemsByItemId 一致。
         private readonly int[] claimed; // 查询标记缓冲：值等于 claimStamp 才算「本轮已检查」。
         private readonly List<StackStep> stackSteps = new List<StackStep>(); // 接收规划复用的合并缓冲，成功规划后复制到独立计划以隔离事件重入。
+
+        private readonly HashSet<ItemId> pendingViewChanges = new HashSet<ItemId>();
 
         private int claimStamp; // 查询轮次戳，每轮自增；初值 0 与缓冲初值相同，故必须先 BeginClaimPass。
         private readonly ItemAdmissionHandler admission;
@@ -86,6 +91,9 @@ namespace RPG4.Backpack.Inventory
         public IReadOnlyCollection<RuntimeItem> Items => itemsView; // 当前容器内的物品集合（枚举顺序不保证，勿依赖）。
 
         public int Revision { get; private set; } // 状态版本号：每次成功提交变更（放置 / 移除 / 合并 / 收编）后 +1、失败路径不变，供网络投影做廉价的「是否有外部变更」判断（比较相等而非大小，溢出回绕不影响语义）。
+
+        // 仅用于派生缓存失效：静默提交和回滚都可能触发，订阅者不得在这里执行业务。
+        internal event Action<RuntimeItem, bool> ItemTouched;
 
         /// <summary>按 RuntimeItem.ItemId 升序把物品写入 destination（先清空），顺序与物品下标查询一致；变更后首次读取重建排序缓存，destination 由调用方持有以复用。</summary>
         public void FillItemsByItemId(List<RuntimeItem> destination)
@@ -634,10 +642,10 @@ namespace RPG4.Backpack.Inventory
             movedCount = Math.Min(room, incoming.StackCount);
 
             // 提交：数值已校验，不会触及 SetStackCount 的取值范围约束。
-            target.SetStackCount(target.StackCount + movedCount);
+            SetItemStack(target, target.StackCount + movedCount);
             if (movedCount < incoming.StackCount)
             {
-                incoming.SetStackCount(incoming.StackCount - movedCount);
+                SetItemStack(incoming, incoming.StackCount - movedCount);
             }
 
             BumpRevision();
@@ -665,7 +673,7 @@ namespace RPG4.Backpack.Inventory
                 return true;
             }
 
-            item.SetStackCount(stackCount);
+            SetItemStack(item, stackCount);
             BumpRevision();
             error = null;
             NotifyStackChanged(item);
@@ -701,8 +709,8 @@ namespace RPG4.Backpack.Inventory
                     error = null;
                     return true;
                 }
-                source.SetStackCount(targetCount);
-                target.SetStackCount(sourceCount);
+                SetItemStack(source, targetCount);
+                destination.SetItemStack(target, sourceCount);
             }
             else
             {
@@ -710,14 +718,14 @@ namespace RPG4.Backpack.Inventory
                     return Reject(out error, operation, "合并数量必须大于零且不超过来源数量。");
                 movedCount = Math.Min(count, target.MaxStackSize - targetCount);
                 if (movedCount == 0) return Reject(out error, operation, "目标堆叠已满。");
-                target.SetStackCount(targetCount + movedCount);
+                destination.SetItemStack(target, targetCount + movedCount);
                 if (movedCount == sourceCount)
                 {
                     ClearCells(sourcePlacement);
                     RemovePlacement(source);
                     itemIndicesDirty = true;
                 }
-                else source.SetStackCount(sourceCount - movedCount);
+                else SetItemStack(source, sourceCount - movedCount);
             }
 
             error = null;
@@ -726,8 +734,8 @@ namespace RPG4.Backpack.Inventory
             if (confirmed && !same && destinationConfirm != null) confirmed = destinationConfirm(target.ItemId, out error);
             if (!confirmed)
             {
-                source.SetStackCount(sourceCount);
-                target.SetStackCount(targetCount);
+                SetItemStack(source, sourceCount);
+                destination.SetItemStack(target, targetCount);
                 if (!Contains(source)) CommitPlacement(source, sourcePlacement.UpperLeftIndex, sourcePlacement.Dimensions);
                 itemIndicesDirty = true;
                 confirm?.Invoke(ItemId.None, out _);
@@ -774,9 +782,9 @@ namespace RPG4.Backpack.Inventory
                 for (int i = 0; i < plan.StackSteps.Length; i++)
                 {
                     StackStep step = plan.StackSteps[i];
-                    step.Target.SetStackCount(step.Target.StackCount - step.Amount);
+                    SetItemStack(step.Target, step.Target.StackCount - step.Amount);
                 }
-                item.SetStackCount(previousCount);
+                SetItemStack(item, previousCount);
                 itemIndicesDirty = true;
                 confirm(ItemId.None, out _);
                 return false;
@@ -827,7 +835,7 @@ namespace RPG4.Backpack.Inventory
 
             bool sameContainer = ReferenceEquals(this, destination);
             int previousStack = source.StackCount;
-            source.SetStackCount(previousStack - splitItem.StackCount);
+            SetItemStack(source, previousStack - splitItem.StackCount);
             destination.CommitReceiveItem(splitItem, plan);
             itemIndicesDirty = true;
             destination.itemIndicesDirty = true;
@@ -840,7 +848,7 @@ namespace RPG4.Backpack.Inventory
             {
                 destination.ClearCells(destination.placements[splitItem]);
                 destination.RemovePlacement(splitItem);
-                source.SetStackCount(previousStack);
+                SetItemStack(source, previousStack);
                 itemIndicesDirty = true;
                 destination.itemIndicesDirty = true;
                 confirm?.Invoke(ItemId.None, out _);
@@ -874,7 +882,7 @@ namespace RPG4.Backpack.Inventory
             if (!destination.TryPlanReceiveItem(item, operation, out ReceivePlan plan, out error,
                     mergeStacks && !SingleCellItems && !destination.SingleCellItems, upperLeftIndex, incomingSize)) return false;
 
-            // 双方静默提交：此段无回调，不能通过两个公开增删操作拼接转移。
+            // 双方静默提交：只使派生缓存失效，不发业务通知；不能用两个公开增删操作拼接转移。
             ClearCells(placement);
             RemovePlacement(item);
             int previousStack = item.StackCount;
@@ -895,9 +903,9 @@ namespace RPG4.Backpack.Inventory
                 for (int i = 0; i < plan.StackSteps.Length; i++)
                 {
                     StackStep step = plan.StackSteps[i];
-                    step.Target.SetStackCount(step.Target.StackCount - step.Amount);
+                    destination.SetItemStack(step.Target, step.Target.StackCount - step.Amount);
                 }
-                item.SetStackCount(previousStack);
+                SetItemStack(item, previousStack);
                 CommitPlacement(item, placement.UpperLeftIndex, placement.Dimensions);
                 itemIndicesDirty = true;
                 destination.itemIndicesDirty = true;
@@ -987,18 +995,18 @@ namespace RPG4.Backpack.Inventory
             return true;
         }
 
-        /// <summary>应用已校验的接收计划，不推进版本或通知；转移用此入口确保双方状态先全部落盘。</summary>
+        /// <summary>应用已校验的接收计划，只使派生缓存失效，不推进业务版本或广播；转移用此入口确保双方状态先全部落盘。</summary>
         private void CommitReceiveItem(RuntimeItem item, ReceivePlan plan)
         {
             for (int i = 0; i < plan.StackSteps.Length; i++)
             {
                 StackStep step = plan.StackSteps[i];
-                step.Target.SetStackCount(step.Target.StackCount + step.Amount);
+                SetItemStack(step.Target, step.Target.StackCount + step.Amount);
             }
 
             if (plan.PlaceIndex != NoIndex)
             {
-                item.SetStackCount(plan.Remaining);
+                SetItemStack(item, plan.Remaining);
                 CommitPlacement(item, plan.PlaceIndex, plan.Dimensions);
             }
         }
@@ -1062,6 +1070,7 @@ namespace RPG4.Backpack.Inventory
             item.RootOwner = this;
             item.Changed += OnItemStateChanged;
             FillCells(startIndex, dimensions, placement);
+            TouchItem(item, false);
         }
 
         private void RemovePlacement(RuntimeItem item)
@@ -1069,11 +1078,28 @@ namespace RPG4.Backpack.Inventory
             if (!placements.Remove(item)) return;
             item.Changed -= OnItemStateChanged;
             item.RootOwner = null;
+            TouchItem(item, false);
         }
 
         private void OnItemStateChanged(RuntimeItem item)
         {
-            if (Contains(item)) BumpRevision();
+            if (!Contains(item)) return;
+            TouchItem(item, true);
+            BumpRevision();
+        }
+
+        private void TouchItem(RuntimeItem item, bool payloadChanged)
+        {
+            pendingViewChanges.Add(item.ItemId);
+            ItemTouched?.Invoke(item, payloadChanged);
+        }
+
+        // 同程序集事务回滚也使用此入口，保持缓存失效但不追加业务通知。
+        internal void SetItemStack(RuntimeItem item, int count)
+        {
+            if (item.StackCount == count) return;
+            item.SetStackCount(count);
+            if (Contains(item)) TouchItem(item, true);
         }
 
         /// <summary>把放置记录占用的格子清空（用记录内冻结的尺寸，不重新向物品取尺寸）。</summary>
@@ -1159,7 +1185,19 @@ namespace RPG4.Backpack.Inventory
         /// <summary>广播粗粒度变更信号（无载荷）：表现层据此置脏、帧末合并刷新一次，不区分具体变了什么。</summary>
         private void NotifyChanged()
         {
-            EventBus.Global.Publish(InvChannels.Changed, this);
+            EventBus bus = EventBus.Global;
+            bool detailed = bus.SubscriptionCount(InvChannels.ItemsChanged, this) > 0
+                || bus.SubscriptionCount(InvChannels.ItemsChanged, EventBus.AnySource) > 0;
+            ItemId[] changed = null;
+            if (detailed && pendingViewChanges.Count > 0 && !pendingViewChanges.Contains(ItemId.None))
+            {
+                changed = new ItemId[pendingViewChanges.Count];
+                pendingViewChanges.CopyTo(changed);
+            }
+            // 先清空再回调：重入的下一次事务拥有独立的变更集合。
+            pendingViewChanges.Clear();
+            if (detailed) bus.Publish<ItemId[]>(InvChannels.ItemsChanged, this, changed);
+            bus.Publish(InvChannels.Changed, this);
         }
 
         /// <summary>广播「物品进入容器」：放置成功或被收编进容器时。</summary>

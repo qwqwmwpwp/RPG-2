@@ -26,7 +26,8 @@ namespace RPG4.Backpack.UI
 
         private RectTransform rectTransform; // 自身 RectTransform（像素尺寸与内嵌换算的目标）。
         private Color backgroundColor; // 底图常态色：唤醒时取自预制体，取消悬停时原样还原。
-        private bool selected, hovered;
+        private bool selected, hovered, iconInitialized, stackInitialized;
+        private int lastDisplayStack;
         private Vector2 pixelSize; // 最近一次写入的物品像素尺寸。
         private Sprite icon; // 当前图标。
         private bool warnedIcon; // 图标未接线的警告是否已输出（每实例一条，避免逐帧刷屏）。
@@ -52,11 +53,12 @@ namespace RPG4.Backpack.UI
         /// <summary>写入物品像素尺寸（由主控按网格度量算好，含多格物品的间距累加），并据此重算图标内嵌。</summary>
         public void SetSize(Vector2 size)
         {
+            if (pixelSize == size) return;
             pixelSize = size;
             if (rectTransform != null)
             {
                 rectTransform.sizeDelta = size;
-                backgroundImage1.rectTransform.sizeDelta = size - Vector2.one * 10;
+                if (backgroundImage1 != null) backgroundImage1.rectTransform.sizeDelta = size - Vector2.one * 10;
             }
             ApplyIconLayout();
         }
@@ -64,9 +66,15 @@ namespace RPG4.Backpack.UI
         /// <summary>写入图标与显示数量：图标为空则留空（不回落文字），数量不大于 1 则清空文本。</summary>
         public void SetItem(Sprite itemIcon, int displayStack)
         {
-            icon = itemIcon;
-            ApplyIconLayout();
-
+            if (!iconInitialized || icon != itemIcon)
+            {
+                iconInitialized = true;
+                icon = itemIcon;
+                ApplyIconLayout();
+            }
+            if (stackInitialized && lastDisplayStack == displayStack) return;
+            stackInitialized = true;
+            lastDisplayStack = displayStack;
             if (stackText == null)
             {
                 if (!warnedStack)
@@ -84,25 +92,28 @@ namespace RPG4.Backpack.UI
         /// <summary>切换悬停底色：悬停用反馈高亮色，取消悬停还原预制体的常态色。</summary>
         public void SetHover(bool hovered)
         {
+            if (this.hovered == hovered) return;
             this.hovered = hovered;
             RefreshFrame();
         }
 
         public void SetSelected(bool value)
         {
+            if (selected == value) return;
             selected = value;
             RefreshFrame();
         }
         private void RefreshFrame()
         {
-            if (backgroundImage0 != null)
-                backgroundImage0.color = selected ? selectedColor : hovered ? BackpackFeedbackPalette.ItemFrameHovered : backgroundColor;
+            if (backgroundImage0 == null) return;
+            Color color = selected ? selectedColor : hovered ? BackpackFeedbackPalette.ItemFrameHovered : backgroundColor;
+            if (backgroundImage0.color != color) backgroundImage0.color = color;
         }
 
         /// <summary>写入预制体上 CanvasGroup 的整体透明度（携带预览用）。</summary>
         public void SetAlpha(float alpha)
         {
-            if (group != null) group.alpha = alpha;
+            if (group != null && !Mathf.Approximately(group.alpha, alpha)) group.alpha = alpha;
         }
 
         #endregion
@@ -124,7 +135,7 @@ namespace RPG4.Backpack.UI
             }
 
             bool hasIcon = icon != null && icon.rect.size.x > 0f && icon.rect.size.y > 0f;
-            iconImage.gameObject.SetActive(hasIcon);
+            if (iconImage.gameObject.activeSelf != hasIcon) iconImage.gameObject.SetActive(hasIcon);
             if (!hasIcon) return;
 
             iconImage.sprite = icon;

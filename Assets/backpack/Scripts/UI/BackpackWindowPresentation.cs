@@ -9,6 +9,7 @@ namespace RPG4.Backpack.UI
     public sealed class BackpackWindowPresentation : MonoBehaviour
     {
         [SerializeField] private BackpackWindowUIData ui;
+        private bool presentationCleared;
         private readonly SummaryCache primary = new SummaryCache();
         private readonly SummaryCache secondary = new SummaryCache();
 
@@ -52,9 +53,10 @@ namespace RPG4.Backpack.UI
             if (ui == null) return;
             if (ui.window == null || !ui.window.IsOpen)
             {
-                Clear();
+                if (!presentationCleared) Clear();
                 return;
             }
+            presentationCleared = false;
             primary.Refresh(ui.primaryView, ui.primarySummary);
             secondary.Refresh(ui.secondaryView, ui.secondarySummary);
             BackpackInteractionController interaction = ui.interaction;
@@ -73,6 +75,7 @@ namespace RPG4.Backpack.UI
 
         private void Clear()
         {
+            presentationCleared = true;
             if (ui == null) return;
             primary.Clear();
             secondary.Clear();

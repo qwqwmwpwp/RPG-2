@@ -11,6 +11,8 @@ namespace RPG4.Backpack.Core
 
         public const string ItemRemoved = "Inv.ItemRemoved"; // 移除物品条目。载荷 (item)；M2 移除路径发送。
 
+        public const string ItemsChanged = "Inv.Items.Changed"; // (ItemId[] ids)，紧邻 Changed 前发布；null 表示全量失效，接收方只读取快照。
+
         public const string Changed = "Inv.Changed"; // 粗粒度「数据已变」脏信号，无载荷；表现层收到后置脏标记、帧末合并刷新一次，不区分具体变了什么。
 
         public const string OperationCompleted = "Inv.Operation.Completed"; // 完整库存操作结果。载荷 (InventoryOperationResult)，source 为来源库存的事件键。

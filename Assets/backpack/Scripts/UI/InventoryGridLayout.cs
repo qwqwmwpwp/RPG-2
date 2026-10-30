@@ -46,6 +46,10 @@ namespace RPG4.Backpack.UI
         private bool[] occupied;
         private ItemId[] ownerIds;
         private int[] ownerUpperLefts;
+        private readonly Dictionary<ItemId, int> placedIndices = new Dictionary<ItemId, int>();
+        private readonly HashSet<int> changedCells = new HashSet<int>();
+        public IReadOnlyCollection<int> ChangedCells => changedCells;
+        public int OccupiedCellCount { get; private set; }
 
         public int Columns { get; } // 网格列数。
         public int Rows { get; } // 网格行数。
@@ -69,6 +73,9 @@ namespace RPG4.Backpack.UI
         public void Clear()
         {
             Placed.Clear();
+            placedIndices.Clear();
+            changedCells.Clear();
+            OccupiedCellCount = 0;
             Overflow.Clear();
             Array.Clear(occupied, 0, occupied.Length);
             Array.Clear(ownerIds, 0, ownerIds.Length);
@@ -112,6 +119,57 @@ namespace RPG4.Backpack.UI
             }
         }
 
+        public bool TryGetPlacement(ItemId id, out GridDisplayPlacement placement)
+        {
+            if (placedIndices.TryGetValue(id, out int index)) { placement = Placed[index]; return true; }
+            placement = default;
+            return false;
+        }
+
+        /// <summary>整批释放旧占格后投影新落点；异常或溢出时由调用方回退到完整投影。</summary>
+        public bool ProjectChanges(IReadOnlyCollection<ItemId> ids, IReadOnlyDictionary<ItemId, InventoryPlacement> placements)
+        {
+            if (placements == null || Overflow.Count > 0) return false;
+            changedCells.Clear();
+            foreach (ItemId id in ids) Remove(id);
+            foreach (ItemId id in ids)
+            {
+                if (!id.IsValid) return false;
+                if (!placements.TryGetValue(id, out InventoryPlacement placement)) continue;
+                if (!placement.IsValid || placement.UpperLeftIndex >= ownerIds.Length
+                    || placement.Dimensions.X < 1 || placement.Dimensions.Y < 1) return false;
+                var item = new GridDisplayItem(id, placement.Dimensions.X, placement.Dimensions.Y);
+                var position = new Vector2Int(placement.UpperLeftIndex % Columns, placement.UpperLeftIndex / Columns);
+                if (!Fits(item, position)) return false;
+                Place(item, position);
+            }
+            return true;
+        }
+
+        private void Remove(ItemId id)
+        {
+            if (!placedIndices.TryGetValue(id, out int index)) return;
+            GridDisplayPlacement previous = Placed[index];
+            for (int y = previous.Position.y; y < previous.Position.y + previous.Item.Height; y++)
+            for (int x = previous.Position.x; x < previous.Position.x + previous.Item.Width; x++)
+            {
+                int cell = y * Columns + x;
+                occupied[cell] = false;
+                ownerIds[cell] = ItemId.None;
+                ownerUpperLefts[cell] = NoOwner;
+                changedCells.Add(cell);
+                OccupiedCellCount--;
+            }
+            int last = Placed.Count - 1;
+            if (index != last)
+            {
+                Placed[index] = Placed[last];
+                placedIndices[Placed[index].Item.Id] = index;
+            }
+            Placed.RemoveAt(last);
+            placedIndices.Remove(id);
+        }
+
         /// <summary>判断物品能否放在指定落点（不越界且覆盖范围内无占用）。</summary>
         private bool Fits(GridDisplayItem item, Vector2Int position)
         {
@@ -132,10 +190,13 @@ namespace RPG4.Backpack.UI
                 {
                     int cell = y * Columns + x;
                     occupied[cell] = true;
+                    OccupiedCellCount++;
+                    changedCells.Add(cell);
                     ownerIds[cell] = item.Id;
                     ownerUpperLefts[cell] = upperLeft;
                 }
 
+            placedIndices[item.Id] = Placed.Count;
             Placed.Add(new GridDisplayPlacement(item, position));
         }
     }
