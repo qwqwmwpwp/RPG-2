@@ -54,25 +54,73 @@ namespace RPG4.PlayerMovement
 
         private void Awake()
         {
+            if (!InitializeCamera()) return;
+            if (viewController != null) BindView(viewController);
+            else UnbindView();
+        }
+
+        private bool InitializeCamera()
+        {
+            if (initialized) return true;
             if (virtualCamera == null) virtualCamera = GetComponent<CinemachineVirtualCamera>();
-            follow = virtualCamera.GetCinemachineComponent<Cinemachine3rdPersonFollow>();
-            if (viewController == null || follow == null)
+            if (virtualCamera != null) follow = virtualCamera.GetCinemachineComponent<Cinemachine3rdPersonFollow>();
+            if (follow == null)
             {
-                Debug.LogError("PlayerCameraController 需要配置 PlayerViewController 和 3rd Person Follow。", this);
+                Debug.LogError("PlayerCameraController 需要配置 CinemachineVirtualCamera 和 3rd Person Follow。", this);
                 enabled = false;
-                return;
+                return false;
             }
 
+            ResetCameraState();
+            initialized = true;
+            return true;
+        }
+
+        private void ResetCameraState()
+        {
+            attacking = restoringExploration = false;
+            zoomVelocity = fieldOfViewVelocity = 0f;
+            shoulderOffsetVelocity = Vector3.zero;
             currentDistance = explorationDistance = Mathf.Clamp(initialDistance, minimumDistance, maximumDistance);
             follow.CameraDistance = currentDistance;
             follow.ShoulderOffset = explorationShoulderOffset;
             virtualCamera.m_Lens.FieldOfView = explorationFieldOfView;
-            virtualCamera.Follow = viewController.transform;
-            virtualCamera.LookAt = null;
             virtualCamera.PreviousStateIsValid = false;
-            initialized = true;
         }
 
+        public void BindView(PlayerViewController ownerView)
+        {
+            if (ownerView == null) { UnbindView(); return; }
+            if (!InitializeCamera()) return;
+            if (IsBoundTo(ownerView)) { enabled = true; BindPresenter(); return; }
+            presenter?.UnregisterCamera(this);
+            presenter = null;
+            viewController = ownerView;
+            ResetCameraState();
+            virtualCamera.Follow = ownerView.transform;
+            virtualCamera.LookAt = null;
+            virtualCamera.PreviousStateIsValid = false;
+            enabled = true;
+            BindPresenter();
+        }
+        public bool IsBoundTo(PlayerViewController ownerView) => ownerView != null && initialized
+            && viewController == ownerView && virtualCamera != null && virtualCamera.Follow == ownerView.transform
+            && virtualCamera.LookAt == null;
+
+        public void UnbindView()
+        {
+            presenter?.UnregisterCamera(this);
+            presenter = null;
+            viewController = null;
+            if (virtualCamera == null) virtualCamera = GetComponent<CinemachineVirtualCamera>();
+            if (virtualCamera != null)
+            {
+                virtualCamera.Follow = null;
+                virtualCamera.LookAt = null;
+                virtualCamera.PreviousStateIsValid = false;
+            }
+            if (initialized) ResetCameraState();
+        }
         private void BindPresenter()
         {
             if (presenter != null || viewController == null) return;
@@ -82,7 +130,7 @@ namespace RPG4.PlayerMovement
         private void Update() { if (initialized) BindPresenter(); }
         private void LateUpdate()
         {
-            if (!initialized) return;
+            if (!initialized || viewController == null) return;
             BindPresenter();
             presenter?.ApplyCamera(this, Time.unscaledDeltaTime);
         }

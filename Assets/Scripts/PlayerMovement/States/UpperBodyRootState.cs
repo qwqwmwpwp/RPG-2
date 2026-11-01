@@ -12,12 +12,12 @@ namespace RPG4.PlayerMovement
         private readonly WeaponActionTimeline timeline;
         private bool frameAvailable;
         private bool fireArmed = true;
-        private int fireRearmFrame = -1;
+        private long fireRearmFrame = -1;
         internal double Now { get; private set; }
         internal bool CanAct => frameAvailable && context.CanUseWeapon;
         internal bool AimHeld => CanAct && context.ReadState.Input.AimHeld;
         internal bool ReloadPressed => CanAct && context.ReadState.Input.ReloadPressed && context.Weapon.CanReload;
-        internal bool FireInputAvailable => CanAct && fireArmed && Time.frameCount > fireRearmFrame;
+        internal bool FireInputAvailable => CanAct && fireArmed && context.Owner.SimulationTick > fireRearmFrame;
         internal bool FireHeld => FireInputAvailable && context.ReadState.Input.FireHeld;
         internal bool FirePressed => FireInputAvailable && context.ReadState.Input.FirePressed;
         internal bool IsReloading => context.Weapon != null && context.Weapon.IsReloading;
@@ -47,17 +47,25 @@ namespace RPG4.PlayerMovement
             if (!frameAvailable) CancelWeaponAction();
             else
             {
-                if (Time.frameCount > fireRearmFrame && !context.ReadState.Input.FireHeld) fireArmed = true;
-                context.Weapon.BeginFrame(now, Time.frameCount, FireHeld);
-                timeline.Advance(context.Weapon, now, Time.frameCount);
+                // 取消前的 held 不能自行恢复；之后明确的新按下边沿也能开启下一次扳机会话。
+                if (context.Owner.SimulationTick > fireRearmFrame
+                    && (!context.ReadState.Input.FireHeld || context.ReadState.Input.FirePressed)) fireArmed = true;
+                context.Weapon.BeginFrame(now, context.Owner.SimulationTick, FireHeld);
+                timeline.Advance(context.Weapon, now, context.Owner.SimulationTick);
             }
         }
-        internal void AdvanceAction() => timeline.Advance(context.Weapon, Now, Time.frameCount);
+        internal void AdvanceAction() => timeline.Advance(context.Weapon, Now, context.Owner.SimulationTick);
         internal void ClearAction() => timeline.ClearAction();
         private void RequireRelease()
         {
             fireArmed = false;
-            fireRearmFrame = Time.frameCount;
+            fireRearmFrame = context.Owner.SimulationTick;
+        }
+        // 来源切换已撤回旧输入；新来源提交的首个新边沿不属于旧扳机会话。
+        internal void BeginInputSession()
+        {
+            fireArmed = true;
+            fireRearmFrame = -1;
         }
 
         internal void TickReady(bool aiming)

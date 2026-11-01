@@ -44,24 +44,44 @@ namespace RPG4.Backpack.Items
         {
             BackpackTag ammo = rounds[0];
             rounds.RemoveAt(0);
-            if (notify) owner.NotifyStateChanged();
+            owner.AdvanceStateRevision(true);
+            if (notify) owner.PublishStateChanged();
             return ammo;
         }
 
         internal void AddRounds(BackpackTag ammo, int count)
         {
             for (int i = 0; i < count; i++) rounds.Add(ammo);
+            owner.AdvanceStateRevision(false);
         }
 
         internal bool TryRestore(IReadOnlyList<BackpackTag> values, ItemManifestCatalog catalog, out string error)
+        {
+            if (!ValidateRuntime(values, catalog, out error)) return false;
+            ApplyRuntime(values);
+            return true;
+        }
+
+        internal bool ValidateRuntime(IReadOnlyList<BackpackTag> values, ItemManifestCatalog catalog, out string error)
         {
             error = null;
             if (values == null || values.Count > Capacity) { error = "弹匣弹数超过容量。"; return false; }
             for (int i = 0; i < values.Count; i++)
                 if (!CanAcceptAmmo(values[i], catalog)) { error = "弹匣包含未知或不兼容弹种。"; return false; }
+            return true;
+        }
+
+        internal void ApplyRuntime(IReadOnlyList<BackpackTag> values)
+        {
             rounds.Clear();
             for (int i = 0; i < values.Count; i++) rounds.Add(values[i]);
-            return true;
+            owner.AdvanceStateRevision(false);
+        }
+
+        internal void ApplyRemainingRounds(int remaining)
+        {
+            rounds.RemoveRange(0, rounds.Count - remaining);
+            owner.AdvanceStateRevision(true);
         }
     }
 
@@ -124,7 +144,7 @@ namespace RPG4.Backpack.Items
             if (magazine != null && magazine.RoundCount > 0) ChamberAmmo = magazine.RemoveFirst(false);
             Durability = Math.Max(0f, Durability - Definition.DurabilityPerShot);
             sequence = ++ShotSequence;
-            owner.NotifyStateChanged();
+            owner.NotifyStateChanged(true);
             error = null;
             return true;
         }
@@ -136,7 +156,7 @@ namespace RPG4.Backpack.Items
                 || !ammo.AmmoType.MatchesTagExact(Definition.AmmoType))
             { error = "已上膛或弹匣没有兼容弹药。"; return false; }
             ChamberAmmo = Magazine.MagazineState.RemoveFirst(false);
-            owner.NotifyStateChanged();
+            owner.NotifyStateChanged(true);
             error = null;
             return true;
         }
@@ -146,6 +166,7 @@ namespace RPG4.Backpack.Items
             Detach(Magazine);
             Magazine = item;
             Attach(item);
+            owner.AdvanceStateRevision(false);
         }
 
         internal void SetAttachment(WeaponAttachmentSlot slot, RuntimeItem item)
@@ -153,6 +174,7 @@ namespace RPG4.Backpack.Items
             if (attachments.TryGetValue(slot, out RuntimeItem previous)) Detach(previous);
             attachments.Remove(slot);
             if (item != null) { attachments.Add(slot, item); Attach(item); }
+            owner.AdvanceStateRevision(false);
         }
 
         private void Attach(RuntimeItem item)
@@ -169,9 +191,17 @@ namespace RPG4.Backpack.Items
             item.ParentItem = null;
         }
 
-        private void OnChildChanged(RuntimeItem item) => owner.NotifyStateChanged();
+        private void OnChildChanged(RuntimeItem item) => owner.PublishStateChanged();
 
         internal bool TryRestore(float durability, BackpackTag chamberAmmo, ulong sequence,
+            ItemManifestCatalog catalog, out string error)
+        {
+            if (!ValidateRuntime(durability, chamberAmmo, catalog, out error)) return false;
+            ApplyRuntime(durability, chamberAmmo, sequence);
+            return true;
+        }
+
+        internal bool ValidateRuntime(float durability, BackpackTag chamberAmmo,
             ItemManifestCatalog catalog, out string error)
         {
             error = null;
@@ -180,8 +210,13 @@ namespace RPG4.Backpack.Items
             if (!chamberAmmo.IsEmpty && (!MagazineItemState.TryResolveAmmo(chamberAmmo, catalog, out AmmoDefinitionFragment ammo)
                 || !ammo.AmmoType.MatchesTagExact(Definition.AmmoType)))
             { error = "膛内弹种未知或不兼容。"; return false; }
-            Durability = durability; ChamberAmmo = chamberAmmo; ShotSequence = sequence;
             return true;
+        }
+
+        internal void ApplyRuntime(float durability, BackpackTag chamberAmmo, ulong sequence)
+        {
+            Durability = durability; ChamberAmmo = chamberAmmo; ShotSequence = sequence;
+            owner.AdvanceStateRevision(true);
         }
     }
 }

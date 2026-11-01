@@ -12,6 +12,11 @@ namespace RPG4.PlayerMovement
         private readonly Vector3 standingCenter;
         private readonly Collider[] standHits = new Collider[32];
         private float turnVelocity;
+        private readonly RaycastHit[] moveHits = new RaycastHit[32];
+        private float verticalVelocity;
+        private bool networkMotor;
+        private bool originalKinematic, originalGravity;
+        internal bool NetworkMotor => networkMotor;
         private Rigidbody strafeBody;
         private float originalMaxAngularVelocity;
         private Vector2 movement;
@@ -26,14 +31,23 @@ namespace RPG4.PlayerMovement
             standingCenter = content.Capsule.center;
         }
         internal void ResetTurn() => turnVelocity = 0f;
-        internal static Ray GetAimRay(Transform owner, Camera configuredCamera, float yaw, float pitch, bool useSceneCamera)
+        internal Ray GetAimRay(float yaw, float pitch)
         {
-            Camera camera = null;
-            if (useSceneCamera) camera = configuredCamera != null ? configuredCamera : Camera.main;
-            if (camera != null && camera.isActiveAndEnabled)
-                return camera.ViewportPointToRay(new Vector3(0.5f, 0.5f));
-            return new Ray(owner.position + Vector3.up * 1.5f,
+            return new Ray(LogicAnchor(0.8f),
                 Quaternion.Euler(pitch, yaw, 0f) * Vector3.forward);
+        }
+        internal void GetShotOrigins(Vector3 direction, out Vector3 bodyOrigin, out Vector3 muzzleOrigin)
+        {
+            // 逻辑锚点只来自物理主体与胶囊；动画、模型枪口和相机都不参与命中计算。
+            bodyOrigin = LogicAnchor(0.65f);
+            muzzleOrigin = bodyOrigin + direction.normalized * 0.5f;
+        }
+        private Vector3 LogicAnchor(float heightFraction)
+        {
+            CapsuleCollider capsule = content.Capsule;
+            Rigidbody body = content.Body;
+            Vector3 local = capsule.center + Vector3.up * (capsule.height * (heightFraction - 0.5f));
+            return body.position + body.rotation * Vector3.Scale(local, capsule.transform.lossyScale);
         }
         internal bool ApplyPosture(bool wantsCrouch)
         {
@@ -76,6 +90,7 @@ namespace RPG4.PlayerMovement
         internal void Move(LocomotionPlan plan, bool strafe, float deltaTime)
         {
             Rigidbody body = content.Body;
+            if (networkMotor) { MoveNetwork(plan, strafe, deltaTime); return; }
             if (body == null || body.isKinematic)
             {
                 movement = Vector2.zero;
@@ -133,6 +148,125 @@ namespace RPG4.PlayerMovement
                     ref turnVelocity, data.Exploration.TurnSmoothTime, Mathf.Infinity, deltaTime);
             body.MoveRotation(Quaternion.Euler(0f, freeYaw, 0f));
         }
+        internal void ConfigureNetworkMotor(bool enabled)
+        {
+            if (networkMotor == enabled) return;
+            Rigidbody body = content.Body;
+            if (enabled)
+            {
+                originalKinematic = body.isKinematic;
+                originalGravity = body.useGravity;
+                Stop();
+                body.isKinematic = true;
+                body.useGravity = false;
+                verticalVelocity = 0f;
+            }
+            else { body.isKinematic = originalKinematic; body.useGravity = originalGravity; }
+            networkMotor = enabled;
+        }
+        internal PlayerMotorState CaptureMotor() => new PlayerMotorState
+        {
+            Position = content.Body.position, Yaw = BodyYaw, Velocity = PlanarVelocity,
+            VerticalVelocity = verticalVelocity, TurnVelocity = turnVelocity, Crouched = PhysicallyCrouched
+        };
+        internal void RestoreMotor(PlayerMotorState state)
+        {
+            movement = new Vector2(state.Velocity.x, state.Velocity.z);
+            verticalVelocity = state.VerticalVelocity;
+            turnVelocity = state.TurnVelocity;
+            float height = state.Crouched ? Mathf.Clamp(data.Crouch.Height,
+                content.Capsule.radius * 2f, standingHeight) : standingHeight;
+            content.Capsule.height = height;
+            content.Capsule.center = standingCenter + Vector3.up * ((height - standingHeight) * 0.5f);
+            PhysicallyCrouched = state.Crouched;
+            SetPose(state.Position, state.Yaw);
+        }
+        private void SetPose(Vector3 position, float yaw)
+        {
+            Quaternion rotation = Quaternion.Euler(0f, yaw, 0f);
+            content.Body.position = position;
+            content.Body.rotation = rotation;
+            content.Body.transform.SetPositionAndRotation(position, rotation);
+        }
+        private bool Blocks(Collider other)
+            => other != null && other != content.Capsule && other.attachedRigidbody != content.Body
+                && !other.transform.IsChildOf(content.Body.transform)
+                && !Physics.GetIgnoreLayerCollision(content.Capsule.gameObject.layer, other.gameObject.layer)
+                && !Physics.GetIgnoreCollision(content.Capsule, other);
+        private void CapsuleAt(Vector3 position, out Vector3 bottom, out Vector3 top, out float radius)
+        {
+            CapsuleCollider capsule = content.Capsule;
+            Vector3 scale = capsule.transform.lossyScale;
+            radius = capsule.radius * Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.z));
+            float height = Mathf.Max(radius * 2f, capsule.height * Mathf.Abs(scale.y));
+            Vector3 center = position + content.Body.rotation * Vector3.Scale(capsule.center, scale);
+            bottom = center - Vector3.up * (height * 0.5f - radius);
+            top = center + Vector3.up * (height * 0.5f - radius);
+        }
+        private void MoveNetwork(LocomotionPlan plan, bool strafe, float deltaTime)
+        {
+            if (deltaTime <= 0f) return;
+            Physics.SyncTransforms();
+            Vector3 direction = Quaternion.Euler(0f, plan.ViewYaw, 0f) * new Vector3(plan.Move.x, 0f, plan.Move.y);
+            Vector2 target = plan.CanMove ? new Vector2(direction.x, direction.z) * plan.MoveSpeed : Vector2.zero;
+            movement = plan.CanMove ? Vector2.ClampMagnitude(PlayerMotionMath.SmoothMove(movement, target,
+                data.Movement.DirectionSmoothTime, data.Movement.SpeedSmoothTime, deltaTime), plan.MoveSpeed) : Vector2.zero;
+            float yaw = BodyYaw;
+            if (strafe || movement.sqrMagnitude > 0.000001f)
+            {
+                float targetYaw = strafe ? plan.ViewYaw : Mathf.Atan2(movement.x, movement.y) * Mathf.Rad2Deg;
+                float smooth = strafe ? data.Aim.TurnSmoothTime : data.Exploration.TurnSmoothTime;
+                yaw = smooth <= 0f ? targetYaw : Mathf.SmoothDampAngle(yaw, targetYaw, ref turnVelocity,
+                    smooth, Mathf.Infinity, deltaTime);
+            }
+            else turnVelocity = 0f;
+            verticalVelocity += Physics.gravity.y * deltaTime;
+            Vector3 position = content.Body.position;
+            // Limited depenetration also recovers a server correction inside a moving obstacle.
+            for (int iteration = 0; iteration < 4; iteration++)
+            {
+                CapsuleAt(position, out Vector3 bottom, out Vector3 top, out float radius);
+                int count = Physics.OverlapCapsuleNonAlloc(bottom, top, radius, standHits,
+                    Physics.AllLayers, QueryTriggerInteraction.Ignore);
+                bool moved = false;
+                for (int i = 0; i < count; i++)
+                {
+                    Collider other = standHits[i];
+                    if (!Blocks(other)) continue;
+                    if (Physics.ComputePenetration(content.Capsule, position, content.Body.rotation,
+                        other, other.transform.position, other.transform.rotation, out Vector3 normal, out float distance))
+                    { position += normal * (distance + 0.001f); moved = true; }
+                }
+                if (!moved) break;
+            }
+            Vector3 remaining = new Vector3(movement.x, verticalVelocity, movement.y) * deltaTime;
+            const float skin = 0.002f;
+            for (int iteration = 0; iteration < 4 && remaining.sqrMagnitude > 0.0000001f; iteration++)
+            {
+                CapsuleAt(position, out Vector3 bottom, out Vector3 top, out float radius);
+                float distance = remaining.magnitude;
+                Vector3 directionStep = remaining / distance;
+                int count = Physics.CapsuleCastNonAlloc(bottom, top, radius, directionStep, moveHits,
+                    distance + skin, Physics.AllLayers, QueryTriggerInteraction.Ignore);
+                float nearest = float.PositiveInfinity;
+                Vector3 normal = Vector3.zero;
+                for (int i = 0; i < count; i++)
+                {
+                    RaycastHit hit = moveHits[i];
+                    if (!Blocks(hit.collider) || Vector3.Dot(directionStep, hit.normal) >= -0.0001f) continue;
+                    if (hit.distance < nearest) { nearest = hit.distance; normal = hit.normal; }
+                }
+                // A saturated query is conservative: do not tunnel through an omitted collider.
+                if (count == moveHits.Length) break;
+                if (float.IsPositiveInfinity(nearest)) { position += remaining; break; }
+                float travelled = Mathf.Max(0f, nearest - skin);
+                position += directionStep * travelled;
+                remaining = Vector3.ProjectOnPlane(remaining - directionStep * travelled, normal);
+                if (normal.y > 0.5f && verticalVelocity < 0f) verticalVelocity = 0f;
+                else if (normal.y < -0.5f && verticalVelocity > 0f) verticalVelocity = 0f;
+            }
+            SetPose(position, yaw);
+        }
         private void SetPlanarVelocity(Vector3 velocity)
         {
             Rigidbody body = content.Body;
@@ -152,6 +286,7 @@ namespace RPG4.PlayerMovement
             RestoreStrafeAngularLimit();
             ResetTurn();
             movement = Vector2.zero;
+            verticalVelocity = 0f;
         }
     }
 }

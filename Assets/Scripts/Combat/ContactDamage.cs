@@ -27,7 +27,7 @@ namespace RPG4.Combat
 
         private void TryDamage(Collider other)
         {
-            if (!isActiveAndEnabled || owner != null && !owner.IsAlive
+            if (!isActiveAndEnabled || owner != null && (!owner.IsAlive || !owner.CanExecuteAuthority)
                 || (targetLayers.value & (1 << other.gameObject.layer)) == 0) return;
             AttributeComponent target = other.GetComponentInParent<AttributeComponent>();
             if (target == null || target == owner || !target.IsAlive) return;

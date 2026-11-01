@@ -3,6 +3,7 @@ using Mirror;
 using UnityEngine;
 using RPG4.Backpack.Core;
 using RPG4.Backpack.Items;
+using RPG4.Backpack.Inventory;
 
 namespace RPG4.Backpack.Network
 {
@@ -27,7 +28,13 @@ namespace RPG4.Backpack.Network
         [SerializeField]
         private BackpackNetworkStartMode startMode = BackpackNetworkStartMode.None;
 
-        public ItemIdGenerator ServerItemIds { get; private set; } // 服务端物品标识生成器：OnStartServer 创建、OnStopServer 释放，客户端恒为 null；每个会话使用新实例，避免跨会话复用标识。
+        [Header("Application payload scheduling (per connection)")]
+        [SerializeField, Min(1024)] private int sendBytesPerSecond = 65536;
+        [SerializeField, Min(NetworkSendScheduler.MinimumBurstBytes)] private int sendBurstBytes = 16384;
+        [SerializeField, Min(8)] private int maxPendingSends = 256;
+        [SerializeField, Min(1024)] private int maxPendingSendBytes = 524288;
+
+        public ItemIdGenerator ServerItemIds { get; private set; } // 服务端持有共享单调发号器：启动时接续场景已有离线物品，停止仅释放引用；纯客户端恒为 null。
 
         public bool IsServerRunning => NetworkServer.active; // 服务端是否处于运行状态。
 
@@ -51,10 +58,12 @@ namespace RPG4.Backpack.Network
         public override void OnStartServer()
         {
             base.OnStartServer();
+            NetworkSendScheduler.Reset();
+            NetworkSendScheduler.Configure(sendBytesPerSecond, sendBurstBytes, maxPendingSends, maxPendingSendBytes);
             statisticsServerRunning = true;
             StartTrafficCapture();
-            ServerItemIds = new ItemIdGenerator();
-            BackpackLog.Info(LogModule.Network, "服务端已启动：" + DescribeTransport() + "，物品标识从 " + ItemIdGenerator.FirstValue + " 开始发放。");
+            ServerItemIds = InventoryHostCore.SharedItemIds;
+            BackpackLog.Info(LogModule.Network, "服务端已启动：" + DescribeTransport() + "，物品标识接续 " + ServerItemIds.LastIssued + " 之后发放。");
         }
 
         /// <inheritdoc/>
@@ -69,6 +78,7 @@ namespace RPG4.Backpack.Network
         /// <inheritdoc/>
         public override void OnStopServer()
         {
+            NetworkSendScheduler.Reset();
             statisticsServerRunning = false;
             StopTrafficCaptureIfIdle();
             if (ServerItemIds != null)
@@ -110,8 +120,15 @@ namespace RPG4.Backpack.Network
         /// <inheritdoc/>
         public override void OnServerDisconnect(NetworkConnectionToClient conn)
         {
+            NetworkSendScheduler.CancelConnection(conn);
             base.OnServerDisconnect(conn);
             BackpackLog.Info(LogModule.Network, "客户端已断开：connectionId=" + conn.connectionId + "，剩余连接数 " + NetworkServer.connections.Count + "。");
+        }
+
+        public override void LateUpdate()
+        {
+            base.LateUpdate();
+            if (NetworkServer.active) NetworkSendScheduler.Flush();
         }
 
         /// <inheritdoc/>

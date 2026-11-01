@@ -57,7 +57,11 @@ namespace RPG4.Backpack.Inventory
 
         private void OnWeaponOperationCommand(WeaponOperation operation)
         {
-            if (ResolveAuthority()) PublishWeaponOperationResult(ExecuteWeaponOperation(operation));
+            if (ResolveAuthority())
+            {
+                if (AuthorityWeaponOperationDispatcher != null) AuthorityWeaponOperationDispatcher(operation);
+                else PublishWeaponOperationResult(ExecuteWeaponOperation(operation));
+            }
             else if (ForwardWeaponOperation != null) ForwardWeaponOperation(operation);
             else PublishWeaponOperationResult(new WeaponOperationResult(operation.RequestId, operation.TargetItemId,
                 false, "此库存当前不支持武器操作。"));

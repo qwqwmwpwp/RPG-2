@@ -4,6 +4,17 @@ using RPG4.Backpack.Items;
 
 namespace RPG4.Backpack.Inventory
 {
+    /// <summary>共享容器交互的网络桥；运行时箱子不依赖网络程序集。</summary>
+    public interface ISharedInventoryAccess
+    {
+        bool IsNetworkSessionActive { get; }
+        bool IsServerSession { get; }
+        IBackpackView InventoryView { get; }
+        bool HasLocalAccess { get; }
+        bool RequestOpenForLocalPlayer(System.Action granted);
+        void CloseForLocalPlayer();
+    }
+
     /// <summary>UI 数据源契约：表现层只依赖本接口，单机与网络两套宿主各实现一份，切换部署形态时界面代码零改动；物品读取经 <see cref="CopyItems"/>，变更通知与写入意图走事件管线的 <see cref="EventSource"/> 键。</summary>
     public interface IBackpackView
     {

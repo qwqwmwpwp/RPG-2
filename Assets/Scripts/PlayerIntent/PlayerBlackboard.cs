@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Threading;
 using UnityEngine;
 
-[assembly: InternalsVisibleTo("RPG4.Input")]
 [assembly: InternalsVisibleTo("RPG4.PlayerMovement")]
 
 namespace RPG4.PlayerIntent

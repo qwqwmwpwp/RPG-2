@@ -1,5 +1,6 @@
 using RPG4.Backpack.Items;
 using RPG4.Combat;
+using RPG4.Input;
 using RPG4.Interaction;
 using RPG4.PlayerIntent;
 using RPG4.UI;
@@ -12,6 +13,7 @@ namespace RPG4.PlayerMovement
     internal sealed class PlayerPresenter
     {
         private readonly PlayerBlackboard blackboard;
+        private readonly PlayerInput localInput;
         private readonly PlayerStateData data;
         private readonly PlayerWeaponRig weaponRig;
         private readonly PlayerLocomotionPresentation locomotion;
@@ -19,7 +21,7 @@ namespace RPG4.PlayerMovement
         private readonly PlayerLifePresentation life;
         private readonly List<CharacterHealthView> healthViews = new List<CharacterHealthView>();
         private readonly List<CharacterStatusHUD> statusViews = new List<CharacterStatusHUD>();
-        private readonly CrosshairUI crosshair;
+        private CrosshairUI crosshair;
         private PlayerPublishedFrame frame;
         private PlayerMotionTarget motionTarget;
         private PlayerWeaponTarget weaponTarget;
@@ -27,8 +29,12 @@ namespace RPG4.PlayerMovement
         private PlayerCameraTarget cameraTarget;
         private PlayerCameraController camera;
         private WeaponView weaponView;
+        private RuntimeItem equipmentItem;
+        private bool equipmentAttempted;
+        private bool equipmentRigAvailable;
+        private int equipmentRevision = -1;
         private ulong lastEventSequence;
-        private int advancedFrame = -1, zoomFrame = -1;
+        private int advancedFrame = -1;
         private float explorationDistance;
         private bool cameraInitialized, enabled = true, wasActive, wasAlive = true, wasReloading, shotAiming;
         private bool reloadCrouched;
@@ -38,6 +44,7 @@ namespace RPG4.PlayerMovement
             RPG4.CharacterAttributes.CharacterAttributes attributes)
         {
             this.blackboard = blackboard;
+            localInput = ownerRoot.GetComponent<PlayerInput>();
             this.data = data;
             weaponRig = rig;
             locomotion = new PlayerLocomotionPresentation(data);
@@ -46,12 +53,14 @@ namespace RPG4.PlayerMovement
             data.Content.ViewController?.Initialize(ownerRoot, this);
             data.Content.AimPose?.Initialize(ownerRoot);
             weaponRig?.PrepareEquipment();
-            PlayerInteraction interaction = ownerRoot.GetComponent<PlayerInteraction>();
-            if (interaction != null && interaction.CrosshairPrefab != null)
-            {
-                crosshair = Object.Instantiate(interaction.CrosshairPrefab, ownerRoot, false);
-                crosshair.SetState(false, false);
-            }
+            RefreshHealthBindings(attributes);
+        }
+        internal void RefreshHealthBindings(RPG4.CharacterAttributes.CharacterAttributes attributes)
+        {
+            foreach (CharacterHealthView view in healthViews)
+                if (view != null) view.SetExternalPresentation(false);
+            healthViews.Clear(); statusViews.Clear();
+            if (localInput == null || !localInput.UsesLocalInput) return;
             foreach (CharacterHealthView view in Object.FindObjectsOfType<CharacterHealthView>(true))
             {
                 if (view.SourceAttributes != attributes) continue;
@@ -61,6 +70,14 @@ namespace RPG4.PlayerMovement
                 CharacterStatusHUD status = view.GetComponent<CharacterStatusHUD>();
                 if (status != null) statusViews.Add(status);
             }
+        }
+        private void EnsureLocalCrosshair()
+        {
+            if (crosshair != null || localInput == null || !localInput.UsesLocalInput) return;
+            PlayerInteraction interaction = localInput.GetComponent<PlayerInteraction>();
+            if (interaction == null || interaction.CrosshairPrefab == null) return;
+            crosshair = Object.Instantiate(interaction.CrosshairPrefab, localInput.transform, false);
+            crosshair.SetState(false, false);
         }
 
         internal void Present(float deltaTime, bool reevaluate = false)
@@ -73,6 +90,15 @@ namespace RPG4.PlayerMovement
             {
                 lastEventSequence = frame.LastEventSequence;
                 return;
+            }
+            EnsureLocalCrosshair();
+            float localZoom = localInput != null ? localInput.ConsumePresentationZoom() : 0f;
+            if (camera != null && localZoom != 0f && frame.CanLook
+                && !frame.WeaponDemand.AimCamera && !frame.WeaponDemand.AttackCamera)
+            {
+                explorationDistance = Mathf.Clamp(explorationDistance - localZoom * camera.ZoomSpeed,
+                    camera.MinimumDistance, camera.MaximumDistance);
+                changed = true;
             }
             if (changed) BuildTargets();
             float step = advancedFrame == Time.frameCount ? 0f : Mathf.Max(0f, deltaTime);
@@ -132,10 +158,6 @@ namespace RPG4.PlayerMovement
             if (camera != null)
             {
                 bool attack = allowed && (demand.AimCamera || demand.AttackCamera);
-                if (zoomFrame != Time.frameCount && frame.CanLook && !attack)
-                    explorationDistance = Mathf.Clamp(explorationDistance - frame.Zoom * camera.ZoomSpeed,
-                        camera.MinimumDistance, camera.MaximumDistance);
-                zoomFrame = Time.frameCount;
                 cameraTarget = new PlayerCameraTarget(attack,
                     attack ? camera.AttackDistance : explorationDistance,
                     attack ? camera.AttackFieldOfView : camera.ExplorationFieldOfView, explorationDistance);
@@ -202,6 +224,7 @@ namespace RPG4.PlayerMovement
         {
             if (enabled == value) return;
             enabled = value;
+            if (value && weaponView == null) equipmentAttempted = false;
             PlayerPublishedFrame published = blackboard.Published;
             lastEventSequence = published != null ? published.LastEventSequence : 0;
             if (frame != null && frame.Alive) locomotion.Reset(frame.PhysicallyCrouched);
@@ -232,38 +255,61 @@ namespace RPG4.PlayerMovement
         }
         private void RestoreSocket() => weaponRig?.SwitchSocketByString("To_Hand_R_Socket,IK_ON_Left_Handle");
 
-        internal bool CanPrepareEquipment(GameObject prefab, out string error)
-        {
-            error = "角色缺少武器挂点与左手目标。";
-            return weaponRig != null && weaponRig.CanPrepareEquipment(prefab, out error);
-        }
-        internal bool TryPrepareEquipment(GameObject prefab, out GameObject model, out string error)
-        {
-            model = null;
-            error = "角色缺少武器挂点与左手目标。";
-            return weaponRig != null && weaponRig.TryPrepareEquipment(prefab, out model, out error);
-        }
-        internal void BindEquipment(GameObject model, RuntimeItem item)
+        private void BindEquipment(GameObject model, RuntimeItem item)
         {
             weaponRig.BindEquipment(model);
             weaponView = model.GetComponentInChildren<WeaponView>(true);
             weaponView?.Bind(item);
             weaponRig.SetVisible(enabled);
         }
-        internal void RefreshEquipment(RuntimeItem item) => weaponView?.ApplyItemState(item);
+        internal void RefreshEquipment(RuntimeItem item)
+        {
+            if (!ReferenceEquals(equipmentItem, item))
+            {
+                ReleaseEquipment();
+                equipmentItem = item;
+            }
+            if (!enabled || item == null) return;
+            bool rigAvailable = weaponRig != null && weaponRig.isActiveAndEnabled;
+            if (rigAvailable != equipmentRigAvailable)
+            {
+                equipmentRigAvailable = rigAvailable;
+                if (rigAvailable) equipmentAttempted = false;
+            }
+            if (!rigAvailable) return;
+            if (weaponView != null)
+            {
+                if (equipmentRevision != item.Revision) weaponView.ApplyItemState(item);
+                equipmentRevision = item.Revision;
+                return;
+            }
+            // 缺少资源/挂点时仅放弃本轮投影；不阻塞装备，也不逐帧反复创建失败的模型。
+            if (equipmentAttempted && equipmentRevision == item.Revision) return;
+            equipmentAttempted = true;
+            equipmentRevision = item.Revision;
+            GameObject model = null;
+            try
+            {
+                GameObject prefab = item.GetFragment<EquipmentFragment>()?.EquipPrefab;
+                if (!weaponRig.TryPrepareEquipment(prefab, out model, out _)) return;
+                BindEquipment(model, item);
+            }
+            catch (System.Exception exception)
+            {
+                Debug.LogException(exception);
+                if (model != null) Object.Destroy(model);
+                weaponView = null;
+                weaponRig?.UnbindEquipment();
+            }
+        }
         internal void ReleaseEquipment()
         {
             weaponView?.Unbind();
             weaponView = null;
             weaponRig?.UnbindEquipment();
-        }
-        internal bool TryGetShotOrigins(out Vector3 bodyOrigin, out Vector3 muzzleOrigin)
-        {
-            bodyOrigin = muzzleOrigin = default;
-            if (!enabled || weaponView == null || weaponView.Muzzle == null) return false;
-            bodyOrigin = weaponView.transform.position;
-            muzzleOrigin = weaponView.Muzzle.position;
-            return true;
+            equipmentItem = null;
+            equipmentAttempted = false;
+            equipmentRevision = -1;
         }
     }
 }

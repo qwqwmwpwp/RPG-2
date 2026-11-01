@@ -1,0 +1,7 @@
+<linker>
+  <assembly fullname="MySqlConnector" preserve="all" ignoreIfMissing="1" />
+  <assembly fullname="Microsoft.Extensions.Logging.Abstractions" preserve="all" ignoreIfMissing="1" />
+  <assembly fullname="Microsoft.Extensions.DependencyInjection.Abstractions" preserve="all" ignoreIfMissing="1" />
+  <assembly fullname="System.Diagnostics.DiagnosticSource" preserve="all" ignoreIfMissing="1" />
+  <assembly fullname="System.Runtime.CompilerServices.Unsafe" preserve="all" ignoreIfMissing="1" />
+</linker>

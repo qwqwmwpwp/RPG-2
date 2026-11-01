@@ -1,0 +1,12 @@
+.工作缓存/
+依赖/缓存/
+配置/server.json
+配置/*.local.json
+配置/identity/
+配置/密钥/
+日志/
+构建/
+*.log
+*.key
+*.pem
+*.pfx

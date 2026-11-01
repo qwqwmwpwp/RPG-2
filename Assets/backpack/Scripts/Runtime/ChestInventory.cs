@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using RPG4.Backpack.Core;
 using RPG4.Backpack.Items;
+using RPG4.Backpack.Inventory;
 using RPG4.Interaction;
 
 namespace RPG4.Backpack.Runtime
@@ -13,6 +14,18 @@ namespace RPG4.Backpack.Runtime
         #region 字段与属性
         private BackpackInventory inventory;
         public BackpackInventory Inventory => inventory != null ? inventory : inventory = GetComponent<BackpackInventory>();
+        private ISharedInventoryAccess NetworkAccess
+        {
+            get
+            {
+                foreach (MonoBehaviour component in GetComponents<MonoBehaviour>())
+                    if (component is ISharedInventoryAccess access && access.IsNetworkSessionActive) return access;
+                return null;
+            }
+        }
+        public IBackpackView View => NetworkAccess?.InventoryView ?? Inventory;
+        public bool HasViewAccess => NetworkAccess == null || NetworkAccess.HasLocalAccess;
+        public void CloseNetworkAccess() => NetworkAccess?.CloseForLocalPlayer();
         #endregion
 
         #region 生命周期
@@ -20,12 +33,12 @@ namespace RPG4.Backpack.Runtime
 
         private void Start()
         {
-            if (fillCatalogOnStart) FillFromCatalogForTest();
+            if (!Inventory.IsNetworkReadOnly && (NetworkAccess == null || NetworkAccess.IsServerSession) && fillCatalogOnStart) FillFromCatalogForTest();
         }
         #endregion
 
         public bool CanInteract(PlayerInteraction player) =>
-            isActiveAndEnabled && player != null && Inventory.isActiveAndEnabled && Inventory.IsInitialized;
+            isActiveAndEnabled && player != null && (NetworkAccess != null || Inventory.isActiveAndEnabled && Inventory.IsInitialized);
 
         public void Interact(PlayerInteraction player)
         {
@@ -34,7 +47,16 @@ namespace RPG4.Backpack.Runtime
 
         /// <summary>供外部交互调用，请求显示本箱子的背包；箱子不持有 UI 引用。</summary>
         [ContextMenu("交互/打开箱子背包")]
-        public void OpenUI() => EventBus.Global.Publish(CmdChannels.OpenChestUI, this, this);
+        public void OpenUI()
+        {
+            ISharedInventoryAccess network = NetworkAccess;
+            if (network != null)
+            {
+                network.RequestOpenForLocalPlayer(() => EventBus.Global.Publish(CmdChannels.OpenChestUI, this, this));
+                return;
+            }
+            EventBus.Global.Publish(CmdChannels.OpenChestUI, this, this);
+        }
 
         #region 测试物品生成
         private const int TestStackCount = 5;

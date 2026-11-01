@@ -38,7 +38,7 @@ namespace RPG4.Backpack.Equipment
     public sealed class Weapon
     {
         private bool hasFrame;
-        private int frameId;
+        private long frameId;
         private double now;
         private double nextShotTime;
         private double reloadStartTime;
@@ -49,6 +49,7 @@ namespace RPG4.Backpack.Equipment
         private readonly ExchangeWeaponMagazine exchangeMagazine;
         private ItemId selectedMagazine;
         private bool reloadNeedsExchange;
+        private ulong actionRevision;
 
         public Weapon(RuntimeItem item, ItemManifestCatalog catalog = null,
             SelectWeaponMagazine selectMagazine = null, ExchangeWeaponMagazine exchangeMagazine = null)
@@ -90,6 +91,8 @@ namespace RPG4.Backpack.Equipment
         public bool ReloadCompletedThisFrame { get; private set; }
         public bool ShotStartedThisFrame { get; private set; }
         public double ReloadStartTime => reloadStartTime;
+        /// <summary>尚在执行的换弹事务候选；用于关联库存操作与动作取消。</summary>
+        public ItemId ReloadMagazineId => IsReloading && reloadNeedsExchange ? selectedMagazine : ItemId.None;
         public bool HasUsableRound => Item.WeaponState.CanConsumeShot(catalog)
             && TryGetParameters(out _, out _, out _, out _, out _);
         public bool CanReload => hasFrame && !commandConsumed && !IsReloading
@@ -102,9 +105,10 @@ namespace RPG4.Backpack.Equipment
         private bool CanChamber() => Item.WeaponState.ChamberAmmo.IsEmpty
             && Item.WeaponState.Magazine?.MagazineState != null
             && Item.WeaponState.Magazine.MagazineState.Rounds.Count > 0;
-        public void BeginFrame(double now, int frameId, bool triggerHeld)
+        public void BeginFrame(double now, long frameId, bool triggerHeld)
         {
-            if (hasFrame && this.frameId == frameId) return;
+            // 网络重试与旧输入不能重新开放本 tick 的消费额度。
+            if (hasFrame && frameId <= this.frameId) return;
             if (double.IsNaN(now) || double.IsInfinity(now) || now < 0d || (hasFrame && now < this.now))
                 throw new ArgumentOutOfRangeException(nameof(now), "武器时钟必须有限、非负且不后退。");
             hasFrame = true;
@@ -114,6 +118,7 @@ namespace RPG4.Backpack.Equipment
             ShotStartedThisFrame = ReloadCompletedThisFrame = false;
             if (!triggerHeld) hasShotInHold = false;
             if (!IsReloading) return;
+            ulong revision = actionRevision;
             double elapsed = now - reloadStartTime;
             ReloadPhase = (float)Math.Min(1d, elapsed / Definition.ReloadDuration);
             if (ReloadStage == WeaponReloadStage.Started && ReloadPhase >= Definition.ReloadCommitFraction)
@@ -124,8 +129,11 @@ namespace RPG4.Backpack.Equipment
                     CancelAction();
                     return;
                 }
+                // 事务 Changed 回调可能同步卸装或取消；不能把取消的旧动作继续推进到上膛。
+                if (!IsReloading || actionRevision != revision) return;
                 ReloadStage = WeaponReloadStage.MagazineCommitted;
                 EventBus.Global.Publish(InvChannels.WeaponActionChanged, this);
+                if (!IsReloading || actionRevision != revision) return;
             }
             if (ReloadStage == WeaponReloadStage.MagazineCommitted && ReloadPhase >= Definition.ChamberFraction)
             {
@@ -135,8 +143,10 @@ namespace RPG4.Backpack.Equipment
                     CancelAction();
                     return;
                 }
+                if (!IsReloading || actionRevision != revision) return;
                 ReloadStage = WeaponReloadStage.Chambered;
                 EventBus.Global.Publish(InvChannels.WeaponActionChanged, this);
+                if (!IsReloading || actionRevision != revision) return;
             }
             if (elapsed < Definition.ReloadDuration) return;
             IsReloading = false;
@@ -186,6 +196,7 @@ namespace RPG4.Backpack.Equipment
         {
             if (!CanReload) return false;
             reloadNeedsExchange = CanSelectMagazine(out selectedMagazine);
+            actionRevision++;
             IsReloading = true;
             ReloadStage = WeaponReloadStage.Started;
             LastReloadError = null;
@@ -199,6 +210,7 @@ namespace RPG4.Backpack.Equipment
         /// <summary>提交之前不碰库存；提交之后不回滚真实弹匣及膛内状态。</summary>
         public void CancelAction()
         {
+            actionRevision++;
             bool wasReloading = IsReloading;
             IsReloading = false;
             ReloadPhase = 0f;

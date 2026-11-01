@@ -28,10 +28,45 @@ namespace RPG4.Backpack.UI
         private RectTransform containerRect;
         private float nextBindingCheck;
         private bool configurationWarned;
+        private bool hasSessionSources;
+        private IBackpackView sessionInventory, sessionEquipment;
 
         public BackpackContainerUI ContainerUI => containerUI;
+        public BackpackContainerUI EquipmentView => equipmentView;
         public BackpackInteractionController Interaction => interaction;
         public IBackpackView Inventory => boundInventory;
+
+        /// <summary>Explicit online sources remain prepared while the window is closed; no offline fallback.</summary>
+        public bool BindSessionSources(IBackpackView inventory, IBackpackView equipment)
+        {
+            if (inventory == null || equipment == null || !inventory.IsReady || !equipment.IsReady
+                || inventory.EventSource == null || equipment.EventSource == null || !EnsureDisplay())
+            { UnbindSessionSources(); return false; }
+            hasSessionSources = true;
+            sessionInventory = inventory; sessionEquipment = equipment;
+            BindInventory(inventory);
+            return IsSessionBoundTo(inventory, equipment);
+        }
+
+        public bool IsSessionBoundTo(IBackpackView inventory, IBackpackView equipment) => hasSessionSources
+            && inventory != null && equipment != null && inventory.IsReady && equipment.IsReady
+            && inventory.EventSource != null && equipment.EventSource != null
+            && ReferenceEquals(sessionInventory, inventory) && ReferenceEquals(sessionEquipment, equipment)
+            && ReferenceEquals(boundInventory, inventory) && ReferenceEquals(boundEquipment, equipment)
+            && ReferenceEquals(boundEventSource, inventory.EventSource) && ReferenceEquals(boundEquipmentEventSource, equipment.EventSource)
+            && containerUI != null && equipmentView != null && containerUI != equipmentView
+            && containerUI.isActiveAndEnabled && equipmentView.isActiveAndEnabled
+            && containerUI.Columns > 0 && containerUI.Rows > 0 && equipmentView.Columns > 0 && equipmentView.Rows > 0
+            && ReferenceEquals(containerUI.Inventory, inventory) && ReferenceEquals(equipmentView.Inventory, equipment);
+
+        public void UnbindSessionSources()
+        {
+            Close();
+            hasSessionSources = false; sessionInventory = sessionEquipment = null;
+            ClearBoundSources();
+        }
+
+        private IBackpackView ResolveInventory() => hasSessionSources ? sessionInventory : LocalBackpackSourceResolver.Resolve();
 
         private string OpenKeyLabel
         {
@@ -73,7 +108,7 @@ namespace RPG4.Backpack.UI
                     return;
                 }
 
-                IBackpackView source = LocalBackpackSourceResolver.Resolve();
+                IBackpackView source = ResolveInventory();
                 if (source == null)
                 {
                     Close();
@@ -105,10 +140,10 @@ namespace RPG4.Backpack.UI
                 windowRect.sizeDelta = containerRect.sizeDelta;
         }
 
-        private void BindInventory(IBackpackView source)
+        private void BindInventory(IBackpackView source, bool beginInteraction = true)
         {
             object eventSource = source?.EventSource;
-            IBackpackView equipment = LocalBackpackSourceResolver.ResolveEquipment(source);
+            IBackpackView equipment = hasSessionSources ? sessionEquipment : LocalBackpackSourceResolver.ResolveEquipment(source);
             object equipmentEventSource = equipment?.EventSource;
             if (ReferenceEquals(boundInventory, source) && ReferenceEquals(boundEventSource, eventSource)
                 && ReferenceEquals(boundEquipment, equipment) && ReferenceEquals(boundEquipmentEventSource, equipmentEventSource)) return;
@@ -121,9 +156,14 @@ namespace RPG4.Backpack.UI
             boundEquipmentEventSource = equipmentEventSource;
             containerUI.BindInventory(source);
             equipmentView.BindInventory(equipment);
+            if (beginInteraction && IsOpen && containerUI.IsReady && equipmentView.IsReady) BeginInteraction();
+        }
+
+        private void BeginInteraction()
+        {
             if (interaction != null)
             {
-                if (equipment != null)
+                if (boundEquipment != null)
                 {
                     interaction.BeginSession(containerUI, equipmentView);
                     interaction.SetQuickTransferPair(containerUI, equipmentView, "快速装备", "快速卸装", replaceSecondSingleSlot: true);
@@ -135,8 +175,9 @@ namespace RPG4.Backpack.UI
         protected override bool CanOpen()
         {
             preparedInventory = null;
-            IBackpackView source = LocalBackpackSourceResolver.Resolve();
+            IBackpackView source = ResolveInventory();
             if (source == null || !source.IsReady || source.EventSource == null || !EnsureDisplay()
+                || hasSessionSources && (sessionEquipment == null || !sessionEquipment.IsReady || sessionEquipment.EventSource == null)
                 || containerUI.Columns < 1 || containerUI.Rows < 1) return false;
             preparedInventory = source;
             return true;
@@ -146,10 +187,11 @@ namespace RPG4.Backpack.UI
         {
             IBackpackView source = preparedInventory;
             preparedInventory = null;
-            BindInventory(source);
+            BindInventory(source, beginInteraction: false);
             nextBindingCheck = Time.unscaledTime + Mathf.Max(0.05f, bindingCheckInterval);
             containerUI.SetPresentationVisible(true);
             equipmentView.SetPresentationVisible(true);
+            BeginInteraction();
             SyncWindowSize();
             inputScope.Capture(Inventory);
             if (hudHint != null) hudHint.gameObject.SetActive(false);
@@ -161,6 +203,14 @@ namespace RPG4.Backpack.UI
             if (equipmentView != null) equipmentView.SetPresentationVisible(false);
             if (interaction != null) interaction.EndSession();
             inputScope.Release();
+            preparedInventory = null;
+            if (!hasSessionSources) ClearBoundSources();
+            nextBindingCheck = 0f;
+            RefreshClosedHint();
+        }
+
+        private void ClearBoundSources()
+        {
             preparedInventory = boundInventory = null;
             boundEventSource = null;
             boundEquipment = null;
@@ -173,14 +223,12 @@ namespace RPG4.Backpack.UI
             {
                 equipmentView.UnbindInventory();
             }
-            nextBindingCheck = 0f;
-            RefreshClosedHint();
         }
 
         private void RefreshClosedHint()
         {
             if (hudHint == null || IsOpen) return;
-            SetHint(LocalBackpackSourceResolver.Resolve() != null
+            SetHint(ResolveInventory() != null
                 ? OpenKeyLabel + "   /   打开背包"
                 : "等待本地玩家 · " + OpenKeyLabel + " 打开背包");
         }

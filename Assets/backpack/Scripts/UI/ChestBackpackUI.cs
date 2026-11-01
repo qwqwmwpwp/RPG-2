@@ -81,6 +81,7 @@ namespace RPG4.Backpack.UI
             if (chest == null || !EnsureInitialized()) return false;
             if (IsOpen)
             {
+                if (currentChest != chest) currentChest?.CloseNetworkAccess();
                 currentChest = chest;
                 RefreshBindings();
                 return true;
@@ -116,6 +117,7 @@ namespace RPG4.Backpack.UI
         /// <summary>隐藏窗口并释放双方显示订阅；保留格子配置，再次 Open 时重新获取与显示库存。</summary>
         protected override void OnClosed()
         {
+            currentChest?.CloseNetworkAccess();
             SuspendViews();
             EndInteractionSession();
             if (ui != null && ui.interaction != null)
@@ -158,7 +160,7 @@ namespace RPG4.Backpack.UI
         public void RefreshBindings()
         {
             if (!IsOpen || !EnsureInitialized()) return;
-            if (currentChest == null)
+            if (currentChest == null || !currentChest.HasViewAccess)
             {
                 Close();
                 return;
@@ -166,8 +168,8 @@ namespace RPG4.Backpack.UI
 
             IBackpackView player = ResolvePlayer();
             IBackpackView equipment = LocalBackpackSourceResolver.ResolveEquipment(player);
-            BackpackInventory chest = currentChest != null ? currentChest.Inventory : null;
-            if (chest != null && !chest.IsInitialized) chest = null;
+            IBackpackView chest = currentChest != null ? currentChest.View : null;
+            if (chest != null && !chest.IsReady) chest = null;
 
             object playerEventSource = player?.EventSource;
             object chestEventSource = chest?.EventSource;

@@ -44,12 +44,23 @@ namespace RPG4.Backpack.Items
         public RuntimeItem ParentItem { get; internal set; }
         internal object RootOwner { get; set; }
         public int Revision { get; private set; }
+        public int StructureRevision { get; private set; }
         public event Action<RuntimeItem> Changed;
 
-        internal void NotifyStateChanged()
+        // 静默事务也先推进版本；通知只在所有归属/占格提交后发布。
+        internal void AdvanceStateRevision(bool runtimeOnly)
         {
             unchecked { Revision++; }
-            Changed?.Invoke(this);
+            if (!runtimeOnly) unchecked { StructureRevision++; }
+            ParentItem?.AdvanceStateRevision(runtimeOnly);
+        }
+
+        internal void PublishStateChanged() => Changed?.Invoke(this);
+
+        internal void NotifyStateChanged(bool runtimeOnly = false)
+        {
+            AdvanceStateRevision(runtimeOnly);
+            PublishStateChanged();
         }
 
         // 占格尺寸（X 为宽、Y 为高）：读网格占位片段，缺该片段时按 1×1 处理。

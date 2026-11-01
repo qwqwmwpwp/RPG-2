@@ -71,14 +71,17 @@ namespace RPG4.Backpack.Network
         private IList<NetworkInventoryEntry> observedTarget;
         private bool needsFullSync = true, fullSyncPending = true;
         private long reportedEncoded, reportedCacheHits;
+        private ulong nextVersion;
 
         public int ItemCount => itemsById.Count;
         public bool HasPendingChanges => fullSyncPending || dirtyItems.Count > 0;
         public long SyncCount { get; private set; }
         public long FullSyncCount { get; private set; }
         public long ConsideredItemCount { get; private set; }
-        public long EncodedItemCount { get; private set; } // 根物品载荷编码尝试数，包含其子物品图。
+        public long EncodedItemCount { get; private set; } // 结构/弹序基线编码尝试数，包含其子物品图。
         public long EncodedPayloadBytes { get; private set; }
+        public long EncodedRuntimeCount { get; private set; }
+        public long EncodedRuntimeBytes { get; private set; }
         public long CacheHitCount { get; private set; }
         public long RestoreAttemptCount { get; private set; }
         public long RestoredItemCount { get; private set; } // 成功恢复的根物品数，服务端确认校验也计入。
@@ -120,6 +123,7 @@ namespace RPG4.Backpack.Network
         {
             SyncCount = FullSyncCount = ConsideredItemCount = EncodedItemCount = 0;
             EncodedPayloadBytes = CacheHitCount = RestoreAttemptCount = RestoredItemCount = 0;
+            EncodedRuntimeCount = EncodedRuntimeBytes = 0;
             reportedEncoded = reportedCacheHits = 0;
             LastSyncReport = default;
         }
@@ -127,7 +131,7 @@ namespace RPG4.Backpack.Network
         private void OnItemTouched(RuntimeItem item, bool payloadChanged)
         {
             dirtyItems.Add(item);
-            if (payloadChanged) cachedEntries.Remove(item);
+            // 静默事务在触碰前已推进对应版本；运行变化不可丢弃稳定结构缓存。
         }
 
         /// <summary>按标识查找上一次同步看到的权威物品（O(1)）。</summary>
@@ -147,22 +151,47 @@ namespace RPG4.Backpack.Network
                 return false;
             }
             if (cachedEntries.TryGetValue(item, out CachedEntry cached)
-                && cached.Revision == item.Revision && cached.StackCount == item.StackCount)
+                && cached.StructureRevision == item.StructureRevision && cached.StackCount == item.StackCount)
             {
                 CacheHitCount++;
+                if (cached.Revision != item.Revision)
+                {
+                    if (!TryBuildRuntime(item, out byte[] runtime, out error)) return false;
+                    cached.Entry.runtimeState = runtime;
+                    cached.Entry.runtimeVersion = AllocateVersion();
+                    cached.Revision = item.Revision;
+                }
                 entry = cached.Entry;
                 error = null;
                 return true;
             }
             EncodedItemCount++;
-            if (!RuntimeItemSnapshotCodec.TryCapture(item, out RuntimeItemSnapshot snapshot, out error)
+            if (!RuntimeItemSnapshotCodec.TryCaptureStructure(item, out RuntimeItemSnapshot snapshot, out error)
                 || !RuntimeItemSnapshotCodec.TryEncodeSnapshot(snapshot, out byte[] payload, out error)) return false;
+            if (!TryBuildRuntime(item, out byte[] runtimePayload, out error)) return false;
             EncodedPayloadBytes += payload.Length;
-            entry = new NetworkInventoryEntry(snapshot.ItemId, snapshot.ItemType, snapshot.StackCount, payload);
+            entry = new NetworkInventoryEntry(snapshot.ItemId, snapshot.ItemType, snapshot.StackCount, payload,
+                structureVersion: AllocateVersion(), runtimeVersion: AllocateVersion(), runtimeState: runtimePayload);
             var ids = new HashSet<ulong>();
             CollectTreeIds(item, ids); // TryCapture 已验证环、深度与图内重复标识。
-            cachedEntries[item] = new CachedEntry(item.Revision, item.StackCount, entry, ids);
+            cachedEntries[item] = new CachedEntry(item.Revision, item.StructureRevision, item.StackCount, entry, ids);
             error = null;
+            return true;
+        }
+
+        private ulong AllocateVersion()
+        {
+            // 版本仅用于相等匹配，不作大小判断；0 保留给旧的完整快照接口。
+            unchecked { nextVersion++; }
+            if (nextVersion == 0) nextVersion = 1;
+            return nextVersion;
+        }
+
+        private bool TryBuildRuntime(RuntimeItem item, out byte[] payload, out string error)
+        {
+            if (!RuntimeItemSnapshotCodec.TryCaptureNetworkRuntime(item, out payload, out error)) return false;
+            EncodedRuntimeCount++;
+            EncodedRuntimeBytes += payload.Length;
             return true;
         }
 
@@ -171,7 +200,8 @@ namespace RPG4.Backpack.Network
         {
             if (!TryBuildEntry(item, out NetworkInventoryEntry entry, out error)) return false;
             CachedEntry cached = cachedEntries[item];
-            if (cached.RestorationValidated && ReferenceEquals(cached.ValidatedCatalog, catalog)) return true;
+            if (cached.RestorationValidated && ReferenceEquals(cached.ValidatedCatalog, catalog))
+                return RuntimeItemSnapshotCodec.TryPrepareNetworkRuntime(item, entry.runtimeState, catalog, out _, out error);
             if (!TryRestoreItem(entry, catalog, out _, out error)) return false;
             cached.ValidatedCatalog = catalog;
             cached.RestorationValidated = true;
@@ -214,6 +244,14 @@ namespace RPG4.Backpack.Network
             {
                 item = null;
                 return false;
+            }
+
+            if (entry.runtimeState != null)
+            {
+                if (!RuntimeItemSnapshotCodec.TryPrepareNetworkRuntime(item, entry.runtimeState, catalog,
+                    out RuntimeItemStateUpdate update, out error))
+                { item = null; return false; }
+                update.Apply();
             }
 
             RestoredItemCount++;
@@ -356,13 +394,14 @@ namespace RPG4.Backpack.Network
 
         private sealed class CachedEntry
         {
-            internal readonly int Revision, StackCount;
-            internal readonly NetworkInventoryEntry Entry;
+            internal int Revision;
+            internal readonly int StructureRevision, StackCount;
+            internal NetworkInventoryEntry Entry;
             internal readonly HashSet<ulong> TreeIds;
             internal ItemManifestCatalog ValidatedCatalog;
             internal bool RestorationValidated;
-            internal CachedEntry(int revision, int stackCount, NetworkInventoryEntry entry, HashSet<ulong> ids)
-            { Revision = revision; StackCount = stackCount; Entry = entry; TreeIds = ids; }
+            internal CachedEntry(int revision, int structureRevision, int stackCount, NetworkInventoryEntry entry, HashSet<ulong> ids)
+            { Revision = revision; StructureRevision = structureRevision; StackCount = stackCount; Entry = entry; TreeIds = ids; }
         }
 
         private readonly struct StagedEntry

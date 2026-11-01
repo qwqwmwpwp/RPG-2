@@ -27,6 +27,11 @@ namespace RPG4.Backpack.UI
         public static IBackpackView ResolveEquipment(IBackpackView playerInventory)
         {
             if (!(playerInventory is Component owner) || owner == null) return null;
+            if (NetworkClient.active)
+            {
+                BackpackNetworkEquipment network = owner.GetComponent<BackpackNetworkEquipment>();
+                return network != null && network.IsReady ? network : null;
+            }
             EquipmentInventory equipment = owner.GetComponent<EquipmentInventory>();
             return equipment != null && equipment.isActiveAndEnabled && equipment.IsReady ? equipment : null;
         }

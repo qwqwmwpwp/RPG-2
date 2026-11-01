@@ -14,6 +14,12 @@ namespace RPG4.CharacterAttributes
 
         private HealthState health;
         private double invulnerableUntil;
+        private bool canExecuteAuthority = true;
+        public bool CanExecuteAuthority => canExecuteAuthority;
+        /// <summary>联网角色由服务器持有伤害/治疗写权限；离线默认启用。</summary>
+        public void ConfigureAuthority(bool canExecute) => canExecuteAuthority = canExecute;
+        public bool ApplyReplicatedHealth(float maxHealth, float currentHealth)
+            => !canExecuteAuthority && Health.ApplySnapshot(maxHealth, currentHealth);
         private HealthState Health => health ?? (health = new HealthState(initialMaxHealth));
 
         public float MaxHealth => Health.MaxHealth;
@@ -60,7 +66,7 @@ namespace RPG4.CharacterAttributes
 
         public bool ApplyDamage(DamageInfo damage)
         {
-            if (!IsAlive || IsInvulnerable || !HealthState.IsPositiveFinite(damage.Amount)) return false;
+            if (!canExecuteAuthority || !IsAlive || IsInvulnerable || !HealthState.IsPositiveFinite(damage.Amount)) return false;
             // 先设置无敌截止时间，防止生命事件同步触发同一接收者的第二次伤害。
             double previousDeadline = invulnerableUntil;
             invulnerableUntil = Time.timeAsDouble + invulnerabilityDuration;
@@ -69,13 +75,13 @@ namespace RPG4.CharacterAttributes
             return false;
         }
 
-        public bool Heal(float amount) => Health.Heal(amount);
+        public bool Heal(float amount) => canExecuteAuthority && Health.Heal(amount);
         public bool Revive(float health)
         {
-            if (IsAlive || !HealthState.IsPositiveFinite(health)) return false;
+            if (!canExecuteAuthority || IsAlive || !HealthState.IsPositiveFinite(health)) return false;
             invulnerableUntil = 0d;
             return Health.Revive(health);
         }
-        public bool SetMaxHealth(float maxHealth) => Health.SetMaxHealth(maxHealth);
+        public bool SetMaxHealth(float maxHealth) => canExecuteAuthority && Health.SetMaxHealth(maxHealth);
     }
 }

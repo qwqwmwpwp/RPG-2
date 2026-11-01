@@ -1,0 +1,6 @@
+{
+    "name": "RPG4.Networking.Contracts",
+    "rootNamespace": "RPG4.Networking.Contracts",
+    "references": ["Mirror"],
+    "autoReferenced": true
+}

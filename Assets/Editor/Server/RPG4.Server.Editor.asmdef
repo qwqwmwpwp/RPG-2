@@ -1,0 +1,7 @@
+{
+    "name": "RPG4.Server.Editor",
+    "rootNamespace": "RPG4.Editor.Server",
+    "references": ["RPG4.Server", "RPG4.Networking", "RPG4.Networking.Contracts"],
+    "includePlatforms": ["Editor"],
+    "autoReferenced": false
+}

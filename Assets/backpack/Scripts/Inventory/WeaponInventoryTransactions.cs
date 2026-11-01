@@ -107,7 +107,7 @@ namespace RPG4.Backpack.Inventory
                 return false;
             }
             if (!ReferenceEquals(weaponContainer, this)) AdvanceRevision();
-            weapon.NotifyStateChanged(); // 所有归属与占格已提交；只发状态通知，不发武器ItemAdded。
+            weapon.PublishStateChanged(); // 静默修改已推进版本；现在所有归属与占格已提交。
             if (!ReferenceEquals(weaponContainer, this)) NotifyChanged();
             if (incoming != null) NotifyItemRemoved(incoming);
             if (outgoing != null) NotifyItemAdded(outgoing);
@@ -152,7 +152,7 @@ namespace RPG4.Backpack.Inventory
                 confirm(ItemId.None, out _);
                 return false;
             }
-            magazine.NotifyStateChanged();
+            magazine.PublishStateChanged();
             if (consumed) NotifyItemRemoved(ammo); else NotifyStackChanged(ammo);
             return true;
         }

@@ -9,11 +9,11 @@ namespace RPG4.PlayerMovement
         private Weapon actionWeapon;
         private ulong observedSequence;
         private bool actionActive, fadeObserved;
-        private int shotFrame = -1, fadeFrame = -1;
+        private long shotFrame = -1, fadeFrame = -1;
         internal WeaponActionSnapshot Action { get; private set; }
         private float ShotDuration => actionWeapon != null ? actionWeapon.Definition.ShotDuration : 0.01f;
         private float FadeDuration => actionWeapon != null ? actionWeapon.Definition.FadeOutDuration : 0f;
-        internal void Advance(Weapon weapon, double now, int frameId)
+        internal void Advance(Weapon weapon, double now, long frameId)
         {
             if (!ReferenceEquals(actionWeapon, weapon))
             {

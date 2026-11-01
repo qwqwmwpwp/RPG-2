@@ -80,7 +80,7 @@ namespace RPG4.Combat
         private void Update()
         {
             if (visualRoot == null) return;
-            if (!attributes.IsAlive && resetDelay > 0f && Time.timeAsDouble >= resetAt)
+            if (attributes.CanExecuteAuthority && !attributes.IsAlive && resetDelay > 0f && Time.timeAsDouble >= resetAt)
                 attributes.Revive(attributes.MaxHealth);
 
             Quaternion targetRotation = attributes.IsAlive ? standingRotation

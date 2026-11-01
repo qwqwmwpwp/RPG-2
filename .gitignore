@@ -107,3 +107,7 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Local Codex task snapshots and scratch files
+/.codex-task-snapshot/
+/.codex-task-work/

@@ -18,6 +18,7 @@ namespace RPG4.Backpack.Inventory
         private readonly string ownerName; // 日志里的宿主名（组件名或兜底名）。
 
         private static readonly ItemIdGenerator SharedGenerator = new ItemIdGenerator(); // 未注入提供者时共用的标识生成器，避免单机玩家与箱子分别从 1 发号而在转移后重号。
+        public static ItemIdGenerator SharedItemIds => SharedGenerator;
         private static readonly Dictionary<object, InventoryHostCore> CommandHosts = new Dictionary<object, InventoryHostCore>();
 
         private object commandSource;
@@ -61,6 +62,9 @@ namespace RPG4.Backpack.Inventory
         public bool SupportsSingleCellTransfers { get; set; } = true;
 
         public Action<InventoryOperation> ForwardOperation { get; set; }
+        public Func<IBackpackView, bool> ForwardCanSubmit { get; set; }
+        public Action<InventoryOperation> AuthorityOperationDispatcher { get; set; }
+        public Action<WeaponOperation> AuthorityWeaponOperationDispatcher { get; set; }
 
         public CommitConfirmHandler CommitConfirm { get; set; } // 权威提交后的确认钩子；留空表示无需确认。
 
@@ -101,6 +105,7 @@ namespace RPG4.Backpack.Inventory
 
         public bool CanSubmitTo(IBackpackView destination)
         {
+            if (!ResolveAuthority() && ForwardCanSubmit != null) return ForwardCanSubmit(destination);
             object destinationSource = destination == null ? commandSource : destination.EventSource;
             if (commandSource == null || destinationSource == null || (destination != null && !destination.IsReady)) return false;
             if (ReferenceEquals(commandSource, destinationSource))
@@ -200,7 +205,8 @@ namespace RPG4.Backpack.Inventory
         {
             if (ResolveAuthority())
             {
-                PublishOperationResult(ExecuteOperation(operation));
+                if (AuthorityOperationDispatcher != null) AuthorityOperationDispatcher(operation);
+                else PublishOperationResult(ExecuteOperation(operation));
                 return;
             }
             if (CanSubmitTo(operation.Destination) && ForwardOperation != null)
@@ -334,7 +340,7 @@ namespace RPG4.Backpack.Inventory
         /// <summary>容器可用性守卫：权威容器尚未创建时拒绝并说明原因。</summary>
         private bool EnsureContainer(out string error)
         {
-            if (Container != null)
+            if (Container != null && ResolveAuthority())
             {
                 error = null;
                 return true;

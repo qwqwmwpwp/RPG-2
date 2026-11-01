@@ -1,0 +1,6 @@
+{
+  "name": "RPG4.Frontend",
+  "rootNamespace": "RPG4.Frontend",
+  "references": ["RPG4.Networking", "RPG4.Networking.Contracts", "RPG4.UI", "RPG4.StateMachine", "RPG4.Input", "RPG4.PlayerMovement", "RPG4.Backpack.UI", "RPG4.Backpack.Inventory", "RPG4.Backpack.Network", "Mirror", "Mirror.Transports", "Unity.TextMeshPro", "UnityEngine.UI", "Unity.InputSystem"],
+  "autoReferenced": true
+}

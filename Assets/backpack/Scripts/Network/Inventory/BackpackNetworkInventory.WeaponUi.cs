@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Mirror;
+using UnityEngine;
 using RPG4.Backpack.Core;
 using RPG4.Backpack.Inventory;
 using RPG4.Backpack.Items;
@@ -14,6 +15,39 @@ namespace RPG4.Backpack.Network
         private readonly List<RuntimeItem> networkWeaponUiItems = new List<RuntimeItem>();
         private object networkWeaponUiSource;
         private bool networkWeaponUiDirty;
+        private BackpackNetworkEquipment networkWeaponEquipment;
+        private WeaponUiActionStage networkWeaponActionStage;
+        private double networkWeaponActionStart;
+        private float networkWeaponActionDuration;
+        private bool networkWeaponReloading;
+        private ItemId networkWeaponActionItemId;
+
+        /// <summary>联网角色的只读动作快照入口；不推进换匣/上膛，不修改物品状态。</summary>
+        public void UpdateWeaponAction(bool reloading, float phase, double serverTime, float duration)
+        {
+            phase = Mathf.Clamp01(phase);
+            WeaponDefinitionFragment definition = NetworkEquippedItem?.GetFragment<WeaponDefinitionFragment>();
+            WeaponUiActionStage stage = reloading
+                ? definition != null && phase >= definition.ChamberFraction ? WeaponUiActionStage.Chambered
+                    : definition != null && phase >= definition.ReloadCommitFraction ? WeaponUiActionStage.MagazineCommitted : WeaponUiActionStage.Started
+                : networkWeaponReloading ? phase >= 1f ? WeaponUiActionStage.Completed : WeaponUiActionStage.Cancelled : networkWeaponActionStage;
+            double start = reloading ? serverTime - phase * duration : networkWeaponActionStart;
+            if (stage != networkWeaponActionStage || reloading != networkWeaponReloading || System.Math.Abs(start - networkWeaponActionStart) > 0.05d)
+                networkWeaponUiDirty = true;
+            networkWeaponReloading = reloading; networkWeaponActionStage = stage;
+            networkWeaponActionStart = start; networkWeaponActionDuration = Mathf.Max(0f, duration);
+        }
+
+        private RuntimeItem NetworkEquippedItem => networkWeaponEquipment != null && networkWeaponEquipment.IsReady ? networkWeaponEquipment.EquippedItem : null;
+
+        private bool TryResolveNetworkWeaponItem(ItemId id, out RuntimeItem item)
+        {
+            if (TryGetItem(id, out item)) return true;
+            item = NetworkEquippedItem;
+            if (item != null && item.ItemId == id) return true;
+            item = null;
+            return false;
+        }
 
         private void RequestWeaponOperation(WeaponOperation operation)
         {
@@ -23,19 +57,30 @@ namespace RPG4.Backpack.Network
                     false, "当前客户端不能提交此武器操作。"));
                 return;
             }
-            CmdExecuteWeaponOperation(operation.RequestId, (int)operation.Kind, operation.TargetItemId.Value,
+            CmdExecuteWeaponOperation(NextClientTicket(), operation.RequestId, (int)operation.Kind, operation.TargetItemId.Value,
                 operation.CandidateItemId.Value, operation.Count, (int)operation.Slot);
         }
 
         // requiresAuthority 验证所属连接；核心仅解析此网络背包的根物品，不接受客户端提供的容器。
         [Command(requiresAuthority = true)]
-        private void CmdExecuteWeaponOperation(int requestId, int kind, ulong targetId, ulong candidateId, int count, int slot)
+        private void CmdExecuteWeaponOperation(ulong ticket, int requestId, int kind, ulong targetId, ulong candidateId, int count, int slot)
         {
-            WeaponOperationResult result = IsServerInventory
-                ? core.ExecuteWeaponOperation(new WeaponOperation(requestId, (WeaponOperationKind)kind,
-                    new ItemId(targetId), new ItemId(candidateId), count, (WeaponAttachmentSlot)slot))
-                : new WeaponOperationResult(requestId, new ItemId(targetId), false, "服务端库存尚未就绪。");
-            TargetWeaponOperationCompleted(connectionToClient, result.RequestId, result.TargetItemId.Value, result.Success, result.Error);
+            NetworkConnectionToClient conn = connectionToClient;
+            if (!BeginTicket(ticket, requestId, true, () => TargetWeaponOperationCompleted(conn, requestId, targetId, false, "请求已过期或队列已满。"))) return;
+            void Complete(WeaponOperationResult result)
+            {
+                if (connectionToClient != conn || operationOwner != conn) return;
+                CompleteTicket(ticket, () => TargetWeaponOperationCompleted(conn, result.RequestId, result.TargetItemId.Value, result.Success, result.Error));
+            }
+            ScheduleOperation(() =>
+            {
+                if (!IsAuthenticatedIngress(conn))
+                { Complete(new WeaponOperationResult(requestId, new ItemId(targetId), false, "角色已不能操作库存。")); return; }
+                var operation = new WeaponOperation(requestId, (WeaponOperationKind)kind,
+                    new ItemId(targetId), new ItemId(candidateId), count, (WeaponAttachmentSlot)slot);
+                ServerBeforeWeaponOperation?.Invoke(operation);
+                Complete(core.ExecuteWeaponOperation(operation));
+            }, reason => Complete(new WeaponOperationResult(requestId, new ItemId(targetId), false, reason)));
         }
 
         [TargetRpc]
@@ -46,6 +91,8 @@ namespace RPG4.Backpack.Network
         {
             UnbindNetworkWeaponUi();
             networkWeaponUiSource = EventSource;
+            networkWeaponEquipment = GetComponent<BackpackNetworkEquipment>();
+            if (networkWeaponEquipment != null) networkWeaponEquipment.Changed += MarkNetworkWeaponUiDirty;
             networkWeaponSnapshotRequest = EventBus.Global.Subscribe<WeaponSnapshotRequest>(CmdChannels.WeaponSnapshot,
                 networkWeaponUiSource, this, OnNetworkWeaponSnapshotRequest);
             networkWeaponInventoryChanged = EventBus.Global.Subscribe(InvChannels.Changed,
@@ -69,7 +116,7 @@ namespace RPG4.Backpack.Network
             if (!IsReady || (isClient && !isOwned)) return "此网络背包不可由当前玩家操作。";
             if (IsServerInventory) return core.CanExecuteWeaponOperation(operation, out string error) ? null : error;
             // 镜像用于展示兼容性；真正归属、返回容量和数量仍由服务器原子事务复核。
-            if (!TryGetItem(operation.TargetItemId, out RuntimeItem item)) return "目标物品已离开此背包。";
+            if (!TryResolveNetworkWeaponItem(operation.TargetItemId, out RuntimeItem item)) return "目标物品已离开此背包。";
             if (operation.Kind == WeaponOperationKind.LoadMagazine)
                 return operation.Count > 0 ? null : "弹匣已满或没有可装填弹药。";
             if (item.WeaponState == null) return "所选物品不是武器。";
@@ -99,23 +146,56 @@ namespace RPG4.Backpack.Network
         private void PublishNetworkWeaponInspection(WeaponSnapshotRequest request)
         {
             CopyItems(networkWeaponUiItems);
-            TryGetItem(request.InspectedItemId, out RuntimeItem item);
+            TryResolveNetworkWeaponItem(request.InspectedItemId, out RuntimeItem item);
             if (!IsReady || (item != null && item.WeaponState == null && item.MagazineState == null)) item = null;
             string reason = !IsReady ? "网络库存尚未同步就绪。" : !isOwned && isClient
                 ? "此网络背包不可由当前玩家操作。" : item == null && request.InspectedItemId.IsValid ? "所选物品已离开此背包。" : null;
             EventBus.Global.Publish(InvChannels.WeaponInspectionChanged, networkWeaponUiSource,
-                WeaponUiSnapshots.Inspection(item, networkWeaponUiItems, catalog, ItemId.None, request, NetworkWeaponRejection, reason));
+                WeaponUiSnapshots.Inspection(item, networkWeaponUiItems, catalog, NetworkEquippedItem?.ItemId ?? ItemId.None, request, NetworkWeaponRejection, reason));
         }
 
         private void PublishNetworkWeaponHud()
         {
-            // 此网络宿主目前只有背包投影，没有装备槽/战斗时序的网络投影。
+            RuntimeItem item = NetworkEquippedItem;
+            WeaponItemState state = item?.WeaponState;
+            MagazineItemState magazine = state?.Magazine?.MagazineState;
+            int spareMagazines = 0, looseAmmo = 0;
+            if (state != null)
+            {
+                CopyItems(networkWeaponUiItems);
+                foreach (RuntimeItem candidate in networkWeaponUiItems)
+                {
+                    if (candidate.MagazineState?.RoundCount > 0 && state.IsCompatibleMagazine(candidate, catalog)) spareMagazines++;
+                    AmmoDefinitionFragment ammo = candidate.GetFragment<AmmoDefinitionFragment>();
+                    if (ammo != null && candidate.WeaponState == null && candidate.MagazineState == null
+                        && ammo.AmmoType.MatchesTagExact(state.Definition.AmmoType)) looseAmmo += candidate.StackCount;
+                }
+            }
+            string status = state == null ? null : state.Durability <= 0f ? "武器已损坏"
+                : state.Durability < state.Definition.DurabilityPerShot ? "耐久不足，无法开火"
+                : state.ChamberAmmo.IsEmpty ? state.Magazine?.MagazineState.RoundCount > 0 ? "未上膛"
+                    : state.Magazine == null ? "未安装弹匣" : "弹药耗尽"
+                : state.CanConsumeShot(catalog) ? null : "当前弹药不可用";
             EventBus.Global.Publish(InvChannels.WeaponHudChanged, networkWeaponUiSource,
-                new WeaponHudSnapshot(null, 0, 0, 0, 0f, 0f, WeaponUiActionStage.None, 0d, 0f,
-                    statusSummary: "网络装备槽尚未接入武器 HUD。"));
+                new WeaponHudSnapshot(WeaponUiSnapshots.Describe(item, catalog),
+                    state == null || state.ChamberAmmo.IsEmpty ? 0 : 1, magazine?.RoundCount ?? 0, magazine?.Capacity ?? 0,
+                    state?.Durability ?? 0f, state?.Definition.MaxDurability ?? 0f,
+                    item == null ? WeaponUiActionStage.None : networkWeaponActionStage,
+                    networkWeaponActionStart, networkWeaponActionDuration, spareMagazines, looseAmmo,
+                    state == null ? null : state.Definition.FireMode == WeaponFireMode.Automatic ? "全自动" : "半自动", status));
         }
 
-        private void MarkNetworkWeaponUiDirty() => networkWeaponUiDirty = true;
+        private void MarkNetworkWeaponUiDirty()
+        {
+            ItemId current = NetworkEquippedItem?.ItemId ?? ItemId.None;
+            if (current != networkWeaponActionItemId)
+            {
+                networkWeaponActionItemId = current;
+                networkWeaponActionStage = WeaponUiActionStage.None;
+                networkWeaponActionStart = 0d; networkWeaponActionDuration = 0f; networkWeaponReloading = false;
+            }
+            networkWeaponUiDirty = true;
+        }
         private void FlushNetworkWeaponUi()
         {
             if (!networkWeaponUiDirty || networkWeaponUiSource == null) return;
@@ -127,6 +207,10 @@ namespace RPG4.Backpack.Network
 
         private void UnbindNetworkWeaponUi()
         {
+            if (networkWeaponEquipment != null) networkWeaponEquipment.Changed -= MarkNetworkWeaponUiDirty;
+            networkWeaponEquipment = null;
+            networkWeaponActionStage = WeaponUiActionStage.None;
+            networkWeaponReloading = false;
             networkWeaponSnapshotRequest.Dispose(); networkWeaponInventoryChanged.Dispose();
             networkWeaponSnapshotRequest = networkWeaponInventoryChanged = default;
             if (networkWeaponUiSource != null)

@@ -11,6 +11,8 @@ namespace RPG4.UI
     public sealed class CharacterHealthView : MonoBehaviour
     {
         [SerializeField] private AttributeComponent attributes;
+        [Tooltip("Online HUD may wait for its local network player. Existing authored/offline views still require a source.")]
+        [SerializeField] private bool allowUnboundSource;
         [SerializeField] private Image healthFill;
         [SerializeField] private TMP_Text healthLabel;
         [SerializeField] private TMP_Text statusLabel;
@@ -34,9 +36,41 @@ namespace RPG4.UI
         private bool colorInitialized;
         public AttributeComponent SourceAttributes => attributes;
         private bool ViewAlive => externallyDriven ? presentedAlive : attributes != null && attributes.IsAlive;
+        private bool WaitingForSource => allowUnboundSource && attributes == null && !externallyDriven;
         private bool LowHealth => showLowHealthWarning && ViewAlive && presentedMaximum > 0f
             && presentedHealth / presentedMaximum <= lowHealthThreshold;
 
+        public void BindAttributes(AttributeComponent source)
+        {
+            if (attributes == source)
+            {
+                if (allowUnboundSource && source == null)
+                {
+                    attributes = null;
+                    externallyDriven = false;
+                    presentedHealth = presentedMaximum = float.NaN;
+                    ResetFeedback();
+                }
+                return;
+            }
+            if (attributes != null)
+            {
+                attributes.Changed -= Refresh;
+                attributes.Damaged -= OnDamaged;
+                attributes.Revived -= OnRevived;
+            }
+            attributes = source;
+            externallyDriven = false;
+            presentedHealth = presentedMaximum = float.NaN;
+            ResetFeedback();
+            if (attributes != null && isActiveAndEnabled)
+            {
+                attributes.Changed += Refresh;
+                attributes.Damaged += OnDamaged;
+                attributes.Revived += OnRevived;
+                Refresh();
+            }
+        }
         public void SetExternalPresentation(bool value)
         {
             if (externallyDriven == value) return;
@@ -61,13 +95,13 @@ namespace RPG4.UI
 
         private void OnEnable()
         {
-            if (attributes == null || healthFill == null || healthLabel == null)
+            if ((!allowUnboundSource && attributes == null) || healthFill == null || healthLabel == null)
             {
                 Debug.LogError("CharacterHealthView 未配置生命组件、血条或生命文字。", this);
                 enabled = false;
                 return;
             }
-            if (!externallyDriven)
+            if (!externallyDriven && attributes != null)
             {
                 attributes.Changed += Refresh;
                 attributes.Damaged += OnDamaged;
@@ -100,6 +134,16 @@ namespace RPG4.UI
         private void Refresh()
         {
             if (attributes != null) ApplyHealth(attributes.CurrentHealth, attributes.MaxHealth, attributes.IsAlive);
+            else if (WaitingForSource)
+            {
+                if (healthFill != null)
+                {
+                    Vector2 maximum = healthFill.rectTransform.anchorMax;
+                    maximum.x = 0f;
+                    healthFill.rectTransform.anchorMax = maximum;
+                }
+                if (healthLabel != null) healthLabel.text = $"{displayName}   等待角色";
+            }
         }
         public void ApplyHealth(float health, float maximumHealth, bool alive)
         {
@@ -118,7 +162,8 @@ namespace RPG4.UI
         private void RefreshStatus()
         {
             if (statusLabel == null) return;
-            if (!ViewAlive) statusLabel.text = deadStatus;
+            if (WaitingForSource) statusLabel.text = "等待同步";
+            else if (!ViewAlive) statusLabel.text = deadStatus;
             else if (!showingDamage) statusLabel.text = LowHealth ? "生命危险" : idleStatus;
         }
 

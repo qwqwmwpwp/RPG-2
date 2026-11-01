@@ -1,0 +1,9 @@
+{
+    "name": "RPG4.Server",
+    "rootNamespace": "RPG4.Server",
+    "references": ["RPG4.Networking.Contracts", "RPG4.Networking", "RPG4.Backpack.Network", "Mirror", "Mirror.Transports"],
+    "overrideReferences": true,
+    "precompiledReferences": ["MySqlConnector.dll", "Microsoft.Extensions.DependencyInjection.Abstractions.dll", "Microsoft.Extensions.Logging.Abstractions.dll", "System.Diagnostics.DiagnosticSource.dll", "System.Runtime.CompilerServices.Unsafe.dll", "Mirror.BouncyCastle.Cryptography.dll"],
+    "defineConstraints": ["UNITY_EDITOR || UNITY_SERVER"],
+    "autoReferenced": false
+}

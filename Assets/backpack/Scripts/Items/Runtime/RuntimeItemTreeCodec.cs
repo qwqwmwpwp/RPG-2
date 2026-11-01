@@ -11,11 +11,18 @@ namespace RPG4.Backpack.Items
         public static bool TryCapture(RuntimeItem item, out RuntimeItemSnapshot snapshot, out string error)
         {
             int count = 0;
-            return TryCaptureTree(item, 0, new HashSet<RuntimeItem>(), new HashSet<ulong>(), ref count, out snapshot, out error);
+            return TryCaptureTree(item, 0, new HashSet<RuntimeItem>(), new HashSet<ulong>(), ref count, out snapshot, out error, true);
+        }
+
+        /// <summary>稳定物品图；高频运行字段由独立载荷提供。</summary>
+        public static bool TryCaptureStructure(RuntimeItem item, out RuntimeItemSnapshot snapshot, out string error)
+        {
+            int count = 0;
+            return TryCaptureTree(item, 0, new HashSet<RuntimeItem>(), new HashSet<ulong>(), ref count, out snapshot, out error, false);
         }
 
         private static bool TryCaptureTree(RuntimeItem item, int depth, HashSet<RuntimeItem> seen,
-            HashSet<ulong> ids, ref int count, out RuntimeItemSnapshot snapshot, out string error)
+            HashSet<ulong> ids, ref int count, out RuntimeItemSnapshot snapshot, out string error, bool includeRuntime)
         {
             snapshot = default;
             if (item == null || depth > RuntimeItemSnapshot.MaxDepth || ++count > RuntimeItemSnapshot.MaxTreeItems
@@ -23,6 +30,7 @@ namespace RPG4.Backpack.Items
             { error = "物品树超限、包含循环或重复/无效子物品标识。"; return false; }
             if (!TryCaptureNumbers(item, out RuntimeItemSnapshot basic, out error)) return false;
             WeaponStateSnapshot weapon = null;
+            // 弹序是低频基线；运行载荷只表达从头消耗后的绝对剩余数。
             MagazineStateSnapshot magazine = item.MagazineState == null ? null : new MagazineStateSnapshot(item.MagazineState.Rounds);
             if (item.WeaponState != null)
             {
@@ -30,16 +38,17 @@ namespace RPG4.Backpack.Items
                 RuntimeItemSnapshot? magazineItem = null;
                 if (state.Magazine != null)
                 {
-                    if (!TryCaptureTree(state.Magazine, depth + 1, seen, ids, ref count, out RuntimeItemSnapshot child, out error)) return false;
+                    if (!TryCaptureTree(state.Magazine, depth + 1, seen, ids, ref count, out RuntimeItemSnapshot child, out error, includeRuntime)) return false;
                     magazineItem = child;
                 }
                 var attachments = new List<AttachmentStateSnapshot>();
                 foreach (KeyValuePair<WeaponAttachmentSlot, RuntimeItem> pair in state.Attachments)
                 {
-                    if (!TryCaptureTree(pair.Value, depth + 1, seen, ids, ref count, out RuntimeItemSnapshot child, out error)) return false;
+                    if (!TryCaptureTree(pair.Value, depth + 1, seen, ids, ref count, out RuntimeItemSnapshot child, out error, includeRuntime)) return false;
                     attachments.Add(new AttachmentStateSnapshot(pair.Key, child));
                 }
-                weapon = new WeaponStateSnapshot(state.Durability, state.ChamberAmmo, state.ShotSequence, magazineItem, attachments);
+                weapon = new WeaponStateSnapshot(includeRuntime ? state.Durability : 0f,
+                    includeRuntime ? state.ChamberAmmo : default, includeRuntime ? state.ShotSequence : 0UL, magazineItem, attachments);
             }
             snapshot = new RuntimeItemSnapshot(basic.ItemId, basic.ItemType, basic.StackCount, CopyNumbers(basic.Numbers), weapon, magazine);
             return true;

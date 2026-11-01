@@ -27,8 +27,10 @@ namespace RPG4.Backpack.UI
         [SerializeField] private WeaponInspectionPanel inspection;
         [SerializeField] private Button detailsButton;
         [SerializeField] private Button inspectionButton;
-        [SerializeField] private Color activeTabColor = new Color(0.12f, 0.34f, 0.38f, 1f);
-        [SerializeField] private Color inactiveTabColor = new Color(0.08f, 0.17f, 0.21f, 1f);
+        [SerializeField] private Image detailsSelectedFrame;
+        [SerializeField] private Image inspectionSelectedFrame;
+        [SerializeField] private Color activeTabColor = Color.white;
+        [SerializeField] private Color inactiveTabColor = new Color(0.85f, 0.9f, 0.95f, 1f);
         [SerializeField] private Button textScaleButton;
         [SerializeField] private Button hitFeedbackButton;
         [SerializeField] private Button lowHealthPulseButton;
@@ -187,6 +189,8 @@ namespace RPG4.Backpack.UI
         private void SetInspection(bool value)
         {
             showingInspection = value;
+            if (detailsSelectedFrame != null) detailsSelectedFrame.enabled = !value;
+            if (inspectionSelectedFrame != null) inspectionSelectedFrame.enabled = value;
             if (detailsButton != null && detailsButton.targetGraphic != null)
                 detailsButton.targetGraphic.color = value ? inactiveTabColor : activeTabColor;
             if (inspectionButton != null && inspectionButton.targetGraphic != null)

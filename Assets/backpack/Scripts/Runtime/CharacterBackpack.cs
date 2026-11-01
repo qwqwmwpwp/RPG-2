@@ -34,9 +34,10 @@ namespace RPG4.Backpack.Runtime
 
         private void Start()
         {
+            if (Inventory.IsNetworkReadOnly) return;
             if (!EnsureInventory(out _)) return;
             BackpackLog.Info(LogModule.Inventory, $"角色背包就绪：{name}，尺寸 {Inventory.Rows} × {Inventory.Columns}。");
-            if (fillCatalogOnStart) FillFromCatalogForTest();
+            if (!Inventory.IsNetworkReadOnly && fillCatalogOnStart) FillFromCatalogForTest();
         }
         #endregion
 

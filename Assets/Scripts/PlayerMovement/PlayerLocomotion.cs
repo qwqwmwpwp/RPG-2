@@ -18,7 +18,7 @@ namespace RPG4.PlayerMovement
         {
             blackboard.PhysicallyCrouched = physicallyCrouched;
             blackboard.CanStand = canStand;
-            bool canMove = blackboard.CanMove && Time.deltaTime > 0f;
+            bool canMove = blackboard.CanMove && blackboard.InputAllowed;
             bool crouched = !canMove ? physicallyCrouched : blackboard.CrouchHeld
                 || (physicallyCrouched && !canStand);
             UpperBodyDemand demand = blackboard.WeaponDemand;
@@ -35,7 +35,7 @@ namespace RPG4.PlayerMovement
 
         internal void RefreshAvailability()
         {
-            if (blackboard.CanMove) return;
+            if (blackboard.CanMove && blackboard.InputAllowed) return;
             LocomotionPlan plan = blackboard.Plan;
             blackboard.Plan = new LocomotionPlan(false, blackboard.PhysicallyCrouched,
                 false, Vector2.zero, blackboard.ViewYaw, plan.MoveSpeed, plan.AnimationSpeed);

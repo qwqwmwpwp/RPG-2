@@ -1,3 +1,4 @@
+using RPG4.Input;
 using UnityEngine;
 
 namespace RPG4.PlayerMovement
@@ -28,6 +29,8 @@ namespace RPG4.PlayerMovement
             Vector3 angles = transform.rotation.eulerAngles;
             viewYaw = Mathf.DeltaAngle(0f, angles.y);
             viewPitch = Mathf.Clamp(Mathf.DeltaAngle(0f, angles.x), pitchRange.x, pitchRange.y);
+            GetComponentInParent<PlayerInput>()?.ConfigureLocalView(lookSensitivity, pitchRange,
+                aimSensitivityMultiplier, new Vector2(viewYaw, viewPitch));
         }
         internal void Initialize(Transform ownerRoot, PlayerPresenter presenter)
         {

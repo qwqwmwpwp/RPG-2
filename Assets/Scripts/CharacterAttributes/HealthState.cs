@@ -76,6 +76,21 @@ namespace RPG4.CharacterAttributes
             return true;
         }
 
+        /// <summary>应用权威快照；不重放伤害回调与伤害来源副作用。</summary>
+        internal bool ApplySnapshot(float maxHealth, float currentHealth)
+        {
+            if (!IsPositiveFinite(maxHealth) || float.IsNaN(currentHealth)
+                || float.IsInfinity(currentHealth) || currentHealth < 0f || currentHealth > maxHealth) return false;
+            if (MaxHealth == maxHealth && CurrentHealth == currentHealth) return false;
+            bool wasAlive = IsAlive;
+            MaxHealth = maxHealth;
+            CurrentHealth = currentHealth;
+            if (wasAlive && !IsAlive) Died?.Invoke();
+            else if (!wasAlive && IsAlive) Revived?.Invoke();
+            Changed?.Invoke();
+            return true;
+        }
+
         internal static bool IsPositiveFinite(float value)
         {
             return value > 0f && !float.IsNaN(value) && !float.IsInfinity(value);

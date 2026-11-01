@@ -42,6 +42,19 @@ namespace RPG4.Backpack.Runtime
 
         #region 运行时字段
 
+        private bool networkReadOnly;
+        public InventoryHostCore AuthorityCore => core;
+        public bool IsNetworkReadOnly => networkReadOnly;
+
+        public void SetNetworkAuthority(bool authority)
+        {
+            networkReadOnly = !authority;
+            if (core == null) return;
+            core.IsAuthority = () => !networkReadOnly;
+            if (networkReadOnly) core.UnsubscribeCommands();
+            else if (isActiveAndEnabled) core.SubscribeCommands(core.Container);
+        }
+
         private InventoryHostCore core; // 共享核心：容器、意图命令与编排逻辑（单机自任权威）。
 
         #endregion
@@ -50,9 +63,9 @@ namespace RPG4.Backpack.Runtime
 
         public InventoryContainer Container => core != null ? core.Container : null; // 权威容器；Awake 创建后不变。
 
-        public bool IsReady => Container != null;
+        public bool IsReady => !networkReadOnly && Container != null;
 
-        public bool IsInitialized => Container != null; // 核心与权威容器是否已创建。
+        public bool IsInitialized => !networkReadOnly && Container != null; // 核心与权威容器是否已创建。
 
         public int Rows => Container?.Rows ?? 0; // 实际行数；尚未初始化时为 0。
 
@@ -127,14 +140,18 @@ namespace RPG4.Backpack.Runtime
         /// <summary>创建共享核心（内部创建权威容器，行列非法或乘积超限时回退默认尺寸并记警告），并把 Inspector 目录同步给核心。</summary>
         private void Awake()
         {
+            foreach (MonoBehaviour component in GetComponents<MonoBehaviour>())
+                if (component is ISharedInventoryAccess access && access.IsNetworkSessionActive && !access.IsServerSession)
+                    networkReadOnly = true;
             core = new InventoryHostCore(rows, columns, LogModule.Inventory, name);
             core.Catalog = catalog;
+            core.IsAuthority = () => !networkReadOnly;
         }
 
         /// <summary>以容器为管线键订阅写入意图命令。</summary>
         private void OnEnable()
         {
-            if (core != null) core.SubscribeCommands(core.Container);
+            if (core != null && !networkReadOnly) core.SubscribeCommands(core.Container);
         }
 
         /// <summary>释放全部意图订阅（与 OnEnable 成对，重复调用安全）。</summary>
@@ -426,13 +443,13 @@ namespace RPG4.Backpack.Runtime
         /// <summary>背包写入共用的初始化守卫。</summary>
         private bool EnsureContainer(out string error)
         {
-            if (Container != null)
+            if (Container != null && !networkReadOnly)
             {
                 error = null;
                 return true;
             }
 
-            error = "背包尚未初始化（组件未执行 Awake）。";
+            error = networkReadOnly ? "客户端本地背包只读，请提交网络库存意图。" : "背包尚未初始化（组件未执行 Awake）。";
             BackpackLog.Warn(LogModule.Inventory, error);
             return false;
         }

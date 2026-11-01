@@ -1,0 +1,57 @@
+{
+  "formatVersion": 1,
+  "targetFramework": "netstandard2.1",
+  "packages": [
+    {
+      "id": "MySqlConnector",
+      "version": "2.6.2",
+      "target": "netstandard2.1",
+      "source": "https://api.nuget.org/v3-flatcontainer/mysqlconnector/2.6.2/mysqlconnector.2.6.2.nupkg",
+      "packageSha256": "3d8758d29d2b19a5efa9f78cfac9cae824a870aaf88e2e3adc40bce3cddac748",
+      "asset": "lib/netstandard2.1/MySqlConnector.dll",
+      "dllSha256": "18626d267ad9312eeb36883c59e56836ac8688aa16f26b1db73e93f5a67fe57b"
+    },
+    {
+      "id": "Microsoft.Extensions.DependencyInjection.Abstractions",
+      "version": "8.0.2",
+      "target": "netstandard2.1",
+      "source": "https://api.nuget.org/v3-flatcontainer/microsoft.extensions.dependencyinjection.abstractions/8.0.2/microsoft.extensions.dependencyinjection.abstractions.8.0.2.nupkg",
+      "packageSha256": "51f2df1100245f10da54f0bb7e813f277155117777d4fbbab902214e27372606",
+      "asset": "lib/netstandard2.1/Microsoft.Extensions.DependencyInjection.Abstractions.dll",
+      "dllSha256": "6c479c61bd03ac7cac4421e5a5689359cb83634e06895eb2d93b4b6df2773dc0"
+    },
+    {
+      "id": "Microsoft.Extensions.Logging.Abstractions",
+      "version": "8.0.2",
+      "target": "netstandard2.0",
+      "source": "https://api.nuget.org/v3-flatcontainer/microsoft.extensions.logging.abstractions/8.0.2/microsoft.extensions.logging.abstractions.8.0.2.nupkg",
+      "packageSha256": "707a5ef17d818186b90f3ba565fab6e2b83c3b62b92e6ab63a22e1a320158097",
+      "asset": "lib/netstandard2.0/Microsoft.Extensions.Logging.Abstractions.dll",
+      "dllSha256": "a0d09ef412b11337f02b2895f305b494fcceb71bb15c35988ff7d7a021c6f87b"
+    },
+    {
+      "id": "System.Diagnostics.DiagnosticSource",
+      "version": "8.0.1",
+      "target": "netstandard2.0",
+      "source": "https://api.nuget.org/v3-flatcontainer/system.diagnostics.diagnosticsource/8.0.1/system.diagnostics.diagnosticsource.8.0.1.nupkg",
+      "packageSha256": "ce6c078dc26029c6e49307a91f4dfc421727b16309707cacf8f11b1460b4260a",
+      "asset": "lib/netstandard2.0/System.Diagnostics.DiagnosticSource.dll",
+      "dllSha256": "989b1797b5cacdf19e7130eddd8ae51f0d79595d6020cbaf51910c1c3637cec9"
+    },
+    {
+      "id": "System.Runtime.CompilerServices.Unsafe",
+      "version": "6.0.0",
+      "target": "netstandard2.0",
+      "source": "https://api.nuget.org/v3-flatcontainer/system.runtime.compilerservices.unsafe/6.0.0/system.runtime.compilerservices.unsafe.6.0.0.nupkg",
+      "packageSha256": "6c41b53e70e9eee298cff3a02ce5acdd15b04125589be0273f0566026720a762",
+      "asset": "lib/netstandard2.0/System.Runtime.CompilerServices.Unsafe.dll",
+      "dllSha256": "01748200f2400c742aa689f1f5101bd6298efdfd92c00c18f4fa473847235ba9"
+    }
+  ],
+  "unityProvided": [
+    "System.Memory assembly 4.0.2.0 (Unity 2022.3.62f3 netstandard2.1 facade; dependencies request assembly 4.0.1.2)",
+    "System.Buffers assembly 4.0.3.0 (Unity 2022.3.62f3 netstandard2.1 facade; Logging.Abstractions requests assembly 4.0.2.0)",
+    "System.Threading.Tasks.Extensions assembly 4.2.1.0 (Unity 2022.3.62f3 netstandard2.1 facade)"
+  ],
+  "runtimeValidation": "Not run; package SHA256 and PE AssemblyRef metadata checked only. Unity facade version unification and Mono/IL2CPP runtime binding remain unverified; plugin validateReferences stays enabled."
+}

@@ -34,13 +34,14 @@ namespace RPG4.Interaction
         }
 
         private bool CanUseInteraction => isActiveAndEnabled
+            && playerInput != null && playerInput.UsesLocalInput && playerInput.CanReadGameplayInput
             && interactionState != null && interactionState.CanInteract
             && interactionCamera != null && interactionCamera.isActiveAndEnabled;
 
         private void Awake()
         {
             if (playerInput == null) playerInput = GetComponent<PlayerInput>();
-            if (playerInput != null) interactionState = playerInput.ReadState.Interaction;
+            if (playerInput != null) interactionState = playerInput.ReadState?.Interaction;
             if (interactionCamera == null) interactionCamera = Camera.main;
 
 
@@ -48,13 +49,14 @@ namespace RPG4.Interaction
 
         private void LateUpdate()
         {
+            interactionState = playerInput != null ? playerInput.ReadState?.Interaction : null;
             if (interactionCamera == null) interactionCamera = Camera.main;
             if (playerInput != null) playerInput.RefreshIntentPermissions();
             targetComponent = CanUseInteraction ? FindTarget() : null;
 
             IInteractable target = CurrentTarget;
             if (playerInput != null) playerInput.RefreshIntentPermissions();
-            if (target != null && CanUseInteraction && interactionState.InteractPressed) target.Interact(this);
+            if (target != null && CanUseInteraction && playerInput.ConsumeLocalInteractionPressed()) target.Interact(this);
 
             // 交互事件可能刚打开窗口或禁用了物品，立即刷新共享许可并撤销姿态。
             if (playerInput != null) playerInput.RefreshIntentPermissions();

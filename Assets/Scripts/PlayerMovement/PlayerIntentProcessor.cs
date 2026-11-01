@@ -18,12 +18,11 @@ namespace RPG4.PlayerMovement
             blackboard.ViewYaw = yaw;
             blackboard.ViewPitch = pitch;
         }
-        internal void ProcessLook(Vector2 sensitivity, Vector2 pitchRange, float aimMultiplier)
+        internal void ProcessLook(Vector2 pitchRange)
         {
-            if (!blackboard.CanLook) return;
-            float multiplier = blackboard.IsAiming ? aimMultiplier : 1f;
-            RecordView(Mathf.DeltaAngle(0f, blackboard.ViewYaw + blackboard.Look.x * sensitivity.x * multiplier),
-                Mathf.Clamp(blackboard.ViewPitch - blackboard.Look.y * sensitivity.y * multiplier,
+            if (!blackboard.CanLook || !blackboard.InputAllowed) return;
+            RecordView(Mathf.DeltaAngle(0f, blackboard.ViewYaw + blackboard.Look.x),
+                Mathf.Clamp(blackboard.ViewPitch + blackboard.Look.y,
                     pitchRange.x, pitchRange.y));
         }
         internal void ApplyRecoil(float pitch, float yaw, Vector2 pitchRange)
@@ -42,7 +41,7 @@ namespace RPG4.PlayerMovement
         internal void Refresh()
         {
             UpperBodyDemand demand = blackboard.WeaponDemand;
-            bool allowed = context.CanUseWeapon && Time.deltaTime > 0f;
+            bool allowed = context.CanUseWeapon;
             if (!allowed && (demand.Strafe || demand.AimCamera || demand.ShotPose || demand.Reloading || demand.AttackCamera))
                 blackboard.WeaponCancellationRequested = true;
             allowed &= !blackboard.WeaponCancellationRequested;

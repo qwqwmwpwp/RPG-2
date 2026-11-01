@@ -4,7 +4,7 @@ using RPG4.Backpack.Items;
 
 namespace RPG4.Backpack.Network
 {
-    /// <summary>库存同步条目：SyncList 的元素必须是值类型，因此这里只放「物品身份的稳定投影」（标识、类型标签、堆叠数、运行时数值载荷）；不放运行时实例 / 片段对象 / Unity 引用（模板派生数据不上网）；位置与冻结占格尺寸同源于权威容器，字段必须保持 public 实例字段供 Mirror Weaver 生成读写器。</summary>
+    /// <summary>库存网络投影：身份、结构/弹序基线、当前运行状态及权威布局，不持有运行时实例或 Unity 引用。完整恢复需要同时读取两个载荷。</summary>
     public struct NetworkInventoryEntry : IEquatable<NetworkInventoryEntry>
     {
         public ulong itemId; // 运行时实例标识（0 表示未登记，属于非法状态）。
@@ -13,14 +13,20 @@ namespace RPG4.Backpack.Network
 
         public int stackCount; // 堆叠数；唯一来源是服务端运行时物品的 StackCount。
 
-        public byte[] fragmentState; // 运行时数值载荷，由 RuntimeItemSnapshotCodec 编码；首字节即快照版本。
+        public byte[] fragmentState; // 结构、随机化数值及弹序基线；零版本的旧接口仍可承载完整快照。
+
+        // 网络投影拆分：fragmentState 只随结构变化，runtimeState 是当前运行基线。
+        public ulong structureVersion;
+        public ulong runtimeVersion;
+        public byte[] runtimeState;
 
         public int upperLeftIndex;
         public int width;
         public int height;
 
         /// <summary>以运行时物品信息构造条目；载荷为空时抛出 <see cref="ArgumentNullException"/>。</summary>
-        public NetworkInventoryEntry(ItemId itemId, BackpackTag itemType, int stackCount, byte[] fragmentState, int upperLeftIndex = 0, int width = 1, int height = 1)
+        public NetworkInventoryEntry(ItemId itemId, BackpackTag itemType, int stackCount, byte[] fragmentState, int upperLeftIndex = 0, int width = 1, int height = 1,
+            ulong structureVersion = 0, ulong runtimeVersion = 0, byte[] runtimeState = null)
         {
             this.fragmentState = fragmentState ?? throw new ArgumentNullException(nameof(fragmentState));
             this.itemId = itemId.Value;
@@ -29,6 +35,9 @@ namespace RPG4.Backpack.Network
             this.upperLeftIndex = upperLeftIndex;
             this.width = width;
             this.height = height;
+            this.structureVersion = structureVersion;
+            this.runtimeVersion = runtimeVersion;
+            this.runtimeState = runtimeState;
         }
 
         public ItemId Id => new ItemId(itemId); // 物品标识。
@@ -99,6 +108,17 @@ namespace RPG4.Backpack.Network
                 return false;
             }
 
+            if (structureVersion != 0 || runtimeVersion != 0 || runtimeState != null)
+            {
+                if (structureVersion == 0 || runtimeVersion == 0 || runtimeState == null
+                    || runtimeState.Length < 2 || runtimeState.Length > RuntimeItemSnapshotCodec.MaxPayloadBytes
+                    || runtimeState[0] != RuntimeItemSnapshotCodec.NetworkRuntimeVersion)
+                {
+                    error = $"条目 {itemId} 的结构/运行版本或运行载荷非法。";
+                    return false;
+                }
+            }
+
             error = null;
             return true;
         }
@@ -113,7 +133,14 @@ namespace RPG4.Backpack.Network
         /// <summary>比较物品载荷；仅移动布局时可保留同一运行时镜像实例。</summary>
         public bool ItemStateEquals(NetworkInventoryEntry other)
         {
+            return StructureStateEquals(other) && runtimeVersion == other.runtimeVersion
+                && PayloadEquals(runtimeState, other.runtimeState);
+        }
+
+        public bool StructureStateEquals(NetworkInventoryEntry other)
+        {
             return itemId == other.itemId && stackCount == other.stackCount
+                && structureVersion == other.structureVersion
                 && string.Equals(itemType, other.itemType, StringComparison.Ordinal)
                 && PayloadEquals(fragmentState, other.fragmentState);
         }
@@ -134,6 +161,8 @@ namespace RPG4.Backpack.Network
                 hash = (hash * 397) ^ upperLeftIndex;
                 hash = (hash * 397) ^ width;
                 hash = (hash * 397) ^ height;
+                hash = (hash * 397) ^ structureVersion.GetHashCode();
+                hash = (hash * 397) ^ runtimeVersion.GetHashCode();
                 hash = (hash * 397) ^ (itemType == null ? 0 : itemType.GetHashCode());
                 if (fragmentState != null)
                 {
@@ -142,6 +171,9 @@ namespace RPG4.Backpack.Network
                         hash = (hash * 397) ^ fragmentState[i];
                     }
                 }
+
+                if (runtimeState != null)
+                    for (int i = 0; i < runtimeState.Length; i++) hash = (hash * 397) ^ runtimeState[i];
 
                 return hash;
             }

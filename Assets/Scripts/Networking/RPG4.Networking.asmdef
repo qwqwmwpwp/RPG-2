@@ -1,0 +1,9 @@
+{
+    "name": "RPG4.Networking",
+    "rootNamespace": "RPG4.Networking",
+    "references": [
+        "Mirror", "Mirror.Transports", "RPG4.Networking.Contracts", "Cinemachine", "Unity.Animation.Rigging", "RPG4.UI", "RPG4.Backpack.Inventory", "RPG4.PlayerMovement", "RPG4.PlayerIntent", "RPG4.Input",
+        "RPG4.CharacterAttributes", "RPG4.Combat", "RPG4.Backpack.Network",
+        "RPG4.Backpack.Runtime", "RPG4.Backpack.Core", "RPG4.Backpack.Items", "RPG4.Backpack.Equipment"
+    ]
+}

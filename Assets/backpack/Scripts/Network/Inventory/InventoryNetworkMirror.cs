@@ -30,6 +30,7 @@ namespace RPG4.Backpack.Network
         public long FullRefreshCount { get; private set; }
         public long RestoredItemCount { get; private set; }
         public long ReusedItemCount { get; private set; }
+        public long RuntimeUpdateCount { get; private set; }
         public int LastRestoredItemCount { get; private set; }
         public int LastChangedItemCount { get; private set; }
 
@@ -60,6 +61,7 @@ namespace RPG4.Backpack.Network
         public void ResetStatistics()
         {
             BatchCount = FullRefreshCount = RestoredItemCount = ReusedItemCount = 0;
+            RuntimeUpdateCount = 0;
             LastRestoredItemCount = LastChangedItemCount = 0;
         }
 
@@ -123,10 +125,14 @@ namespace RPG4.Backpack.Network
                     return Fail("物品 " + entry.itemId + " 的同步位置越界。", out error);
                 RuntimeItem item;
                 HashSet<ulong> ids;
+                RuntimeItemStateUpdate runtimeUpdate = null;
                 if (!forceRestore && sameCatalog && applied.TryGetValue(pair.Key, out NetworkInventoryEntry previous)
-                    && previous.ItemStateEquals(entry) && mirror.TryGetValue(pair.Key, out item))
+                    && previous.StructureStateEquals(entry) && mirror.TryGetValue(pair.Key, out item))
                 {
                     ids = appliedTrees[pair.Key];
+                    if (!previous.ItemStateEquals(entry) && entry.runtimeState != null
+                        && !RuntimeItemSnapshotCodec.TryPrepareNetworkRuntime(item, entry.runtimeState, catalog,
+                            out runtimeUpdate, out error)) return Fail(error, out error);
                     ReusedItemCount++;
                 }
                 else
@@ -154,7 +160,7 @@ namespace RPG4.Backpack.Network
                         return Fail("同步物品占格重叠。", out error);
                     stagedCells.Add(cell, pair.Key);
                 }
-                staged.Add(pair.Key, new StagedItem(item, entry, ids));
+                staged.Add(pair.Key, new StagedItem(item, entry, ids, runtimeUpdate));
             }
 
             // 校验期间只写暂存区；同批交换、根/子物品转换不暴露中间占格。
@@ -189,6 +195,11 @@ namespace RPG4.Backpack.Network
             foreach (KeyValuePair<ulong, StagedItem> pair in staged)
             {
                 StagedItem next = pair.Value;
+                if (next.RuntimeUpdate != null)
+                {
+                    next.RuntimeUpdate.Apply();
+                    RuntimeUpdateCount++;
+                }
                 mirror.Add(pair.Key, next.Item);
                 placements.Add(pair.Key, new InventoryPlacement(next.Item, next.Entry.upperLeftIndex,
                     new GridCoord(next.Entry.width, next.Entry.height)));
@@ -234,8 +245,9 @@ namespace RPG4.Backpack.Network
             internal readonly RuntimeItem Item;
             internal readonly NetworkInventoryEntry Entry;
             internal readonly HashSet<ulong> TreeIds;
-            internal StagedItem(RuntimeItem item, NetworkInventoryEntry entry, HashSet<ulong> ids)
-            { Item = item; Entry = entry; TreeIds = ids; }
+            internal readonly RuntimeItemStateUpdate RuntimeUpdate;
+            internal StagedItem(RuntimeItem item, NetworkInventoryEntry entry, HashSet<ulong> ids, RuntimeItemStateUpdate runtimeUpdate)
+            { Item = item; Entry = entry; TreeIds = ids; RuntimeUpdate = runtimeUpdate; }
         }
     }
 }

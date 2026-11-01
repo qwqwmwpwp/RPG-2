@@ -12,27 +12,38 @@ namespace RPG4.Backpack.Runtime
     [AddComponentMenu("RPG4/Equipment Inventory")]
     public sealed class EquipmentInventory : MonoBehaviour, IBackpackView, IInventoryOperations
     {
+        private bool networkReadOnly;
+        public InventoryHostCore AuthorityCore => core;
+        public void SetNetworkAuthority(bool authority)
+        {
+            networkReadOnly = !authority;
+            if (core == null) return;
+            core.IsAuthority = () => !networkReadOnly;
+            if (networkReadOnly) core.UnsubscribeCommands();
+            else if (isActiveAndEnabled) core.SubscribeCommands(core.Container);
+        }
+
         private InventoryHostCore core;
         private ItemAdmissionHandler additionalAdmission;
         private CommitConfirmHandler commitConfirm;
 
         public InventoryContainer Container => core?.Container;
         public RuntimeItem EquippedItem => Container?.GetItemAt(0);
-        public bool IsReady => Container != null;
+        public bool IsReady => !networkReadOnly && Container != null;
         public int Rows => IsReady ? 1 : 0;
         public int Columns => IsReady ? 1 : 0;
         public int ConfiguredRows => 1;
         public int ConfiguredColumns => 1;
         public object EventSource => Container;
 
-        /// <summary>角色挂点等附加检查；只查询，不创建模型或变更库存。</summary>
+        /// <summary>角色业务附加检查；只查询，不创建模型或变更库存。</summary>
         public ItemAdmissionHandler AdditionalAdmission
         {
             get => additionalAdmission;
             set => additionalAdmission = value;
         }
 
-        /// <summary>双方静默提交之后、通知之前确认外部装备表现；失败后容器回滚并补偿确认。</summary>
+        /// <summary>双方静默提交之后、通知之前确认装备运行实例；失败后容器回滚并补偿确认。</summary>
         public CommitConfirmHandler CommitConfirm
         {
             get => commitConfirm;
@@ -45,11 +56,15 @@ namespace RPG4.Backpack.Runtime
 
         private void Awake()
         {
+            foreach (MonoBehaviour component in GetComponents<MonoBehaviour>())
+                if (component is ISharedInventoryAccess access && access.IsNetworkSessionActive && !access.IsServerSession)
+                    networkReadOnly = true;
             core = new InventoryHostCore(1, 1, LogModule.Equipment, name, true, CanAcceptItem);
             core.CommitConfirm = commitConfirm;
+            core.IsAuthority = () => !networkReadOnly;
         }
 
-        private void OnEnable() => core?.SubscribeCommands(Container);
+        private void OnEnable() { if (!networkReadOnly) core?.SubscribeCommands(Container); }
         private void OnDisable() => core?.UnsubscribeCommands();
 
         public GridCoord ResolveItemDimensions(RuntimeItem item) => GridCoord.One;
@@ -66,9 +81,9 @@ namespace RPG4.Backpack.Runtime
             WeaponDefinitionFragment definition = item.GetFragment<WeaponDefinitionFragment>();
             if (equipment == null || !equipment.FragmentTag.MatchesTagExact(FragmentTags.EquipmentFragment)
                 || equipment.EquipmentType.IsEmpty || !equipment.EquipmentType.IsValid
-                || equipment.EquipPrefab == null || definition == null)
+                || definition == null)
             {
-                error = "物品缺少有效武器定义、装备类型或装备模型。";
+                error = "物品缺少有效武器定义或装备类型。";
                 return false;
             }
             try { definition.Validate(); }
