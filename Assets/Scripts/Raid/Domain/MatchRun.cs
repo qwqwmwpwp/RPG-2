@@ -59,21 +59,9 @@ namespace RPG4.Raid.Domain
             return new MatchCommandResult(MatchCommandStatus.Accepted, state, code, message);
         }
 
-        /// <summary>Creates an accepted result for a transport adapter command that does not mutate MatchRun.</summary>
-        public static MatchCommandResult Accepted(MatchRunState state, string code, string message)
-        {
-            return Accept(state, code, message);
-        }
-
         public static MatchCommandResult Reject(MatchRunState state, string code, string message)
         {
             return new MatchCommandResult(MatchCommandStatus.Rejected, state, code, message);
-        }
-
-        /// <summary>Creates a rejected result for a transport adapter command that does not mutate MatchRun.</summary>
-        public static MatchCommandResult Rejected(MatchRunState state, string code, string message)
-        {
-            return Reject(state, code, message);
         }
     }
 
@@ -162,7 +150,7 @@ namespace RPG4.Raid.Domain
         {
             SetNow(time);
             if (string.IsNullOrEmpty(playerKey)) return Reject("InvalidPlayer", "玩家标识不能为空。");
-            if (State != MatchRunState.Waiting)
+            if (State != MatchRunState.Waiting && State != MatchRunState.Countdown)
                 return Reject("RosterLocked", "对局名单已锁定。");
             if (joinedPlayers.Contains(playerKey)) return Reject("AlreadyJoined", "玩家已在对局中。");
             if (joinedPlayers.Count >= maximumPlayers) return Reject("Full", "对局人数已满。");
@@ -173,7 +161,6 @@ namespace RPG4.Raid.Domain
                 State = MatchRunState.Countdown;
                 deadline = now + countdownSeconds;
                 Emit(MatchRunEventKind.CountdownStarted, null, "最低人数已满足，倒计时开始。");
-                LockRosterSnapshot();
             }
             if (joinedPlayers.Count == maximumPlayers) LockRosterCore();
             return Accept("Joined", "玩家已加入。");
@@ -185,7 +172,6 @@ namespace RPG4.Raid.Domain
             if (State != MatchRunState.Waiting && State != MatchRunState.Countdown)
                 return Reject("InvalidState", "当前阶段不能锁定名单。");
             if (joinedPlayers.Count < minimumPlayers) return Reject("NotEnoughPlayers", "尚未达到最低人数。");
-            if (State == MatchRunState.Countdown) return Accept("RosterLocked", "对局名单已经锁定。");
             LockRosterCore();
             return Accept("RosterLocked", "对局名单已锁定。");
         }
