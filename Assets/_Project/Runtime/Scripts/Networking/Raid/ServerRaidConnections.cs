@@ -43,6 +43,7 @@ namespace RPG4.Networking
                         disconnected.Identity = identity;
                         disconnected.Disconnected = false;
                         connections[connection] = disconnected;
+                        owner.NotifyRaidPlayerReconnected(disconnected.Key);
                         return disconnected;
                     }
                 var entry = new Entry { Key = Guid.NewGuid().ToString("N"), Connection = connection, Identity = identity };

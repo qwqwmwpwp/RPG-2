@@ -84,6 +84,11 @@ namespace RPG4.Networking
         {
             matchRuntime?.MarkReady(key, Time.realtimeSinceStartupAsDouble);
         }
+
+        internal void NotifyRaidPlayerReconnected(string key)
+        {
+            matchRuntime?.Reconnect(key, Time.realtimeSinceStartupAsDouble);
+        }
         private void TickRaidSessions()
         {
             if (usesGameplaySceneBindings && NetworkClient.active) TickLobbyClient();

@@ -244,9 +244,14 @@ namespace RPG4.Raid.Application
         }
         public bool CanReconnect(string key)
         {
-            return TrySession(key, out RaidPlayerSession session) && !session.Connected
-                && session.Raid?.Reservation.Status == PersistentRaidStatus.Active
-                && session.Raid.Stage == RaidStage.Active;
+            if (!TrySession(key, out RaidPlayerSession session) || session.Connected || session.Raid == null)
+                return false;
+            RaidRun raid = session.Raid;
+            bool activeControl = raid.Reservation.Status == PersistentRaidStatus.Active
+                && (raid.Stage == RaidStage.Active || raid.Stage == RaidStage.Activating);
+            bool activationInFlight = raid.Reservation.Status == PersistentRaidStatus.Prepared
+                && raid.Stage == RaidStage.Activating;
+            return activeControl || activationInFlight;
         }
         public void EndRaid(string key, RaidOutcome outcome)
         { if (TrySession(key, out RaidPlayerSession session)) BeginSettlement(session, outcome); }

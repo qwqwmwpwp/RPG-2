@@ -150,6 +150,8 @@ namespace RPG4.Raid.Domain
         {
             SetNow(time);
             if (string.IsNullOrEmpty(playerKey)) return Reject("InvalidPlayer", "玩家标识不能为空。");
+            // Countdown is the configured admission window. The roster freezes when
+            // the countdown expires or the maximum player count is reached.
             if (State != MatchRunState.Waiting && State != MatchRunState.Countdown)
                 return Reject("RosterLocked", "对局名单已锁定。");
             if (joinedPlayers.Contains(playerKey)) return Reject("AlreadyJoined", "玩家已在对局中。");
