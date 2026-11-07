@@ -29,16 +29,16 @@ namespace RPG4.Editor.Build
             "AmmoDefinitionFragment", "MagazineDefinitionFragment", "AttachmentDefinitionFragment"
         };
         internal static readonly string[] SourceRoots = {
-            "Assets/Scripts/CharacterAttributes", "Assets/Scripts/Combat", "Assets/Scripts/PlayerIntent",
-            "Assets/Scripts/PlayerMovement", "Assets/Scripts/StateMachine", "Assets/Scripts/Networking",
-            "Assets/backpack/Scripts/Core", "Assets/backpack/Scripts/Equipment", "Assets/backpack/Scripts/Inventory",
-            "Assets/backpack/Scripts/Items", "Assets/backpack/Scripts/Runtime", "Assets/backpack/Scripts/Network", "Assets/backpack/Scripts/World",
+            "Assets/_Project/Runtime/Scripts/CharacterAttributes", "Assets/_Project/Runtime/Scripts/Combat", "Assets/_Project/Runtime/Scripts/PlayerIntent",
+            "Assets/_Project/Runtime/Scripts/PlayerMovement", "Assets/_Project/Runtime/Scripts/StateMachine", "Assets/_Project/Runtime/Scripts/Networking",
+            "Assets/_Project/Runtime/Backpack/Scripts/Core", "Assets/_Project/Runtime/Backpack/Scripts/Equipment", "Assets/_Project/Runtime/Backpack/Scripts/Inventory",
+            "Assets/_Project/Runtime/Backpack/Scripts/Items", "Assets/_Project/Runtime/Backpack/Scripts/Runtime", "Assets/_Project/Runtime/Backpack/Scripts/Network", "Assets/_Project/Runtime/Backpack/Scripts/World",
             "Assets/Mirror/Core", "Assets/Mirror/Components/InterestManagement/Distance", "Assets/Mirror/Transports/KCP", "Assets/Mirror/Transports/Encryption",
             "Assets/Mirror/Editor/Weaver"
         };
         // These owning assembly definitions sit outside the selected source directories.
         internal static readonly string[] AdditionalAssemblyInputs = {
-            "Assets/Scripts/Input/RPG4.Input.asmdef", "Assets/Mirror/Components/Mirror.Components.asmdef",
+            "Assets/_Project/Runtime/Scripts/Input/RPG4.Input.asmdef", "Assets/Mirror/Components/Mirror.Components.asmdef",
             "Assets/Mirror/Transports/Mirror.Transports.asmdef"
         };
         internal static readonly string[] SharedBinaries = {

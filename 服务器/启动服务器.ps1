@@ -90,7 +90,7 @@ try {
 
     $keyPath = Get-AbsolutePath $settings.keyPath ([IO.Path]::GetDirectoryName($resolvedConfig))
     $assetsRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../Assets')).TrimEnd('\')
-    $manifestPath = Join-Path $PSScriptRoot '../Assets/Settings/EntryContentManifest.asset'
+    $manifestPath = Join-Path $PSScriptRoot '../Assets/_Project/Content/Settings/EntryContentManifest.asset'
     $protocolVersion = $null
     $contentHash = $null
     if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {

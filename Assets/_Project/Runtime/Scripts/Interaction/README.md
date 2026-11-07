@@ -10,15 +10,15 @@
 
 ## 已接入的资源
 
-`Assets/player/player.prefab` 已挂载玩家交互组件，并引用 `Assets/player/Interaction/CrosshairUI.prefab`。准心预制体自带 Overlay Canvas、CanvasGroup 和居中图形，引用已配置；每个本机玩家在 Awake 时实例化一次，禁用交互组件时隐藏。
+`Assets/_Project/Runtime/Player/player.prefab` 已挂载玩家交互组件，并引用 `Assets/_Project/Runtime/Player/Interaction/CrosshairUI.prefab`。准心预制体自带 Overlay Canvas、CanvasGroup 和居中图形，引用已配置；每个本机玩家在 Awake 时实例化一次，禁用交互组件时隐藏。
 
-`Assets/player/Interaction/ItemInteractable.prefab` 是带非 Trigger BoxCollider 的基础方块物品，已挂载 `ItemInteractable`。核心场景 `Assets/Scenes/Main.unity` 中放置了该预制体实例，位于现有主相机准心前方、玩家 3 米范围内。
+`Assets/_Project/Runtime/Player/Interaction/ItemInteractable.prefab` 是带非 Trigger BoxCollider 的基础方块物品，已挂载 `ItemInteractable`。核心场景 `Assets/Scenes/Main.unity` 中放置了该预制体实例，位于现有主相机准心前方、玩家 3 米范围内。
 
-`Assets/backpack/Prefabs/Chest.prefab` 是独立箱子，带非 Trigger BoxCollider、`BackpackInventory` 和实现 `IInteractable` 的 `ChestInventory`。同一场景在玩家右前方放置了实例（1.5, 0.4, 1.8），并仅对该实例启用测试物品填充；预制体默认不自动生成物品。准心瞄准且在距离内时按 E，经 `ChestInventory.OpenUI()` 打开玩家与当前箱子的双栏背包。玩家预制体使用 `CharacterBackpack` 登记本机背包，箱子不会登记为玩家来源。打开窗口期间停止角色方向输入、相机环绕与缩放，并阻止点击重新锁定鼠标；按 B 关闭后恢复。
+`Assets/_Project/Runtime/Backpack/Prefabs/Chest.prefab` 是独立箱子，带非 Trigger BoxCollider、`BackpackInventory` 和实现 `IInteractable` 的 `ChestInventory`。同一场景在玩家右前方放置了实例（1.5, 0.4, 1.8），并仅对该实例启用测试物品填充；预制体默认不自动生成物品。准心瞄准且在距离内时按 E，经 `ChestInventory.OpenUI()` 打开玩家与当前箱子的双栏背包。玩家预制体使用 `CharacterBackpack` 登记本机背包，箱子不会登记为玩家来源。打开窗口期间停止角色方向输入、相机环绕与缩放，并阻止点击重新锁定鼠标；按 B 关闭后恢复。
 
 普通 `ItemInteractable` 仍只输出交互日志并调用 Inspector 的 `On Interacted` 事件，保留在场景中，可重复交互；尚未接入拾取入库或物品销毁。
 
-`Assets/player/Interaction/WorldPickup.prefab` 是独立的真实物品拾取预制体，`WorldPickup` 在 Inspector 绑定 `ItemManifest` 与数量。Main 的玩家左前方放置了小型红药 ×3 与火蕨果实 ×12，沿用现有方块视觉；瞄准后准星下显示物品名、数量和按键。交互使用玩家的本地 `BackpackInventory` 权威整批接收，先合并同类堆叠再放入空格；成功后禁用世界物体，容量不足时保留世界物体并显示失败原因。首次尝试分配共享全局 ItemId 并冻结运行时实例，失败重试不重新随机化。
+`Assets/_Project/Runtime/Player/Interaction/WorldPickup.prefab` 是独立的真实物品拾取预制体，`WorldPickup` 在 Inspector 绑定 `ItemManifest` 与数量。Main 的玩家左前方放置了小型红药 ×3 与火蕨果实 ×12，沿用现有方块视觉；瞄准后准星下显示物品名、数量和按键。交互使用玩家的本地 `BackpackInventory` 权威整批接收，先合并同类堆叠再放入空格；成功后禁用世界物体，容量不足时保留世界物体并显示失败原因。首次尝试分配共享全局 ItemId 并冻结运行时实例，失败重试不重新随机化。
 
 成功、失败反馈复用 `CrosshairUI.prefab` 中已接线的 TMP 文本（现有 NotoSansSC 字体），不在运行时拼装固定 UI。拾取目前仅支持单机：Mirror 客户端、Host、服务器或带网络身份/网络库存的玩家会收到明确提示，世界物体及库存均不变；未来网络拾取需要独立的服务端验证协议。
 

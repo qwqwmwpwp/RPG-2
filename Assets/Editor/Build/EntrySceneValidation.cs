@@ -39,11 +39,11 @@ namespace RPG4.Editor.Build
     {
         private const string ClientBootstrapPath = "Assets/Scenes/ClientBootstrap.unity";
         private const string ServerBootstrapPath = "Assets/Scenes/ServerBootstrap.unity";
-        private const string ManagerPath = "Assets/player/OnlineNetworkManager.prefab";
-        private const string PlayerPath = "Assets/player/OnlinePlayer.prefab";
-        private const string ManifestPath = "Assets/Settings/EntryContentManifest.asset";
-        private const string CatalogPath = "Assets/Settings/ClientServerCatalog.asset";
-        private const string MenuPrefabPath = "Assets/UI/Frontend/ClientMenu.prefab";
+        private const string ManagerPath = "Assets/_Project/Runtime/Player/OnlineNetworkManager.prefab";
+        private const string PlayerPath = "Assets/_Project/Runtime/Player/OnlinePlayer.prefab";
+        private const string ManifestPath = "Assets/_Project/Content/Settings/EntryContentManifest.asset";
+        private const string CatalogPath = "Assets/_Project/Content/Settings/ClientServerCatalog.asset";
+        private const string MenuPrefabPath = "Assets/_Project/Runtime/UI/Frontend/ClientMenu.prefab";
 
         public static void Validate()
         {
@@ -55,7 +55,7 @@ namespace RPG4.Editor.Build
                 "Entry scenes must have independent asset GUIDs.");
             string[] dependencies = AssetDatabase.GetDependencies(scenes, true);
             Require(!dependencies.Contains("Assets/Scenes/Main.unity")
-                && !dependencies.Contains("Assets/player/AuthoritativeNetworkManager.prefab"),
+                && !dependencies.Contains("Assets/_Project/Runtime/Player/AuthoritativeNetworkManager.prefab"),
                 "Entry assets must not reference Main or the protected legacy manager prefab.");
             var manifest = Load<EntryContentManifest>(ManifestPath);
             var catalog = Load<ClientServerCatalog>(CatalogPath);
@@ -220,7 +220,7 @@ namespace RPG4.Editor.Build
                 foreach (Transform node in root.GetComponentsInChildren<Transform>(true))
                 {
                     string source = PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(node.gameObject);
-                    Require(source != "Assets/player/AuthoritativeNetworkManager.prefab",
+                    Require(source != "Assets/_Project/Runtime/Player/AuthoritativeNetworkManager.prefab",
                         scene.path + " contains the protected legacy manager prefab.");
                 }
         }
@@ -414,7 +414,7 @@ namespace RPG4.Editor.Build
             var presenter = Single<LobbyPresenter>(scene);
             var main = Single<LobbyView>(scene); var loadout = Single<LobbyLoadoutWindow>(scene);
             var settings = Single<SettingsView>(scene); var preview = Single<LobbyCharacterPreview>(scene);
-            Require(PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(presenter.gameObject) == "Assets/UI/Frontend/Lobby.prefab",
+            Require(PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(presenter.gameObject) == "Assets/_Project/Runtime/UI/Frontend/Lobby.prefab",
                 "Lobby must instance its authored canvas prefab.");
             Require(Reference<LobbyView>(presenter, "main") == main && Reference<LobbyLoadoutWindow>(presenter, "loadout") == loadout
                 && Reference<SettingsView>(presenter, "settings") == settings && Reference<LobbyCharacterPreview>(presenter, "preview") == preview,
