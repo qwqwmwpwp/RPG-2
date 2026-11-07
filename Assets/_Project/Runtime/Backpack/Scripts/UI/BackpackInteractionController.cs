@@ -136,6 +136,7 @@ namespace RPG4.Backpack.UI
 
         private static int nextRequestId;
         private BackpackContainerUI[] views = Array.Empty<BackpackContainerUI>();
+        private BackpackContainerUI[] inspectableViews = Array.Empty<BackpackContainerUI>();
         private BackpackContainerUI quickTransferFirst;
         private BackpackContainerUI quickTransferSecond;
         private string quickTransferFirstHint;
@@ -221,6 +222,46 @@ namespace RPG4.Backpack.UI
             SessionVersion++;
         }
 
+        /// <summary>登记当前交互会话中允许检查物品的容器；只接受已绑定到本会话的视图。</summary>
+        public void SetInspectableContainers(params BackpackContainerUI[] containers)
+        {
+            if (!IsSessionActive || containers == null)
+            {
+                inspectableViews = Array.Empty<BackpackContainerUI>();
+                return;
+            }
+            var accepted = new System.Collections.Generic.List<BackpackContainerUI>(containers.Length);
+            foreach (BackpackContainerUI view in containers)
+                if (view != null && Array.IndexOf(views, view) >= 0 && !accepted.Contains(view)) accepted.Add(view);
+            inspectableViews = accepted.ToArray();
+        }
+
+        /// <summary>检查物品来源是否为当前会话明确允许检查且已就绪的容器。</summary>
+        public bool CanInspectSessionInventory(IBackpackView inventory)
+        {
+            if (!IsSessionActive || !IsInventoryAlive(inventory) || !inventory.IsReady) return false;
+            foreach (BackpackContainerUI view in inspectableViews)
+                if (IsViewReady(view) && ReferenceEquals(view.Inventory, inventory)) return true;
+            return false;
+        }
+
+        /// <summary>只读查找当前会话明确允许检查的容器，不访问会话外的库存。</summary>
+        public bool TryFindInspectableSessionItem(ItemId itemId, out RuntimeItem item, out IBackpackView inventory)
+        {
+            item = null;
+            inventory = null;
+            if (!IsSessionActive || itemId.IsNone) return false;
+            foreach (BackpackContainerUI view in inspectableViews)
+            {
+                if (!IsViewReady(view) || !IsInventoryAlive(view.Inventory)) continue;
+                if (!view.TryGetItem(itemId, out RuntimeItem found)) continue;
+                item = found;
+                inventory = view.Inventory;
+                return true;
+            }
+            return false;
+        }
+
         /// <summary>显式指定快捷转移的两侧，新增其它拖放容器不会改变原有快捷键目标。</summary>
         public void SetQuickTransferPair(BackpackContainerUI first, BackpackContainerUI second,
             string firstHint = "自动转移", string secondHint = "自动转移", bool replaceSecondSingleSlot = false)
@@ -256,6 +297,7 @@ namespace RPG4.Backpack.UI
             foreach (BackpackContainerUI view in views)
                 if (view != null) view.SetSelectedItem(ItemId.None);
             views = Array.Empty<BackpackContainerUI>();
+            inspectableViews = Array.Empty<BackpackContainerUI>();
             quickTransferFirst = quickTransferSecond = null;
             quickTransferFirstHint = quickTransferSecondHint = null;
             quickTransferCanReplaceSecondSlot = false;

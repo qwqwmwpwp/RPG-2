@@ -20,14 +20,10 @@ namespace RPG4.Combat
         [SerializeField] private AudioSource shotAudioSource;
         [SerializeField] private AudioClip shotAudioClip;
 
-        [Header("Optional magazine model")]
-        [SerializeField] private GameObject magazineModelPrefab;
+        [Header("Installed item models")]
+        [SerializeField] private ItemAssemblyModelView assemblyModelView;
 
         private RuntimeItem boundItem;
-        private ItemId magazineItemId;
-        private ItemId muzzleAttachmentItemId;
-        private GameObject magazineModel;
-        private GameObject muzzleAttachmentModel;
         private WeaponAttachmentView activeAttachmentView;
         private ulong lastPlayedSequence;
         private ulong lastAnticipatedRequest;
@@ -47,7 +43,9 @@ namespace RPG4.Combat
                 throw new System.ArgumentException("WeaponView 需要绑定带武器状态的运行时物品。", nameof(item));
 
             if (boundItem != null) boundItem.Changed -= OnItemChanged;
-            ClearModels();
+            if (assemblyModelView == null) assemblyModelView = GetComponent<ItemAssemblyModelView>();
+            assemblyModelView?.Clear();
+            activeAttachmentView = null;
             boundItem = item;
             lastPlayedSequence = item.WeaponState.ShotSequence;
             hasAnticipatedShot = false;
@@ -85,31 +83,11 @@ namespace RPG4.Combat
 
         private void ApplyItemStateModels(RuntimeItem item)
         {
-            RuntimeItem magazine = item.WeaponState.Magazine;
-            ItemId newMagazineId = magazine != null ? magazine.ItemId : ItemId.None;
-            if (newMagazineId != magazineItemId)
-            {
-                DestroyModel(ref magazineModel);
-                magazineItemId = newMagazineId;
-                if (newMagazineId.IsValid && magazineModelPrefab != null && magazineSocket != null)
-                    magazineModel = InstantiateAtSocket(magazineModelPrefab, magazineSocket);
-            }
-
-            item.WeaponState.Attachments.TryGetValue(WeaponAttachmentSlot.Muzzle, out RuntimeItem muzzleAttachment);
-            ItemId newAttachmentId = muzzleAttachment != null ? muzzleAttachment.ItemId : ItemId.None;
-            if (newAttachmentId != muzzleAttachmentItemId)
-            {
-                DestroyModel(ref muzzleAttachmentModel);
-                muzzleAttachmentItemId = newAttachmentId;
-                activeAttachmentView = null;
-
-                GameObject model = muzzleAttachment?.GetFragment<AttachmentDefinitionFragment>()?.Model;
-                if (newAttachmentId.IsValid && model != null && muzzle != null)
-                {
-                    muzzleAttachmentModel = InstantiateAtSocket(model, muzzle);
-                    activeAttachmentView = muzzleAttachmentModel.GetComponentInChildren<WeaponAttachmentView>(true);
-                }
-            }
+            if (assemblyModelView == null) assemblyModelView = GetComponent<ItemAssemblyModelView>();
+            assemblyModelView?.Bind(item);
+            RuntimeItem muzzleAttachment = item.Assembly.GetChild(ItemAssemblySlots.Muzzle);
+            GameObject model = muzzleAttachment != null ? assemblyModelView?.GetModel(muzzleAttachment.ItemId) : null;
+            activeAttachmentView = model != null ? model.GetComponentInChildren<WeaponAttachmentView>(true) : null;
         }
 
         /// <summary>播放一次新射击的表现；重复或已同步的序号不会补播。</summary>
@@ -166,28 +144,11 @@ namespace RPG4.Combat
             if (muzzleFlash != null) muzzleFlash.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             if (shellEjectionEffect != null) shellEjectionEffect.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             if (shotAudioSource != null) shotAudioSource.Stop();
-            ClearModels();
+            if (assemblyModelView != null) assemblyModelView.Clear();
+            activeAttachmentView = null;
         }
 
         private void OnItemChanged(RuntimeItem item) => ApplyItemState(item);
-
-        private void ClearModels()
-        {
-            DestroyModel(ref magazineModel);
-            DestroyModel(ref muzzleAttachmentModel);
-            activeAttachmentView = null;
-            magazineItemId = ItemId.None;
-            muzzleAttachmentItemId = ItemId.None;
-        }
-
-        private static GameObject InstantiateAtSocket(GameObject prefab, Transform socket)
-        {
-            GameObject instance = Instantiate(prefab, socket, false);
-            instance.transform.localPosition = Vector3.zero;
-            instance.transform.localRotation = Quaternion.identity;
-            instance.transform.localScale = Vector3.one;
-            return instance;
-        }
 
         private static void RestartParticle(ParticleSystem effect, Transform point)
         {
@@ -198,15 +159,6 @@ namespace RPG4.Combat
             main.simulationSpace = ParticleSystemSimulationSpace.World;
             effect.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             effect.Play(true);
-        }
-
-        private static void DestroyModel(ref GameObject model)
-        {
-            if (model == null) return;
-            model.SetActive(false);
-            if (Application.isPlaying) Destroy(model);
-            else DestroyImmediate(model);
-            model = null;
         }
 
         private void OnDestroy()

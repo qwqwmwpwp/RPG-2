@@ -27,6 +27,7 @@ namespace RPG4.Backpack.Items
             readOnlyFragments = this.fragments.AsReadOnly();
             ItemId = id;
             ItemType = itemType;
+            Assembly = new ItemAssemblyState(this);
             if (GetFragment<WeaponDefinitionFragment>() != null) WeaponState = new WeaponItemState(this);
             if (GetFragment<MagazineDefinitionFragment>() != null) MagazineState = new MagazineItemState(this, initializeState);
             SetStackCount(initialStackCount);
@@ -39,6 +40,7 @@ namespace RPG4.Backpack.Items
         public IReadOnlyList<ItemFragment> Fragments => readOnlyFragments; // 片段集合（只读）。
 
         public override int StackCount => stackCount; // 当前堆叠数。
+        public ItemAssemblyState Assembly { get; }
         public WeaponItemState WeaponState { get; }
         public MagazineItemState MagazineState { get; }
         public RuntimeItem ParentItem { get; internal set; }
@@ -55,6 +57,9 @@ namespace RPG4.Backpack.Items
             ParentItem?.AdvanceStateRevision(runtimeOnly);
         }
 
+        internal void RestoreRevisions(int revision, int structureRevision)
+        { Revision = revision; StructureRevision = structureRevision; }
+
         internal void PublishStateChanged() => Changed?.Invoke(this);
 
         internal void NotifyStateChanged(bool runtimeOnly = false)
@@ -63,17 +68,10 @@ namespace RPG4.Backpack.Items
             PublishStateChanged();
         }
 
-        // 占格尺寸（X 为宽、Y 为高）：读网格占位片段，缺该片段时按 1×1 处理。
-        public override GridCoord Size
-        {
-            get
-            {
-                GridFragment grid = GetFragment<GridFragment>();
-                return grid == null ? GridCoord.One : new GridCoord(grid.Width, grid.Height);
-            }
-        }
+        // 基础网格尺寸加整棵装配树的配置扩展；没有网格片段时基础为1×1。
+        public override GridCoord Size => ItemAssemblySizeCalculator.GetDimensions(this);
 
-        public bool IsStackable => WeaponState == null && MagazineState == null && GetFragment<AttachmentDefinitionFragment>() == null && GetFragment<StackableFragment>() != null; // 有状态物品不可合堆或分堆。
+        public bool IsStackable => GetFragment<ItemAssemblyDefinitionFragment>() == null && Assembly.InstalledChildren.Count == 0 && WeaponState == null && MagazineState == null && GetFragment<AttachmentDefinitionFragment>() == null && GetFragment<StackableFragment>() != null; // 有状态物品不可合堆或分堆。
 
         public bool IsConsumable => GetFragment<ConsumableFragment>() != null; // 是否可消耗。
 

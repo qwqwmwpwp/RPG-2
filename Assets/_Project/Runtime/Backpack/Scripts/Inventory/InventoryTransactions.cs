@@ -49,7 +49,7 @@ namespace RPG4.Backpack.Inventory
         internal void Track(RuntimeItem item)
         {
             if (item == null || items.ContainsKey(item)) return;
-            items.Add(item, new ItemState(item.StackCount, item.RootOwner));
+            items.Add(item, new ItemState(item.StackCount, item.RootOwner, item.Revision, item.StructureRevision));
             foreach (InventoryContainer container in containers)
                 if (container.TryGetPlacement(item, out InventoryPlacement placement))
                     placements.Add(new PlacementState(container, item, placement));
@@ -104,6 +104,8 @@ namespace RPG4.Backpack.Inventory
                 { pair.Key.SetStackCount(pair.Value.Count); pair.Key.RootOwner = pair.Value.Owner; }
                 foreach (PlacementState placement in placements)
                     placement.Container.RestoreTransactionPlacement(placement.Item, placement.Placement);
+                foreach (KeyValuePair<RuntimeItem, ItemState> pair in items)
+                    pair.Key.RestoreRevisions(pair.Value.Revision, pair.Value.StructureRevision);
                 foreach (KeyValuePair<InventoryContainer, ItemId[]> pair in pending) pair.Key.RestorePendingViewChanges(pair.Value);
             }
             finally { foreach (IInventoryPreparedCommit handle in prepared) InventoryCommitParticipants.Discard(handle); }
@@ -140,7 +142,9 @@ namespace RPG4.Backpack.Inventory
         {
             internal readonly int Count;
             internal readonly object Owner;
-            internal ItemState(int count, object owner) { Count = count; Owner = owner; }
+            internal readonly int Revision, StructureRevision;
+            internal ItemState(int count, object owner, int revision, int structureRevision)
+            { Count = count; Owner = owner; Revision = revision; StructureRevision = structureRevision; }
         }
         private readonly struct PlacementState
         {

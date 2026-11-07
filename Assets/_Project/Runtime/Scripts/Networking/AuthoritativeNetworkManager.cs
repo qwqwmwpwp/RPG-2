@@ -516,7 +516,9 @@ namespace RPG4.Networking
 
         public override void OnServerDisconnect(NetworkConnectionToClient conn)
         {
-            if (usesGameplaySceneBindings) CaptureDisconnectedRaid(conn);
+            bool preserveRaidPlayer = usesGameplaySceneBindings && CaptureDisconnectedRaid(conn);
+            if (preserveRaidPlayer && conn != null && conn.identity != null)
+                NetworkServer.RemovePlayerForConnection(conn, RemovePlayerOptions.KeepActive);
             if (authenticator is AccountAuthenticator accountAuthenticator)
                 accountAuthenticator.NotifyServerDisconnected(conn);
             base.OnServerDisconnect(conn);

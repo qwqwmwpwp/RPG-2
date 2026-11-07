@@ -29,7 +29,10 @@ namespace RPG4.Backpack.UI
             if (!owned) { Release(); return; }
             if (instance == null && hudPrefab != null)
             {
-                instance = Instantiate(hudPrefab);
+                // Keep the runtime HUD in the scene's gameplay canvas so it shares the same
+                // safe-area coordinate space and sorting context as WeaponAmmoHUD.
+                Transform parent = FindGameplayCanvas();
+                instance = parent != null ? Instantiate(hudPrefab, parent, false) : Instantiate(hudPrefab);
                 hud = instance.GetComponentInChildren<ConsumableHUD>(true);
             }
             if (hud != null && !ReferenceEquals(bound, local)) { bound = local; hud.Bind(local); }
@@ -42,6 +45,18 @@ namespace RPG4.Backpack.UI
             if (hud != null) hud.Unbind();
             if (instance != null) Destroy(instance);
             instance = null; hud = null; bound = null;
+        }
+
+        private static Transform FindGameplayCanvas()
+        {
+            Canvas[] canvases = FindObjectsOfType<Canvas>(true);
+            for (int i = 0; i < canvases.Length; i++)
+            {
+                Canvas canvas = canvases[i];
+                if (canvas != null && canvas.isRootCanvas && canvas.name == "UICanvas")
+                    return canvas.transform;
+            }
+            return null;
         }
     }
 }

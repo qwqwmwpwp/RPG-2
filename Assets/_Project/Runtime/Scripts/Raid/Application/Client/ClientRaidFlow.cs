@@ -112,6 +112,23 @@ namespace RPG4.Raid.Application.Client
                 Count = operation.Count, UpperLeftIndex = operation.UpperLeftIndex });
         }
 
+        public void SubmitAssembly(LobbyCommand operation)
+        {
+            if (operation == null || (operation.Kind != LobbyCommandKind.AssemblyQuery && operation.Kind != LobbyCommandKind.AssemblyOperation))
+                throw new ArgumentException("Invalid assembly request.");
+            if (!CanStartRaid) {
+                projection.PublishResult((PersonalContainerKind)operation.Source, new LobbyInventoryResult { RequestId = operation.RequestId,
+                    AssemblyKind = operation.Kind == LobbyCommandKind.AssemblyQuery ? (byte)1 : (byte)2,
+                    Error = "库存当前只读或正在处理中。" });
+                return;
+            }
+            Send(new LobbyCommand { Kind = operation.Kind, OperationId = NewOperationId(), Revision = inventory.Revision,
+                RequestId = operation.RequestId, Source = operation.Source, Destination = operation.Destination,
+                RootItemId = operation.RootItemId, ParentItemId = operation.ParentItemId, CandidateItemId = operation.CandidateItemId,
+                SlotId = operation.SlotId, AssemblySessionId = operation.AssemblySessionId, StructureRevision = operation.StructureRevision,
+                CandidateOffset = operation.CandidateOffset, CandidateLimit = operation.CandidateLimit });
+        }
+
         public void Tick()
         {
             double now = clock.Now;
@@ -134,6 +151,10 @@ namespace RPG4.Raid.Application.Client
             LobbyCommand completed = pending != null && pending.OperationId == operationId ? pending : null;
             if (completed != null) pending = null;
             projection.NotifyChanged(); InventoryChanged?.Invoke(); Changed?.Invoke();
+            if (completed != null && result != null && (completed.Kind == LobbyCommandKind.AssemblyQuery || completed.Kind == LobbyCommandKind.AssemblyOperation)) {
+                if (result.AssemblyKind == 0) result.AssemblyKind = completed.Kind == LobbyCommandKind.AssemblyQuery ? (byte)1 : (byte)2;
+                projection.PublishResult(source, result);
+            }
             if (completed?.Kind == LobbyCommandKind.InventoryOperation && (byte)source < 3 && result != null)
                 projection.PublishResult(source, result);
         }

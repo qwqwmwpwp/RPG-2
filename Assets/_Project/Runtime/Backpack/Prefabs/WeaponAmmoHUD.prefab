@@ -1280,6 +1280,7 @@ MonoBehaviour:
   actionLabel: {fileID: 930000038}
   icon: {fileID: 930000018}
   reloadProgress: {fileID: 930000047}
+  visualTheme: {fileID: 11400000, guid: 8f5d5a4b1e6f4b4e9d9f2e7c3a6b1d80, type: 2}
 --- !u!1 &930000100
 GameObject:
   m_ObjectHideFlags: 0

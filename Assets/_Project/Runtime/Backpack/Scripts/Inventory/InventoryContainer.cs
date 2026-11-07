@@ -279,12 +279,8 @@ namespace RPG4.Backpack.Inventory
             return false;
         }
 
-        /// <summary>物品的占位尺寸：读 GridFragment 的宽高，缺该 Fragment 或物品为空时按 1×1 处理，与源 UMIS_InventoryGrid::GetItemDimensions 一致。</summary>
-        public static GridCoord GetItemDimensions(RuntimeItem item)
-        {
-            GridFragment grid = item?.GetFragment<GridFragment>();
-            return grid == null ? GridCoord.One : new GridCoord(grid.Width, grid.Height);
-        }
+        /// <summary>完整装配树的背包占格；装备容器仍通过 ResolveItemDimensions 固定为一格。</summary>
+        public static GridCoord GetItemDimensions(RuntimeItem item) => item == null ? GridCoord.One : ItemAssemblySizeCalculator.GetDimensions(item);
 
         public GridCoord ResolveItemDimensions(RuntimeItem item) => SingleCellItems ? GridCoord.One : GetItemDimensions(item);
 

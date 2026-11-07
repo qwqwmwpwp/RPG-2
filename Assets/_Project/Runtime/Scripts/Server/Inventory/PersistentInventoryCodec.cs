@@ -78,13 +78,53 @@ namespace RPG4.Server.Inventory
             }
             return result;
         }
+
+        /// <summary>Clone a trusted snapshot while assigning fresh persistent ids to every node in each item tree.</summary>
+        internal static PersistentContainerData CloneWithNewIds(PersistentContainerData value, Func<ulong> allocateId)
+        {
+            Validate(value);
+            if (allocateId == null) throw new ArgumentNullException(nameof(allocateId));
+            var clone = new PersistentContainerData { Kind = value.Kind, Rows = value.Rows, Columns = value.Columns,
+                Items = new PersistentItemData[value.Items.Length] };
+            for (int i = 0; i < value.Items.Length; i++)
+            {
+                PersistentItemData source = value.Items[i];
+                RuntimeItemSnapshot snapshot = Decode(source);
+                RuntimeItemSnapshot remapped = Remap(snapshot, allocateId);
+                if (!RuntimeItemSnapshotCodec.TryEncodeSnapshot(remapped, out byte[] payload, out string error))
+                    throw new InventoryRaidException("inventory_item_invalid");
+                clone.Items[i] = new PersistentItemData { ItemId = remapped.ItemId.Value, ItemType = remapped.ItemType.Name,
+                    StackCount = remapped.StackCount, UpperLeftIndex = source.UpperLeftIndex, Payload = payload };
+            }
+            Validate(clone);
+            return clone;
+        }
+
+        private static RuntimeItemSnapshot Remap(RuntimeItemSnapshot source, Func<ulong> allocateId)
+        {
+            var children = new List<InstalledItemSnapshot>(source.InstalledChildren.Count);
+            foreach (InstalledItemSnapshot child in source.InstalledChildren)
+                children.Add(new InstalledItemSnapshot(child.SlotId, Remap(child.Item, allocateId)));
+            // v2 decoding exposes legacy magazine/attachment references through Weapon while also
+            // migrating them into InstalledChildren. Rebuild the weapon state without those old
+            // references so the constructor does not compare old ids with the remapped subtree.
+            WeaponStateSnapshot weapon = source.Weapon == null ? null : new WeaponStateSnapshot(
+                source.Weapon.Durability, source.Weapon.ChamberAmmo, source.Weapon.ShotSequence);
+            return new RuntimeItemSnapshot(new ItemId(allocateId()), source.ItemType, source.StackCount,
+                CopyNumbers(source.Numbers), weapon, source.Magazine, children);
+        }
+
+        private static FragmentNumberState[] CopyNumbers(IReadOnlyList<FragmentNumberState> source)
+        {
+            var copy = new FragmentNumberState[source.Count];
+            for (int i = 0; i < copy.Length; i++) copy[i] = source[i];
+            return copy;
+        }
         private static void AddTree(RuntimeItemSnapshot item, Dictionary<ulong, RuntimeItemSnapshot> result)
         {
             if (result.ContainsKey(item.ItemId.Value)) throw new InventoryRaidException("inventory_duplicate_item");
             result.Add(item.ItemId.Value, item);
-            if (item.Weapon == null) return;
-            if (item.Weapon.Magazine.HasValue) AddTree(item.Weapon.Magazine.Value, result);
-            foreach (AttachmentStateSnapshot child in item.Weapon.Attachments) AddTree(child.Item, result);
+            foreach (InstalledItemSnapshot child in item.InstalledChildren) AddTree(child.Item, result);
         }
         internal static Dictionary<string, long> Quantities(Dictionary<ulong, RuntimeItemSnapshot> items)
         {

@@ -198,6 +198,8 @@ namespace RPG4.Backpack.Network
         }
         private void FlushNetworkWeaponUi()
         {
+            foreach (int session in new List<int>(assemblyReceives.Keys))
+                if (Time.unscaledTimeAsDouble > assemblyReceives[session].Deadline) assemblyReceives.Remove(session);
             if (!networkWeaponUiDirty || networkWeaponUiSource == null) return;
             networkWeaponUiDirty = false;
             PublishNetworkWeaponHud();

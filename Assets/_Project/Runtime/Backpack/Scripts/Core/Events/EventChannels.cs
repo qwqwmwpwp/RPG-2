@@ -19,6 +19,9 @@ namespace RPG4.Backpack.Core
 
         public const string ConsumableOperationCompleted = "Inv.Consumable.OperationCompleted"; // (ConsumableUseResult)，玩家背包 EventSource。
 
+        public const string AssemblyInspectionChanged = "Inv.Assembly.InspectionChanged"; // (AssemblyInspectionSnapshot)，来源库存 EventSource。
+        public const string AssemblyOperationCompleted = "Inv.Assembly.OperationCompleted"; // (AssemblyOperationResult)，来源库存 EventSource。
+
         public const string WeaponOperationCompleted = "Inv.Weapon.OperationCompleted"; // (WeaponOperationResult)，玩家背包 EventSource。
         public const string WeaponHudChanged = "Inv.Weapon.HudChanged"; // (WeaponHudSnapshot)，玩家背包 EventSource。
         public const string WeaponActionChanged = "Inv.Weapon.ActionChanged"; // 无载荷，source 为 Weapon 实例；玩家适配器合并为只读 HUD 时间轴。
@@ -33,6 +36,9 @@ namespace RPG4.Backpack.Core
         public const string InventoryOperation = "Cmd.Inventory.Operation"; // 完整库存意图。载荷 (InventoryOperation)。
 
         public const string UseConsumable = "Cmd.Consumable.Use"; // (ConsumableUseOperation)，玩家背包 EventSource。
+
+        public const string AssemblyQuery = "Cmd.Assembly.Query"; // (AssemblyQuery)，来源库存 EventSource。
+        public const string AssemblyOperation = "Cmd.Assembly.Operation"; // (AssemblyOperation)，来源库存 EventSource。
 
         public const string WeaponOperation = "Cmd.Weapon.Operation"; // (WeaponOperation)，玩家背包 EventSource，单处理者执行。
         public const string WeaponSnapshot = "Cmd.Weapon.Snapshot"; // (WeaponSnapshotRequest)，玩家背包 EventSource，None 取消检查。

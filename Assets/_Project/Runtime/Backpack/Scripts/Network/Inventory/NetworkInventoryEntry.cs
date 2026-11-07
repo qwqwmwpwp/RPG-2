@@ -102,7 +102,7 @@ namespace RPG4.Backpack.Network
                 return false;
             }
 
-            if (fragmentState[0] != 1 && fragmentState[0] != RuntimeItemSnapshot.CurrentVersion)
+            if (fragmentState[0] != 1 && fragmentState[0] != 2 && fragmentState[0] != 3)
             {
                 error = $"条目 {itemId} 的快照版本 {fragmentState[0]} 不受支持（期望 {RuntimeItemSnapshot.CurrentVersion}）。";
                 return false;

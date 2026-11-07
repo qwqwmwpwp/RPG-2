@@ -20,7 +20,10 @@ namespace RPG4.Networking
             Revision = command.Revision, RequestId = command.RequestId, Source = command.Source,
             Destination = command.Destination, OperationKind = command.OperationKind,
             SourceItemId = command.SourceItemId, TargetItemId = command.TargetItemId,
-            Count = command.Count, UpperLeftIndex = command.UpperLeftIndex });
+            Count = command.Count, UpperLeftIndex = command.UpperLeftIndex,
+            RootItemId = command.RootItemId, ParentItemId = command.ParentItemId, CandidateItemId = command.CandidateItemId,
+            SlotId = command.SlotId, AssemblySessionId = command.AssemblySessionId, StructureRevision = command.StructureRevision,
+            CandidateOffset = command.CandidateOffset, CandidateLimit = command.CandidateLimit });
         void IClientRaidTransport.Disconnect() => NetworkClient.Disconnect();
 
         ClientSceneLoadResult IClientRaidScenes.Load(ClientRaidScene scene)

@@ -11,6 +11,7 @@
         "RPG4.Input",
         "RPG4.UI",
         "RPG4.CharacterAttributes",
+        "RPG4.Combat",
         "Mirror",
         "UnityEngine.UI",
         "Unity.TextMeshPro",

@@ -77,6 +77,15 @@ namespace RPG4.PlayerMovement
                 && player != null && player.isActiveAndEnabled;
             return available && weaponId != 0 && definition != null;
         }
+        internal bool TryGetPresentationRuntimeItem(out RuntimeItem item, out ItemManifestCatalog catalog)
+        {
+            item = canExecuteAuthority ? equipmentInventory?.EquippedItem : localPresentationWeapon ?? replicatedEquipment;
+            catalog = inventory?.Catalog;
+            bool available = canExecuteAuthority ? RuntimeAvailable : isActiveAndEnabled
+                && player != null && player.isActiveAndEnabled;
+            return available && item != null && item.ItemId.IsValid && item.WeaponState != null
+                && item.GetFragment<WeaponDefinitionFragment>() != null && catalog != null;
+        }
         /// <summary>Read-only owner mirror, supplied by replication; never equips or mutates the item.</summary>
         public void SetLocalPresentationWeapon(RuntimeItem item) => localPresentationWeapon = item;
         internal bool CanAnticipateShot => localPresentationWeapon?.WeaponState != null && inventory?.Catalog != null

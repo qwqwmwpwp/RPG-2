@@ -1,6 +1,7 @@
 using RPG4.Input;
 using RPG4.CharacterAttributes;
 using RPG4.PlayerIntent;
+using RPG4.Backpack.Core;
 using RPG4.Backpack.Items;
 using UnityEngine;
 using CharacterAttributeComponent = RPG4.CharacterAttributes.CharacterAttributes;
@@ -247,8 +248,40 @@ namespace RPG4.PlayerMovement
         {
             if (!CanAnticipateLocalActions || Equipment == null
                 || !Equipment.TryGetPresentationWeapon(out ulong weaponId, out WeaponDefinitionFragment definition)) return;
+            float interval = definition.EffectiveShotInterval;
+            float recoilYaw = definition.RecoilYaw;
+            float recoilPitch = definition.RecoilPitch;
+            if (Equipment.TryGetPresentationRuntimeItem(out RuntimeItem item, out ItemManifestCatalog catalog)
+                && item?.WeaponState != null && catalog != null)
+            {
+                BackpackTag ammoType = item.WeaponState.ChamberAmmo;
+                if (ammoType.IsEmpty && item.WeaponState.Magazine?.MagazineState is MagazineItemState magazine
+                    && magazine.RoundCount > 0)
+                    ammoType = magazine.Rounds[0];
+                if (ammoType.IsEmpty) TryGetReferenceAmmoType(catalog, definition.AmmoType, out ammoType);
+                if (!ammoType.IsEmpty && WeaponParameterCalculator.TryCalculateAssembly(item, catalog, ammoType,
+                    out WeaponCombatParameters parameters))
+                {
+                    interval = parameters.Interval;
+                    recoilYaw *= parameters.Recoil;
+                    recoilPitch *= parameters.Recoil;
+                }
+            }
             localActions.Begin(input, requestId, now, weaponId, definition, PublishedFrame.Reloading,
-                Equipment.CanAnticipateShot, Equipment.PresentationShotSequence);
+                Equipment.CanAnticipateShot, Equipment.PresentationShotSequence, interval, recoilYaw, recoilPitch);
+        }
+
+        private static bool TryGetReferenceAmmoType(ItemManifestCatalog catalog, BackpackTag weaponAmmoType,
+            out BackpackTag ammoItemType)
+        {
+            foreach (ItemManifest manifest in catalog.Manifests)
+            {
+                AmmoDefinitionFragment ammo = manifest?.GetFragment<AmmoDefinitionFragment>();
+                if (ammo != null && ammo.AmmoType.MatchesTagExact(weaponAmmoType))
+                { ammoItemType = manifest.ItemType; return true; }
+            }
+            ammoItemType = default;
+            return false;
         }
         public void ApplyLocalActionResult(ulong requestId, bool accepted, ulong weaponId, ulong shotSequence,
             double serverTime, uint ordinal = 0)

@@ -14,7 +14,7 @@ namespace RPG4.Editor.Build
             "RPG4.Networking.Transports.ConnectionAdmissionTransport", "RPG4.Networking.AccountAuthenticator",
             "RPG4.Networking.AuthoritativeNetworkManager", "RPG4.Networking.GameplaySceneBindings",
             "RPG4.Networking.OnlineSpawnConfiguration", "RPG4.Networking.ExtractionZone", "RPG4.Networking.RaidLootBag", "RPG4.Networking.OnlinePlayerIdentity",
-            "RPG4.Networking.NetworkPlayerController", "RPG4.Networking.NetworkCharacterHealth",
+            "RPG4.Networking.NetworkPlayerController", "RPG4.Networking.NetworkCharacterHealth", "RPG4.Combat.ItemAssemblyModelView",
             "RPG4.CharacterAttributes.CharacterAttributes", "RPG4.Combat.TrainingDummy", "RPG4.Combat.ContactDamage",
             "RPG4.PlayerMovement.Player", "RPG4.PlayerMovement.PlayerEquipment", "RPG4.Input.PlayerInput",
             "RPG4.Backpack.Runtime.BackpackInventory", "RPG4.Backpack.Runtime.EquipmentInventory",
@@ -26,7 +26,8 @@ namespace RPG4.Editor.Build
         {
             "GridFragment", "ImageFragment", "TextFragment", "LabeledNumberFragment", "StackableFragment",
             "ConsumableFragment", "ConsumableUseDefinitionFragment", "EquipmentFragment", "ConsumeModifier", "EquipModifier", "WeaponDefinitionFragment",
-            "AmmoDefinitionFragment", "MagazineDefinitionFragment", "AttachmentDefinitionFragment"
+            "AmmoDefinitionFragment", "MagazineDefinitionFragment", "AttachmentDefinitionFragment",
+            "ItemAssemblyDefinitionFragment", "AssemblySizeDefinitionFragment"
         };
         internal static readonly string[] SourceRoots = {
             "Assets/_Project/Runtime/Scripts/CharacterAttributes", "Assets/_Project/Runtime/Scripts/Combat", "Assets/_Project/Runtime/Scripts/PlayerIntent",
@@ -48,7 +49,7 @@ namespace RPG4.Editor.Build
         };
         internal static readonly HashSet<string> ExcludedSourceNames = new HashSet<string>(StringComparer.Ordinal)
         { "CharacterEquipmentPresentation.cs", "CharacterPresentation.cs", "EntryContentManifest.cs", "ClientPresentationRoot.cs", "PlayerCameraController.cs", "PlayerViewController.cs", "PlayerPresenter.cs", "PlayerAimPose.cs", "PlayerWeaponRig.cs", "PlayerBodyAimConstraint.cs", "PlayerShotPoseConstraint.cs",
-            "WeaponView.cs", "WeaponAttachmentView.cs", "PlayerConsumablePresentation.cs", "PlayerLocomotionPresentation.cs", "PlayerWeaponPresentation.cs", "PlayerPresentationTargets.cs",
+            "WeaponView.cs", "WeaponAttachmentView.cs", "ItemAssemblyModelView.cs", "PlayerConsumablePresentation.cs", "PlayerLocomotionPresentation.cs", "PlayerWeaponPresentation.cs", "PlayerPresentationTargets.cs",
             "PlayerRenderPose.cs", "PlayerLocalWeaponPresentation.cs", "PlayerLocalActionAnticipation.cs" };
 
         internal static bool ExcludeSourcePath(string path) => path.Contains("/Rigging/")
@@ -76,6 +77,7 @@ namespace RPG4.Editor.Build
             switch (name)
             {
                 case "RPG4.Networking.ClientPresentationRoot": case "RPG4.Frontend.GameplayUiBindingAdapter":
+                case "RPG4.Combat.ItemAssemblyModelView":
                 case "RPG4.PlayerMovement.PlayerCameraController": case "RPG4.PlayerMovement.PlayerViewController":
                 case "RPG4.PlayerMovement.CharacterPresentation":
                 case "RPG4.PlayerMovement.PlayerAimPose": case "RPG4.PlayerMovement.PlayerWeaponRig":

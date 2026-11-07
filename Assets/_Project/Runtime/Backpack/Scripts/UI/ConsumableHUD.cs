@@ -1,5 +1,6 @@
 using RPG4.Backpack.Inventory;
 using RPG4.Backpack.Items;
+using RPG4.UI;
 using RPG4.Backpack.Core;
 using TMPro;
 using UnityEngine;
@@ -19,6 +20,8 @@ namespace RPG4.Backpack.UI
         public TMP_Text statusLabel;
         public Image icon;
         public Slider progress;
+        [Tooltip("Optional presentation theme. Gameplay state is never read from the theme.")]
+        [SerializeField] private UiVisualTheme visualTheme;
         private IBackpackView inventory;
         public void Bind(IBackpackView source) => inventory = source;
         public void Unbind() { inventory = null; if (contentRoot != null) contentRoot.SetActive(false); }
@@ -32,11 +35,22 @@ namespace RPG4.Backpack.UI
             InventoryHostCore.TryGetCommandHost(inventory.EventSource, out InventoryHostCore host);
             ConsumableUseViewState state = host != null ? host.GetConsumableUseState() : default;
             string name = item != null && host?.Catalog != null && host.Catalog.TryGet(item.ItemType, out ItemManifest manifest)
-                ? manifest.name : ConsumableQuickUse.SelectedType.Substring(ConsumableQuickUse.SelectedType.LastIndexOf('.') + 1);
+                && !string.IsNullOrWhiteSpace(manifest.name) ? manifest.name : "药品";
+            // An empty selection is not a persistent card. The owner keeps the binding alive so a later
+            // inventory update can show it again without changing command or network semantics.
+            bool visible = item != null && total > 0;
+            if (contentRoot != null) contentRoot.SetActive(visible);
+            if (!visible) return;
             if (itemName != null) itemName.text = name;
             if (count != null) count.text = "× " + total;
             if (keyLabel != null) keyLabel.text = "H · 使用快捷药品";
             if (typeLabel != null) typeLabel.text = total == 0 ? "药品已用完 · 背包中设置" : "每次使用一份";
+            if (visualTheme != null)
+            {
+                if (keyLabel != null) keyLabel.color = visualTheme.SecondaryTextColor;
+                if (typeLabel != null) typeLabel.color = visualTheme.SecondaryTextColor;
+                if (statusLabel != null) statusLabel.color = visualTheme.PrimaryTextColor;
+            }
             if (statusLabel != null) statusLabel.text = state.Active ? "用药中…"
                 : InventoryUIInputRouter.ConsumableFeedback;
             if (icon != null)
@@ -53,7 +67,8 @@ namespace RPG4.Backpack.UI
             {
                 progress.gameObject.SetActive(state.Active);
                 progress.interactable = false;
-                progress.normalizedValue = state.Active && state.Duration > 0f ? Mathf.Clamp01(state.Elapsed / state.Duration) : 0f;
+                progress.normalizedValue = state.Active && state.Duration > 0f
+                    ? UiMotionPolicy.ReduceMotion ? 1f : Mathf.Clamp01(state.Elapsed / state.Duration) : 0f;
             }
         }
     }

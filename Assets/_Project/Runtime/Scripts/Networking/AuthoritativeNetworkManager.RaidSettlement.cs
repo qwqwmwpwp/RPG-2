@@ -17,13 +17,13 @@ namespace RPG4.Networking
             ServerRaidConnections.Entry entry = raidConnections?.Find(controller.connectionToClient);
             return entry != null && raidApplication != null && raidApplication.TryExtract(entry.Key);
         }
-        private void CaptureDisconnectedRaid(NetworkConnectionToClient connection)
+        private bool CaptureDisconnectedRaid(NetworkConnectionToClient connection)
         {
             ServerRaidConnections.Entry entry = raidConnections?.Find(connection);
-            if (entry == null) return;
-            // Synchronously freeze the current actor before Mirror destroys owned objects.
+            if (entry == null) return false;
             raidApplication?.Disconnect(entry.Key);
             entry.Disconnected = true;
+            return raidApplication != null && raidApplication.CanReconnect(entry.Key);
         }
     }
 }

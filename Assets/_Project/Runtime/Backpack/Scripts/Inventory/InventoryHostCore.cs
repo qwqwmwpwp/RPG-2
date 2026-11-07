@@ -90,6 +90,10 @@ namespace RPG4.Backpack.Inventory
                 CmdChannels.InventoryOperation, sourceKey, this, OnOperationCommand);
             weaponOperationSubscription = EventBus.Global.Subscribe<WeaponOperation>(
                 CmdChannels.WeaponOperation, sourceKey, this, OnWeaponOperationCommand);
+            assemblyQuerySubscription = EventBus.Global.Subscribe<AssemblyQuery>(
+                CmdChannels.AssemblyQuery, sourceKey, this, OnAssemblyQueryCommand);
+            assemblyOperationSubscription = EventBus.Global.Subscribe<AssemblyOperation>(
+                CmdChannels.AssemblyOperation, sourceKey, this, OnAssemblyOperationCommand);
             consumableOperationSubscription = EventBus.Global.Subscribe<ConsumableUseOperation>(
                 CmdChannels.UseConsumable, sourceKey, this, OnConsumableOperationCommand);
         }
@@ -101,6 +105,10 @@ namespace RPG4.Backpack.Inventory
             operationSubscription = default;
             weaponOperationSubscription.Dispose();
             weaponOperationSubscription = default;
+            assemblyQuerySubscription.Dispose();
+            assemblyQuerySubscription = default;
+            assemblyOperationSubscription.Dispose();
+            assemblyOperationSubscription = default;
             consumableOperationSubscription.Dispose();
             consumableOperationSubscription = default;
             if (commandSource != null && CommandHosts.TryGetValue(commandSource, out InventoryHostCore owner)

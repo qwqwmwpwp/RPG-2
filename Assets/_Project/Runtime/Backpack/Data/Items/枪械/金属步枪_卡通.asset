@@ -20,6 +20,7 @@ MonoBehaviour:
   - rid: 1003
   - rid: 1004
   - rid: 1005
+  - rid: 920004
   references:
     version: 2
     RefIds:
@@ -78,3 +79,26 @@ MonoBehaviour:
         reloadCommitFraction: 0.6
         chamberFraction: 0.9
         allowedAttachmentSlots: 00000000
+    - rid: 920004
+      type: {class: ItemAssemblyDefinitionFragment, ns: RPG4.Backpack.Items, asm: RPG4.Backpack.Items}
+      data:
+        fragmentTag:
+          name: FragmentTags.Default.ItemAssemblyDefinition
+        slots:
+        - slotId: magazine
+          displayName: 弹匣
+          allowedItemTypes:
+          - name: GameItems.Magazines.Rifle30
+          required: 0
+        - slotId: muzzle
+          displayName: 枪口
+          allowedItemTypes:
+          - name: GameItems.Attachments.Muzzle.Basic
+          required: 0
+        - slotId: rail
+          displayName: 导轨
+          allowedItemTypes:
+          - name: GameItems.Attachments.Optic.Mount.Basic
+          required: 0
+        conflictingItemTypes: []
+        slotConflicts: []

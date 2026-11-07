@@ -27,6 +27,8 @@ namespace RPG4.Server.Inventory
         private string worldLock;
         private ulong leaseConnection;
         private PersistentItemIdRange range;
+        // Recovery consumes from the reserved startup range before the gameplay generator is configured.
+        private ulong recoveryNextId;
         private int disposed;
         public string WorldRunId { get; } = Guid.NewGuid().ToString("N");
 
@@ -118,7 +120,9 @@ namespace RPG4.Server.Inventory
                         ("@world", WorldRunId), ("@server", serverId)).ConfigureAwait(false);
                     return new PersistentItemIdRange(last + 1, last + block);
                 }, token, false).ConfigureAwait(false);
+                recoveryNextId = range.First;
                 await RecoverPreviousWorldsAsync(token).ConfigureAwait(false);
+                if (recoveryNextId != range.First) range = new PersistentItemIdRange(recoveryNextId, range.Last);
                 return range;
             }
             catch { Dispose(); throw; }
@@ -310,7 +314,9 @@ namespace RPG4.Server.Inventory
             string bagId, PersistentContainerData backpack, PersistentContainerData equipment, CancellationToken token)
         {
             if (raid.Status != PersistentRaidStatus.Active || state.ActiveRaidId != raid.Entry.RaidId) throw new InventoryRaidException("raid_not_active");
-            bool extracted = outcome == RaidOutcome.Extracted;
+            // Server recovery is a compensating success: the entry snapshot is restored to the account,
+            // with fresh ids, and no drop bag is created.
+            bool extracted = outcome == RaidOutcome.Extracted || outcome == RaidOutcome.ServerRecovery;
             var current = PersistentInventoryCodec.Items(backpack, equipment);
             foreach (ulong id in current.Keys.OrderBy(id => id))
             {
@@ -508,6 +514,11 @@ namespace RPG4.Server.Inventory
         { if (stash.Kind != PersonalContainerKind.Stash || backpack.Kind != PersonalContainerKind.Backpack || equipment.Kind != PersonalContainerKind.Equipment) throw new InventoryRaidException("inventory_container_kind"); }
         private void RequireNewId(ulong id)
         { if (range.First == 0 || id < range.First || id > range.Last) throw new InventoryRaidException("inventory_item_id_outside_range"); }
+        private ulong AllocateRecoveryId()
+        {
+            if (recoveryNextId == 0 || recoveryNextId > range.Last) throw new InventoryRaidException("inventory_item_ids_exhausted");
+            return recoveryNextId++;
+        }
         private static void RequireRaidOwner(RaidRow raid, RaidIdentity identity, bool session)
         {
             if (raid.Entry.AccountId != identity.AccountId || raid.Entry.CharacterId != identity.CharacterId || session && raid.Session != identity.SessionId)
@@ -544,14 +555,16 @@ namespace RPG4.Server.Inventory
                         PersistentInventoryState state = await ReadProfile(c, t, entry.account, entry.character, token).ConfigureAwait(false);
                         RaidRow raid = await ReadRaid(c, t, entry.raid, token).ConfigureAwait(false);
                         if (raid.Status == PersistentRaidStatus.Prepared) await CancelPrepared(c, t, state, raid, token).ConfigureAwait(false);
-                        else if (raid.Status == PersistentRaidStatus.Active)
+                        else if (raid.Status == PersistentRaidStatus.Active && raid.Settlement == null)
                         {
-                            // A crash lost the actual world state. Never reconstruct consumed/stolen items from its entry copy.
-                            // Quarantine only IDs STILL owned by this old world/raid; personal extractions are untouched.
+                            // A crash lost the actual world state. Quarantine old ids, then compensate the complete
+                            // entry snapshot with fresh ids. A committed settlement payload is never overwritten.
                             await Execute(c, t, "UPDATE item_ownership SET owner_kind=2,bag_id=NULL WHERE owner_kind=1 AND owner_scope=@world AND raid_id=@raid", token,
                                 ("@world", world), ("@raid", entry.raid)).ConfigureAwait(false);
+                            PersistentContainerData backpack = PersistentInventoryCodec.CloneWithNewIds(raid.Entry.Backpack, AllocateRecoveryId);
+                            PersistentContainerData equipment = PersistentInventoryCodec.CloneWithNewIds(raid.Entry.Equipment, AllocateRecoveryId);
                             await Settle(c, t, state, raid, RaidOutcome.ServerRecovery, Guid.NewGuid().ToString("N"),
-                                PersistentInventoryCodec.Empty(PersonalContainerKind.Backpack), PersistentInventoryCodec.Empty(PersonalContainerKind.Equipment), token).ConfigureAwait(false);
+                                backpack, equipment, token).ConfigureAwait(false);
                         }
                         else if (raid.Status == PersistentRaidStatus.Failed && state.ActiveRaidId == entry.raid)
                         {

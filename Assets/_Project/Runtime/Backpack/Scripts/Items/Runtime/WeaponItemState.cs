@@ -88,20 +88,26 @@ namespace RPG4.Backpack.Items
     public sealed class WeaponItemState
     {
         private readonly RuntimeItem owner;
-        private readonly Dictionary<WeaponAttachmentSlot, RuntimeItem> attachments = new Dictionary<WeaponAttachmentSlot, RuntimeItem>();
-        private readonly ReadOnlyDictionary<WeaponAttachmentSlot, RuntimeItem> readOnlyAttachments;
         public WeaponDefinitionFragment Definition => owner.GetFragment<WeaponDefinitionFragment>();
         public float Durability { get; private set; }
         public BackpackTag ChamberAmmo { get; private set; }
         public ulong ShotSequence { get; private set; }
-        public RuntimeItem Magazine { get; private set; }
-        public IReadOnlyDictionary<WeaponAttachmentSlot, RuntimeItem> Attachments => readOnlyAttachments;
+        public RuntimeItem Magazine => owner.Assembly.GetChild(ItemAssemblySlots.Magazine);
+        public IReadOnlyDictionary<WeaponAttachmentSlot, RuntimeItem> Attachments
+        {
+            get
+            {
+                var view = new Dictionary<WeaponAttachmentSlot, RuntimeItem>();
+                RuntimeItem muzzle = owner.Assembly.GetChild(ItemAssemblySlots.Muzzle);
+                if (muzzle != null) view.Add(WeaponAttachmentSlot.Muzzle, muzzle);
+                return new ReadOnlyDictionary<WeaponAttachmentSlot, RuntimeItem>(view);
+            }
+        }
 
         internal WeaponItemState(RuntimeItem owner)
         {
             this.owner = owner;
             Durability = Definition.MaxDurability;
-            readOnlyAttachments = new ReadOnlyDictionary<WeaponAttachmentSlot, RuntimeItem>(attachments);
         }
 
         public bool IsCompatibleMagazine(RuntimeItem magazine, ItemManifestCatalog catalog)
@@ -161,37 +167,13 @@ namespace RPG4.Backpack.Items
             return true;
         }
 
-        internal void SetMagazine(RuntimeItem item)
-        {
-            Detach(Magazine);
-            Magazine = item;
-            Attach(item);
-            owner.AdvanceStateRevision(false);
-        }
+        internal void SetMagazine(RuntimeItem item) => owner.Assembly.SetChild(ItemAssemblySlots.Magazine, item);
 
         internal void SetAttachment(WeaponAttachmentSlot slot, RuntimeItem item)
         {
-            if (attachments.TryGetValue(slot, out RuntimeItem previous)) Detach(previous);
-            attachments.Remove(slot);
-            if (item != null) { attachments.Add(slot, item); Attach(item); }
-            owner.AdvanceStateRevision(false);
+            if (slot != WeaponAttachmentSlot.Muzzle) throw new ArgumentOutOfRangeException(nameof(slot));
+            owner.Assembly.SetChild(ItemAssemblySlots.Muzzle, item);
         }
-
-        private void Attach(RuntimeItem item)
-        {
-            if (item == null) return;
-            item.ParentItem = owner;
-            item.Changed += OnChildChanged;
-        }
-
-        private void Detach(RuntimeItem item)
-        {
-            if (item == null) return;
-            item.Changed -= OnChildChanged;
-            item.ParentItem = null;
-        }
-
-        private void OnChildChanged(RuntimeItem item) => owner.PublishStateChanged();
 
         internal bool TryRestore(float durability, BackpackTag chamberAmmo, ulong sequence,
             ItemManifestCatalog catalog, out string error)

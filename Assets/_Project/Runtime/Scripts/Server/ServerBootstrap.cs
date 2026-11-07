@@ -8,6 +8,7 @@ using Mirror.Transports.Encryption;
 using RPG4.Networking;
 using RPG4.Networking.Contracts;
 using RPG4.Networking.Transports;
+using RPG4.Raid.Application;
 using kcp2k;
 using UnityEngine;
 
@@ -29,6 +30,9 @@ namespace RPG4.Server
         private MySqlAuthenticationProvider provider;
         private Inventory.MySqlInventoryRaidService inventoryRaids;
         private ServerConfiguration settings;
+        // Transport/gameplay adapters can use this stable binding point to admit players and
+        // report ready/dead/extracted/reconnect events without coupling MatchRun to Unity.
+        private ServerMatchRuntime matchRuntime;
         private ServerAuthenticationCleanup cleanup;
         private Task startTask, initializationTask, stopTask, healthTask;
         private bool quitAllowed, stopping, destroyed;
@@ -37,6 +41,7 @@ namespace RPG4.Server
         public string FailureCode { get; private set; }
         public ServerStartupPhase FailurePhase { get; private set; }
         public Task StartupCompletion => startTask ?? Task.CompletedTask;
+        public ServerMatchRuntime MatchRuntime => matchRuntime;
         public event Action<ServerStartupPhase> PhaseChanged;
 
         private void Awake()
@@ -100,6 +105,9 @@ namespace RPG4.Server
                 manager.ConfigurePersistentItemIdRange(itemIds.First, itemIds.Last);
                 manager.ConfigureInventoryRaidService(inventoryRaids);
                 manager.ConfigureGameplaySceneBindings(true);
+                matchRuntime = new ServerMatchRuntime(settings.minimumPlayers, settings.maxPlayers,
+                    settings.matchCountdownSeconds, settings.matchPreparationSeconds, settings.matchDurationSeconds,
+                    settings.maxActiveAi, settings.aiDecisionIntervalMilliseconds);
                 authenticator = manager.authenticator as AccountAuthenticator;
                 var encryption = manager.transport as EncryptionTransport;
                 if (authenticator == null || encryption == null
@@ -156,6 +164,7 @@ namespace RPG4.Server
         private void Update()
         {
             if (stopping || provider == null || manager == null) return;
+            if (NetworkServer.active) matchRuntime?.Tick(Time.realtimeSinceStartupAsDouble);
             bool world = NetworkServer.active && manager.IsServerGameplayWorldReady;
             world &= manager.CurrentGameplaySceneBindings?.TrustedSpawnConfiguration is OnlineSpawnConfiguration;
             provider.SetWorldReady(world);
@@ -218,6 +227,8 @@ namespace RPG4.Server
                 if (cleanup != null && cleanup.ReleaseFailureCount > 0)
                 { FailureCode = "server_session_release_failed"; exitCode = Math.Max(exitCode, 1); }
                 provider?.FinishStop();
+                matchRuntime?.Dispose();
+                matchRuntime = null;
                 inventoryRaids?.Dispose();
                 if (manager != null && NetworkManager.loadingSceneAsync == null) Destroy(manager.gameObject);
                 SetPhase(exitCode == 0 ? ServerStartupPhase.Stopped : ServerStartupPhase.Failed);
@@ -225,7 +236,7 @@ namespace RPG4.Server
             catch (Exception)
             {
                 FailureCode = "server_shutdown_failed"; exitCode = Math.Max(exitCode, 1);
-                provider?.FinishStop(); SetPhase(ServerStartupPhase.Failed);
+                provider?.FinishStop(); matchRuntime?.Dispose(); matchRuntime = null; SetPhase(ServerStartupPhase.Failed);
                 inventoryRaids?.Dispose();
             }
             finally { completion.TrySetResult(true); }

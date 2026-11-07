@@ -21,6 +21,7 @@ namespace RPG4.PlayerMovement
             internal long InitialConfirmedTick;
             internal ulong BaseShotSequence;
             internal float RenderedReloadPhase;
+            internal float ShotInterval, RecoilYaw, RecoilPitch;
             internal uint NextOrdinal;
             internal WeaponDefinitionFragment Definition;
             internal readonly Dictionary<uint, Cue> Cues = new Dictionary<uint, Cue>();
@@ -70,7 +71,7 @@ namespace RPG4.PlayerMovement
 
         internal void Begin(PlayerInputFrame input, ulong requestId, double now, ulong weaponId,
             WeaponDefinitionFragment definition, bool authoritativeReloading, bool knownUsableRound,
-            ulong baseShotSequence)
+            ulong baseShotSequence, float shotInterval, float recoilYaw, float recoilPitch)
         {
             if (requestId == 0 || weaponId == 0 || definition == null || requests.ContainsKey(requestId)) return;
             byte kind = input.ReloadPressed ? (byte)2 : input.FirePressed ? (byte)1 : (byte)0;
@@ -83,6 +84,7 @@ namespace RPG4.PlayerMovement
             }
             var request = new Request { Id = requestId, WeaponId = weaponId, Kind = kind,
                 Started = now, LastResult = now, Definition = definition, BaseShotSequence = baseShotSequence,
+                ShotInterval = shotInterval, RecoilYaw = recoilYaw, RecoilPitch = recoilPitch,
                 InitialConfirmedTick = hasConfirmed ? latestConfirmed.Tick : 0 };
             requests.Add(requestId, request); requestOrder.Enqueue(requestId);
             aiming = input.AimHeld;
@@ -109,7 +111,7 @@ namespace RPG4.PlayerMovement
             request.Cues.Add(cue.Ordinal, cue); request.CueOrder.Enqueue(cue.Ordinal);
             if (pendingCues.Count == Capacity) pendingCues.Dequeue();
             pendingCues.Enqueue(cue); lastShot = cue;
-            nextShotAt = now + Math.Max(0.01d, request.Definition.EffectiveShotInterval);
+            nextShotAt = now + Math.Max(0.01d, request.ShotInterval);
         }
 
         internal void ApplyResult(ulong requestId, bool accepted, ulong weaponId, ulong shotSequence,
@@ -137,7 +139,7 @@ namespace RPG4.PlayerMovement
                 request.Cues.Add(ordinal, cue); request.CueOrder.Enqueue(ordinal);
                 request.NextOrdinal = Math.Max(request.NextOrdinal, ordinal);
                 if (fireSession == request && cadenceWeapon == weaponId)
-                    nextShotAt = Math.Max(nextShotAt, now + Math.Max(0.01d, request.Definition.EffectiveShotInterval));
+                    nextShotAt = Math.Max(nextShotAt, now + Math.Max(0.01d, request.ShotInterval));
             }
             cue.ServerSequence = shotSequence;
             var key = new ShotKey(weaponId, shotSequence);
@@ -269,7 +271,7 @@ namespace RPG4.PlayerMovement
             double elapsed = Math.Max(0d, now - cue.Started);
             if (elapsed > 0.12d) return Vector2.zero;
             float weight = Mathf.Exp(-(float)elapsed / 0.04f);
-            return new Vector2(cue.Request.Definition.RecoilYaw, -cue.Request.Definition.RecoilPitch) * weight;
+            return new Vector2(cue.Request.RecoilYaw, -cue.Request.RecoilPitch) * weight;
         }
         internal void Cancel()
         {
