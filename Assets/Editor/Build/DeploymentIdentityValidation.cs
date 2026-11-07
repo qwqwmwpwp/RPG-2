@@ -37,7 +37,7 @@ namespace RPG4.Editor.Build
                 string key = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(path), identity.keyPath));
                 ServerConfiguration.RequireOutsideAssets(key, Application.dataPath);
                 string fingerprint = ServerIdentityFiles.ValidateExisting(key, Application.dataPath);
-                var catalog = AssetDatabase.LoadAssetAtPath<ClientServerCatalog>("Assets/Settings/ClientServerCatalog.asset");
+                var catalog = AssetDatabase.LoadAssetAtPath<ClientServerCatalog>("Assets/_Project/Content/Settings/ClientServerCatalog.asset");
                 Require(catalog != null, "Deployment identity check requires the shared client server catalog.");
                 TrustedClientServer selected = null;
                 int count = 0;
