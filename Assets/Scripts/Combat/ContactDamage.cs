@@ -12,6 +12,7 @@ namespace RPG4.Combat
         [SerializeField] private AttributeComponent owner;
         [SerializeField, Min(0.01f)] private float damage = 10f;
         [SerializeField, Min(0.05f)] private float repeatInterval = 1f;
+        [SerializeField] private DamageKind damageKind = DamageKind.Direct;
         [SerializeField] private LayerMask targetLayers = ~0;
 
         private readonly Dictionary<AttributeComponent, double> nextDamageAt = new Dictionary<AttributeComponent, double>();
@@ -35,7 +36,7 @@ namespace RPG4.Combat
             if (nextDamageAt.TryGetValue(target, out double next) && now < next) return;
             Vector3 point = other.ClosestPoint(transform.position);
             var request = new DamageInfo(damage, owner != null ? owner.gameObject : gameObject,
-                point, (other.bounds.center - transform.position).normalized);
+                point, (other.bounds.center - transform.position).normalized, damageKind);
             // 先登记，生命事件内的同步调用也不能绕过该角色的来源冷却。
             nextDamageAt[target] = now + repeatInterval;
             if (!target.ApplyDamage(request)) nextDamageAt.Remove(target);

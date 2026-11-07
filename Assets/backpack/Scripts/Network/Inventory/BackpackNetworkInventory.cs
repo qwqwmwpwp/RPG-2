@@ -12,7 +12,7 @@ namespace RPG4.Backpack.Network
     /// <summary>库存网络宿主：客户端意图经 Command 交给权威核心；结构基线、运行差量与布局经同一有序同步流下发。</summary>
     [DisallowMultipleComponent]
     [AddComponentMenu("RPG4/Backpack Network Inventory")]
-    public sealed partial class BackpackNetworkInventory : NetworkBehaviour, IBackpackView, IInventoryOperations, ISharedInventoryAccess
+    public sealed partial class BackpackNetworkInventory : NetworkBehaviour, IBackpackView, IInventoryOperations, ISharedInventoryAccess, IInventoryCommitParticipant
     {
         public const int DefaultRows = 6; // 权威容器默认行数。
 
@@ -179,7 +179,7 @@ namespace RPG4.Backpack.Network
                 CaptureCoreBindings(local.AuthorityCore);
                 local.SetNetworkAuthority(true);
             }
-            core = local != null ? local.AuthorityCore : new InventoryHostCore(rows, columns, LogModule.Network, name);
+            core = preparedLootCore ?? (local != null ? local.AuthorityCore : new InventoryHostCore(rows, columns, LogModule.Network, name));
             core.SupportsSingleCellTransfers = true;
             if (catalog == null && local != null) catalog = local.Catalog;
             core.Catalog = catalog;
@@ -187,9 +187,12 @@ namespace RPG4.Backpack.Network
             core.IdGeneratorProvider = ResolveGenerator;
             core.ForwardOperation = RequestInventoryOperation;
             core.ForwardWeaponOperation = RequestWeaponOperation;
-            core.CommitConfirm = ConfirmInventoryProjection;
+            core.ForwardConsumableOperation = RequestConsumableOperation;
+            core.ConsumableStateProvider = () => ConsumableStateProvider?.Invoke() ?? default;
+            core.CommitParticipant = InventoryCommitParticipants.Combine(core.CommitParticipant, this);
             core.AuthorityOperationDispatcher = DispatchAuthorityOperation;
             core.AuthorityWeaponOperationDispatcher = DispatchAuthorityWeaponOperation;
+            core.AuthorityConsumableOperationDispatcher = DispatchAuthorityConsumableOperation;
 
             authoritativeRows = Container.Rows;
             authoritativeColumns = Container.Columns;
@@ -246,6 +249,8 @@ namespace RPG4.Backpack.Network
             core.IsAuthority = () => false;
             core.ForwardOperation = RequestInventoryOperation;
             core.ForwardWeaponOperation = RequestWeaponOperation;
+            core.ForwardConsumableOperation = RequestConsumableOperation;
+            core.ConsumableStateProvider = () => ConsumableStateProvider?.Invoke() ?? default;
             core.ForwardCanSubmit = CanForwardTo;
 
             mirrorProjection.Clear();
@@ -366,27 +371,46 @@ namespace RPG4.Backpack.Network
             return core.TrySplitStack(itemId, splitCount, out newItemId, out error);
         }
 
-        /// <summary>先验证提交物品能按本宿主目录恢复，再同步投影；None 用于回滚后的补偿。</summary>
-        private bool ConfirmInventoryProjection(ItemId requiredItem, out string error)
+        /// <summary>准备独立网络候选；此阶段不修改同步流或发送视图通知。</summary>
+        public bool TryPrepare(ItemId requiredItem, out IInventoryPreparedCommit prepared, out string error)
         {
-            if (!IsServerInventory)
-            {
-                error = "只有服务端可以确认库存投影。";
-                return false;
-            }
-
+            prepared = null;
+            if (!IsServerInventory) { error = "只有服务端可以准备库存投影。"; return false; }
             projection.Bind(Container, entries);
-            if (requiredItem.IsValid)
+            try
             {
-                if (!Container.TryGetItemById(requiredItem, out RuntimeItem item))
+                if (requiredItem.IsValid)
                 {
-                    error = $"库存中不存在待确认物品 {requiredItem}。";
-                    return false;
+                    if (!Container.TryGetItemById(requiredItem, out RuntimeItem item))
+                    { error = $"库存中不存在待确认物品 {requiredItem}。"; return false; }
+                    if (!projection.TryValidateRestoration(item, catalog, out error)) return false;
                 }
-                if (!projection.TryValidateRestoration(item, catalog, out error)) return false;
+                if (!projection.TryPrepareContainer(Container, entries, requiredItem, out IInventoryPreparedCommit candidate,
+                    out ProjectionSyncReport report, out error)) return false;
+                prepared = new PreparedInventoryProjection(this, candidate, report);
+                return true;
             }
+            catch { projection.Invalidate(); throw; }
+        }
 
-            return SyncEntries(out error, requiredItem);
+        private sealed class PreparedInventoryProjection : IInventoryPreparedCommit
+        {
+            private readonly BackpackNetworkInventory owner;
+            private readonly IInventoryPreparedCommit candidate;
+            private readonly ProjectionSyncReport report;
+            internal PreparedInventoryProjection(BackpackNetworkInventory owner, IInventoryPreparedCommit candidate, ProjectionSyncReport report)
+            { this.owner = owner; this.candidate = candidate; this.report = report; }
+            public void Publish()
+            {
+                try
+                {
+                    candidate.Publish();
+                    owner.syncedRevision = owner.Container.Revision;
+                    if (report.HasChanges) owner.RaiseChanged();
+                }
+                catch { owner.projection.Invalidate(); throw; }
+            }
+            public void Discard() => candidate.Discard();
         }
 
         /// <summary>服务端清空库存（容器与同步列表一起清空）。</summary>
@@ -518,8 +542,8 @@ namespace RPG4.Backpack.Network
                 return false;
             }
 
-            syncedRevision = Container.Revision;
             projection.SyncContainer(Container, entries, out ProjectionSyncReport report);
+            if (report.Rejected == 0) syncedRevision = Container.Revision;
 
             if (report.Rejected > 0)
             {

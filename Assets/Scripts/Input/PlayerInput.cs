@@ -17,6 +17,11 @@ namespace RPG4.Input
         public IPlayerReadState ReadState { get; private set; }
         public bool UsesLocalInput { get; private set; } = true;
         public bool LocalGameplayInputAllowed { get; private set; } = true;
+        /// <summary>Read-only render preview; FixedUpdate remains the sole consumer of accumulated look.</summary>
+        public Vector2 UnconsumedLook => CanPreviewLocalWeaponInput ? simulationInput.Look : Vector2.zero;
+        public bool CanPreviewLocalWeaponInput => UsesLocalInput && isActiveAndEnabled
+            && CanSampleLocalGameplayInput && Application.isFocused && Time.timeScale > 0f
+            && IntentProcessor.WeaponInputAllowed && (UIManager.Instance == null || !UIManager.Instance.BlocksGameplayInput);
         private int localInputBlockedThroughFrame = -1;
         private bool captureCursorWhenAllowed;
         internal bool CanSampleLocalGameplayInput => LocalGameplayInputAllowed && Time.frameCount > localInputBlockedThroughFrame;

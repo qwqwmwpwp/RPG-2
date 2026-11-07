@@ -35,6 +35,11 @@ namespace RPG4.Backpack.Inventory
 
         public WeaponOperationResult ExecuteWeaponOperation(WeaponOperation operation)
         {
+            using (InventoryTransactions.DeferPublication()) return ExecuteWeaponOperationCore(operation);
+        }
+
+        private WeaponOperationResult ExecuteWeaponOperationCore(WeaponOperation operation)
+        {
             if (!CanExecuteWeaponOperation(operation, out string error))
                 return new WeaponOperationResult(operation.RequestId, operation.TargetItemId, false, error);
             bool success;
@@ -52,7 +57,7 @@ namespace RPG4.Backpack.Inventory
 
         public void PublishWeaponOperationResult(WeaponOperationResult result)
         {
-            if (commandSource != null) EventBus.Global.Publish(InvChannels.WeaponOperationCompleted, commandSource, result);
+            if (commandSource != null) InventoryTransactions.RunPostCommit(() => EventBus.Global.Publish(InvChannels.WeaponOperationCompleted, commandSource, result), "武器结果通知失败");
         }
 
         private void OnWeaponOperationCommand(WeaponOperation operation)
@@ -98,7 +103,7 @@ namespace RPG4.Backpack.Inventory
             bool magazine, WeaponAttachmentSlot slot, out string error)
         {
             if (!ResolveWeaponExchange(weaponContainer, weaponId, childId, out RuntimeItem weapon, out RuntimeItem child, out error)) return false;
-            return Container.TryExchangeWeaponChild(weaponContainer, weapon, child, magazine, slot, Catalog, CommitConfirm, out error);
+            return Container.TryExchangeWeaponChild(weaponContainer, weapon, child, magazine, slot, Catalog, CommitParticipant, out error);
         }
 
         public bool CanLoadMagazine(ItemId magazineId, ItemId ammoId, int roundCount, out string error)
@@ -113,7 +118,7 @@ namespace RPG4.Backpack.Inventory
             if (!CanLoadMagazine(magazineId, ammoId, roundCount, out error)) return false;
             Container.TryGetItemById(magazineId, out RuntimeItem magazine);
             Container.TryGetItemById(ammoId, out RuntimeItem ammo);
-            return Container.TryLoadMagazine(magazine, ammo, roundCount, Catalog, CommitConfirm, out error);
+            return Container.TryLoadMagazine(magazine, ammo, roundCount, Catalog, CommitParticipant, out error);
         }
     }
 }

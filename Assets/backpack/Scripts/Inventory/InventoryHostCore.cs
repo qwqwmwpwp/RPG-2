@@ -5,9 +5,6 @@ using RPG4.Backpack.Items;
 
 namespace RPG4.Backpack.Inventory
 {
-    /// <summary>权威提交后的确认回调（联机 = 投影同步）：返回 false 表示外部表示未能跟随本次提交，核心按各操作的回滚口径撤销变更，并再执行一次补偿确认（requiredItem 传 None）。</summary>
-    public delegate bool CommitConfirmHandler(ItemId requiredItem, out string error);
-
     /// <summary>共享库存核心：权威端执行完整意图并返回结果，纯客户端通过宿主转发；容器持有真实数据。</summary>
     public sealed partial class InventoryHostCore
     {
@@ -24,6 +21,7 @@ namespace RPG4.Backpack.Inventory
         private object commandSource;
         private EventSubscription operationSubscription;
         private EventSubscription weaponOperationSubscription;
+        private EventSubscription consumableOperationSubscription;
 
         /// <summary>非权威端（纯客户端）构造：不创建容器，只承载意图订阅与转发。</summary>
         public InventoryHostCore(LogModule logModule, string ownerName)
@@ -66,7 +64,12 @@ namespace RPG4.Backpack.Inventory
         public Action<InventoryOperation> AuthorityOperationDispatcher { get; set; }
         public Action<WeaponOperation> AuthorityWeaponOperationDispatcher { get; set; }
 
-        public CommitConfirmHandler CommitConfirm { get; set; } // 权威提交后的确认钩子；留空表示无需确认。
+        private IInventoryCommitParticipant commitParticipant;
+        public IInventoryCommitParticipant CommitParticipant
+        {
+            get => commitParticipant;
+            set { commitParticipant = value; if (Container != null) Container.CommitParticipant = value; }
+        }
 
         // 命令及完成结果共用来源宿主的事件键。
 
@@ -87,6 +90,8 @@ namespace RPG4.Backpack.Inventory
                 CmdChannels.InventoryOperation, sourceKey, this, OnOperationCommand);
             weaponOperationSubscription = EventBus.Global.Subscribe<WeaponOperation>(
                 CmdChannels.WeaponOperation, sourceKey, this, OnWeaponOperationCommand);
+            consumableOperationSubscription = EventBus.Global.Subscribe<ConsumableUseOperation>(
+                CmdChannels.UseConsumable, sourceKey, this, OnConsumableOperationCommand);
         }
 
         /// <summary>释放全部意图订阅（幂等）。</summary>
@@ -96,6 +101,8 @@ namespace RPG4.Backpack.Inventory
             operationSubscription = default;
             weaponOperationSubscription.Dispose();
             weaponOperationSubscription = default;
+            consumableOperationSubscription.Dispose();
+            consumableOperationSubscription = default;
             if (commandSource != null && CommandHosts.TryGetValue(commandSource, out InventoryHostCore owner)
                 && ReferenceEquals(owner, this)) CommandHosts.Remove(commandSource);
             commandSource = null;
@@ -123,6 +130,11 @@ namespace RPG4.Backpack.Inventory
 
         /// <summary>服务端或本地宿主执行整次操作；结果只在完整提交或回滚后返回。</summary>
         public InventoryOperationResult ExecuteOperation(InventoryOperation operation)
+        {
+            using (InventoryTransactions.DeferPublication()) return ExecuteOperationCore(operation);
+        }
+
+        private InventoryOperationResult ExecuteOperationCore(InventoryOperation operation)
         {
             ItemId resultId = ItemId.None;
             int moved = 0;
@@ -153,19 +165,19 @@ namespace RPG4.Backpack.Inventory
                 case InventoryOperationKind.SwapStackCounts:
                     if (!destination.TryResolveItem(operation.TargetItemId, out RuntimeItem target, out error)) break;
                     success = Container.TryChangeStackPair(source, target, operation.Count,
-                        operation.Kind == InventoryOperationKind.SwapStackCounts, CommitConfirm, out moved, out error,
-                        destination.Container, destination.CommitConfirm);
+                        operation.Kind == InventoryOperationKind.SwapStackCounts, CommitParticipant, out moved, out error,
+                        destination.Container, destination.CommitParticipant);
                     resultId = target.ItemId;
                     break;
                 case InventoryOperationKind.SplitStack:
                     success = TrySplitStackToEmptySpace(source, operation.Count, destination.Container,
-                        out resultId, out error, destination.CommitConfirm, operation.UpperLeftIndex);
+                        out resultId, out error, destination.CommitParticipant, operation.UpperLeftIndex);
                     moved = operation.Count;
                     break;
                 case InventoryOperationKind.TransferItem:
                     moved = source.StackCount;
                     success = Container.TryTransferItem(source, destination.Container, operation.UpperLeftIndex,
-                        CommitConfirm, destination.CommitConfirm, out error);
+                        CommitParticipant, destination.CommitParticipant, out error);
                     resultId = source.ItemId;
                     break;
                 case InventoryOperationKind.MoveItem:
@@ -174,13 +186,13 @@ namespace RPG4.Backpack.Inventory
                         error = "跨库存移动须使用转移操作。";
                         break;
                     }
-                    success = Container.TryMoveItem(source, operation.UpperLeftIndex, CommitConfirm, out error);
+                    success = Container.TryMoveItem(source, operation.UpperLeftIndex, CommitParticipant, out error);
                     resultId = source.ItemId;
                     break;
                 case InventoryOperationKind.SwapItems:
                     if (!destination.TryResolveItem(operation.TargetItemId, out RuntimeItem swapTarget, out error)) break;
                     success = Container.TrySwapItems(source, swapTarget, destination.Container,
-                        CommitConfirm, destination.CommitConfirm, out error);
+                        CommitParticipant, destination.CommitParticipant, out error);
                     resultId = source.ItemId;
                     break;
                 default:
@@ -198,7 +210,7 @@ namespace RPG4.Backpack.Inventory
         public void PublishOperationResult(InventoryOperationResult result)
         {
             if (commandSource != null)
-                EventBus.Global.Publish(InvChannels.OperationCompleted, commandSource, result);
+                InventoryTransactions.RunPostCommit(() => EventBus.Global.Publish(InvChannels.OperationCompleted, commandSource, result), "库存结果通知失败");
         }
 
         private void OnOperationCommand(InventoryOperation operation)
@@ -238,7 +250,7 @@ namespace RPG4.Backpack.Inventory
                 return false;
             }
 
-            if (!Container.TryReceiveItem(item, CommitConfirm, out error))
+            if (!Container.TryReceiveItem(item, CommitParticipant, out error))
             {
                 item = null;
                 return false;
@@ -247,31 +259,17 @@ namespace RPG4.Backpack.Inventory
             return true;
         }
 
-        /// <summary>修改容器内物品的堆叠数：委托容器做归属与 1..单堆上限校验（数量未变化时不提交）；提交后确认失败时回滚原值并补偿确认。</summary>
+        /// <summary>数量修改与移除均在容器的一次事务中准备、提交或恢复。</summary>
         public bool TrySetStackCount(ItemId itemId, int stackCount, out string error)
         {
             if (!TryResolveItem(itemId, out RuntimeItem item, out error)) return false;
-
-            int previousStack = item.StackCount;
-            if (!Container.TrySetStackCount(item, stackCount, out error)) return false;
-
-            if (CommitConfirm != null && !CommitConfirm(item.ItemId, out error))
-            {
-                Container.SetItemStack(item, previousStack);
-                CommitConfirm(ItemId.None, out _);
-                return false;
-            }
-
-            return true;
+            return Container.TrySetStackCount(item, stackCount, CommitParticipant, out error);
         }
 
-        /// <summary>从容器移除物品并释放其全部占格；容器拒绝时原因外露，提交后确认失败直接判失败（移除回滚会改变占格，按原口径不回滚）。</summary>
         public bool TryRemoveItem(ItemId itemId, out string error)
         {
             if (!TryResolveItem(itemId, out RuntimeItem item, out error)) return false;
-            if (!Container.TryRemoveItem(item, out error)) return false;
-            if (CommitConfirm != null && !CommitConfirm(ItemId.None, out error)) return false;
-            return true;
+            return Container.TryRemoveItem(item, CommitParticipant, out error);
         }
 
         /// <summary>从指定堆叠拆出独立实例：核对归属、可堆叠与数量边界、按类型目录取模板、抓源快照并以新标识恢复数值原样继承的新实例、落到行优先扫描出的首个空白区域；提交后确认失败时回滚新实例与源堆叠并补偿确认，任一步失败整体零变更。</summary>
@@ -291,7 +289,7 @@ namespace RPG4.Backpack.Inventory
         }
 
         /// <summary>将指定数量拆成新实例并直接放入同一或另一容器的空位；源容器无需额外空位，数值继承源快照，确认失败时恢复双方状态。</summary>
-        public bool TrySplitStackToEmptySpace(RuntimeItem source, int splitCount, InventoryContainer destination, out ItemId newItemId, out string error, CommitConfirmHandler destinationConfirm = null, int upperLeftIndex = InventoryPlacement.NoIndex)
+        public bool TrySplitStackToEmptySpace(RuntimeItem source, int splitCount, InventoryContainer destination, out ItemId newItemId, out string error, IInventoryCommitParticipant destinationConfirm = null, int upperLeftIndex = InventoryPlacement.NoIndex)
         {
             newItemId = ItemId.None;
             if (!ResolveAuthority()) return Reject("拆分堆叠", "只有权威端可以拆分库存物品。", out error);
@@ -314,7 +312,7 @@ namespace RPG4.Backpack.Inventory
 
             if (!TryBuildSplitInstance(manifest, snapshot, issued, splitCount, out RuntimeItem created, out string buildError))
                 return Reject("拆分堆叠", buildError, out error);
-            if (!Container.TrySplitStackToEmptySpace(source, created, destination, CommitConfirm, destinationConfirm, out error, upperLeftIndex)) return false;
+            if (!Container.TrySplitStackToEmptySpace(source, created, destination, CommitParticipant, destinationConfirm ?? destination.CommitParticipant, out error, upperLeftIndex)) return false;
 
             newItemId = issued;
             return true;

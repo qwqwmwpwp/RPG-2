@@ -30,6 +30,9 @@ namespace RPG4.Combat
         private GameObject muzzleAttachmentModel;
         private WeaponAttachmentView activeAttachmentView;
         private ulong lastPlayedSequence;
+        private ulong lastAnticipatedRequest;
+        private uint lastAnticipatedOrdinal;
+        private bool hasAnticipatedShot;
 
         public Transform Muzzle => activeAttachmentView != null && activeAttachmentView.MuzzleOverride != null
             ? activeAttachmentView.MuzzleOverride : muzzle;
@@ -47,6 +50,7 @@ namespace RPG4.Combat
             ClearModels();
             boundItem = item;
             lastPlayedSequence = item.WeaponState.ShotSequence;
+            hasAnticipatedShot = false;
             boundItem.Changed += OnItemChanged;
             ApplyItemState(item);
         }
@@ -119,16 +123,37 @@ namespace RPG4.Combat
                 return;
 
             lastPlayedSequence = sequence;
+            PlayShotEffects();
+        }
+
+        /// <summary>本地输入的即时表现使用独立身份，不推进服务器射击序号游标。</summary>
+        public bool PlayAnticipatedShot(ItemId weaponId, ulong requestId, uint ordinal)
+        {
+            if (boundItem == null || weaponId != boundItem.ItemId || hasAnticipatedShot
+                && (requestId < lastAnticipatedRequest || requestId == lastAnticipatedRequest && ordinal <= lastAnticipatedOrdinal))
+                return false;
+            hasAnticipatedShot = true;
+            lastAnticipatedRequest = requestId;
+            lastAnticipatedOrdinal = ordinal;
+            return PlayShotEffects();
+        }
+
+        public void ResetAnticipatedShots() => hasAnticipatedShot = false;
+
+        private bool PlayShotEffects()
+        {
             try
             {
                 RestartParticle(muzzleFlash, Muzzle);
                 RestartParticle(shellEjectionEffect, shellEjectionPoint);
                 if (shotAudioSource != null && shotAudioClip != null)
                     shotAudioSource.PlayOneShot(shotAudioClip);
+                return true;
             }
             catch (System.Exception exception)
             {
                 Debug.LogException(exception, this);
+                return false;
             }
         }
 
@@ -137,6 +162,7 @@ namespace RPG4.Combat
             if (boundItem != null) boundItem.Changed -= OnItemChanged;
             boundItem = null;
             lastPlayedSequence = 0;
+            hasAnticipatedShot = false;
             if (muzzleFlash != null) muzzleFlash.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             if (shellEjectionEffect != null) shellEjectionEffect.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             if (shotAudioSource != null) shotAudioSource.Stop();

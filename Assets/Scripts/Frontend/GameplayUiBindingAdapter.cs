@@ -22,6 +22,7 @@ namespace RPG4.Frontend
         private BackpackNetworkInventory inventory;
         private BackpackNetworkEquipment equipment;
         private SettingsView settings;
+        private PlayerDeathUI deathWindow;
         private ClientSessionController observedSession;
         private AuthoritativeNetworkManager observedManager;
         public void BindLocalPlayer(Player player)
@@ -33,6 +34,7 @@ namespace RPG4.Frontend
             { UnbindLocalPlayer(); return; }
             window = uiManager.Get<BackpackGridUI>();
             settings = uiManager.Get<SettingsView>();
+            ObserveDeathWindow();
             if (window == null || !player.TryGetComponent(out inventory) || !player.TryGetComponent(out equipment)
                 || !inventory.IsReady || !equipment.IsReady || settings == null) return;
             if (!window.BindSessionSources(inventory, equipment)) return;
@@ -57,6 +59,8 @@ namespace RPG4.Frontend
             && Owns(inventoryInput) && Owns(inventoryCoordinator);
         public void UnbindLocalPlayer()
         {
+            if (deathWindow != null) deathWindow.ReturnToLobbyRequested -= ReturnToLobby;
+            deathWindow = null;
             boundPlayer = null;
             if (inventoryCoordinator != null) inventoryCoordinator.enabled = false;
             if (inventoryInput != null) inventoryInput.enabled = false;
@@ -120,7 +124,26 @@ namespace RPG4.Frontend
             if (!ReferenceEquals(observedSession, null)) observedSession.StatusChanged -= OnSessionStatusChanged;
             observedSession = null;
         }
-        private void OnSessionStatusChanged(ClientSessionStatus _) => SyncInputGate();
+        private void OnSessionStatusChanged(ClientSessionStatus _) { SyncInputGate(); RefreshRaidResult(); }
+        private void ObserveDeathWindow()
+        {
+            var current = uiManager != null ? uiManager.Get<PlayerDeathUI>() : null;
+            if (current == deathWindow) return;
+            if (deathWindow != null) deathWindow.ReturnToLobbyRequested -= ReturnToLobby;
+            deathWindow = current;
+            if (deathWindow != null) deathWindow.ReturnToLobbyRequested += ReturnToLobby;
+            RefreshRaidResult();
+        }
+        private void RefreshRaidResult()
+        {
+            if (deathWindow != null) deathWindow.SetRaidResult(observedSession != null ? observedSession.LastRaidResultText : string.Empty,
+                observedSession != null && observedSession.State == ClientSessionState.Playing);
+        }
+        private void ReturnToLobby()
+        {
+            if (observedSession != null && !observedSession.TryReturnToLobby(out string reason))
+                deathWindow.SetRaidResult(reason, true);
+        }
         private void SyncInputGate()
         {
             if (!Owns(inventoryInput) || !Owns(inventoryCoordinator)) return;
@@ -141,7 +164,7 @@ namespace RPG4.Frontend
         }
         private void Update()
         {
-            ObserveSession(); ObserveManager(); SyncInputGate();
+            ObserveSession(); ObserveManager(); SyncInputGate(); ObserveDeathWindow(); RefreshRaidResult();
             var session = ClientSessionController.Instance;
             if (boundPlayer == null || session == null || session.State != ClientSessionState.Playing
                 || inventoryInput == null || !inventoryInput.enabled

@@ -12,7 +12,7 @@ namespace RPG4.Backpack.Network
     /// <summary>复用角色已有武器槽；完整物品树仅定向给 owner，公共同步只有武器/枪口模板身份。</summary>
     [DisallowMultipleComponent]
     [RequireComponent(typeof(BackpackNetworkInventory), typeof(EquipmentInventory))]
-    public sealed class BackpackNetworkEquipment : NetworkBehaviour, IBackpackView, IInventoryOperations
+    public sealed class BackpackNetworkEquipment : NetworkBehaviour, IBackpackView, IInventoryOperations, IInventoryCommitParticipant
     {
         [SyncVar(hook = nameof(OnAppearanceIdChanged))] private ulong publicItemId;
         [SyncVar(hook = nameof(OnAppearanceChanged))] private string definitionId;
@@ -25,7 +25,7 @@ namespace RPG4.Backpack.Network
         private readonly Dictionary<ulong, InventoryPlacement> placements = new Dictionary<ulong, InventoryPlacement>();
         private EquipmentInventory local;
         private BackpackNetworkInventory ingress;
-        private CommitConfirmHandler previousConfirm;
+        private IInventoryCommitParticipant previousParticipant;
         private Action<InventoryOperation> previousDispatcher;
         private bool baselineSent, mirrorReady, mirrorDirty, appearanceDirty;
         private sealed class AppearanceValues : IItemRandomSource
@@ -70,9 +70,9 @@ namespace RPG4.Backpack.Network
         {
             base.OnStartServer();
             local.SetNetworkAuthority(true);
-            previousConfirm = local.CommitConfirm;
+            previousParticipant = local.CommitParticipant;
             previousDispatcher = local.AuthorityCore.AuthorityOperationDispatcher;
-            local.CommitConfirm = Confirm;
+            local.CommitParticipant = InventoryCommitParticipants.Combine(previousParticipant, this);
             projection.Bind(local.Container, stream.Entries);
             local.AuthorityCore.AuthorityOperationDispatcher = operation => ingress.SubmitEquipmentOperation(this, operation);
         }
@@ -140,7 +140,7 @@ namespace RPG4.Backpack.Network
         {
             if (local != null)
             {
-                local.CommitConfirm = previousConfirm;
+                local.CommitParticipant = previousParticipant;
                 if (local.AuthorityCore != null) local.AuthorityCore.AuthorityOperationDispatcher = previousDispatcher;
                 local.SetNetworkAuthority(true);
             }
@@ -148,10 +148,16 @@ namespace RPG4.Backpack.Network
             base.OnStopServer();
         }
 
-        private bool Confirm(ItemId itemId, out string error)
+        public bool TryPrepare(ItemId itemId, out IInventoryPreparedCommit prepared, out string error)
         {
-            if (previousConfirm != null && !previousConfirm(itemId, out error)) return false;
-            return SyncProjection(out error);
+            prepared = null;
+            try
+            {
+                RuntimeItem equipped = local.EquippedItem;
+                if (equipped != null && !projection.TryValidateRestoration(equipped, ingress.Catalog, out error)) return false;
+                return projection.TryPrepareContainer(local.Container, stream.Entries, itemId, out prepared, out _, out error);
+            }
+            catch { projection.Invalidate(); throw; }
         }
 
         private bool SyncProjection(out string error)

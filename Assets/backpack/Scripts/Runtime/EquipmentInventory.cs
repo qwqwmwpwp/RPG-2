@@ -25,7 +25,7 @@ namespace RPG4.Backpack.Runtime
 
         private InventoryHostCore core;
         private ItemAdmissionHandler additionalAdmission;
-        private CommitConfirmHandler commitConfirm;
+        private IInventoryCommitParticipant commitParticipant;
 
         public InventoryContainer Container => core?.Container;
         public RuntimeItem EquippedItem => Container?.GetItemAt(0);
@@ -43,14 +43,14 @@ namespace RPG4.Backpack.Runtime
             set => additionalAdmission = value;
         }
 
-        /// <summary>双方静默提交之后、通知之前确认装备运行实例；失败后容器回滚并补偿确认。</summary>
-        public CommitConfirmHandler CommitConfirm
+        /// <summary>为装备运行实例和网络投影准备独立候选；提交前失败只撤销候选。</summary>
+        public IInventoryCommitParticipant CommitParticipant
         {
-            get => commitConfirm;
+            get => commitParticipant;
             set
             {
-                commitConfirm = value;
-                if (core != null) core.CommitConfirm = value;
+                commitParticipant = value;
+                if (core != null) core.CommitParticipant = value;
             }
         }
 
@@ -60,7 +60,7 @@ namespace RPG4.Backpack.Runtime
                 if (component is ISharedInventoryAccess access && access.IsNetworkSessionActive && !access.IsServerSession)
                     networkReadOnly = true;
             core = new InventoryHostCore(1, 1, LogModule.Equipment, name, true, CanAcceptItem);
-            core.CommitConfirm = commitConfirm;
+            core.CommitParticipant = commitParticipant;
             core.IsAuthority = () => !networkReadOnly;
         }
 

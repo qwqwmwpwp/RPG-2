@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace RPG4.Backpack.Core
 {
-    /// <summary>日志配置资产（ScriptableObject）：全局开关 + 最低级别 + 模块位掩码三件套，在 Inspector 中可视化编辑；资产规范位置 <c>Assets/backpack/Data/LogSettings.asset</c>，不由本类自动加载，需由 <c>BackpackLog.Settings</c> 显式注入，未注入时退化为开发期默认值。</summary>
+    /// <summary>日志配置资产（ScriptableObject）：全局开关 + 最低级别 + 模块位掩码三件套，在 Inspector 中可视化编辑；资产规范位置 <c>Assets/Resources/LogSettings.asset</c>，由 BackpackLog 按需从 Resources 加载，也支持通过 <c>BackpackLog.Settings</c> 显式覆盖；资产缺失时使用默认值。</summary>
     [CreateAssetMenu(fileName = "LogSettings", menuName = "RPG4/Backpack/Log Settings", order = 0)]
     public class LogSettings : ScriptableObject
     {
@@ -59,7 +59,7 @@ namespace RPG4.Backpack.Core
             return isEnabled && IsLevelEnabled(level) && IsModuleEnabled(module);
         }
 
-        /// <summary>生成一个不落盘的运行时默认实例（<c>Info</c> 级别、全模块放行），用于未注入资产时的兜底。</summary>
+        /// <summary>生成一个不落盘的运行时默认实例（<c>Info</c> 级别、全模块放行），用于未找到配置资产时的兜底。</summary>
         public static LogSettings CreateRuntimeDefault()
         {
             LogSettings settings = CreateInstance<LogSettings>();

@@ -76,6 +76,11 @@ namespace RPG4.CharacterAttributes
         }
 
         public bool Heal(float amount) => canExecuteAuthority && Health.Heal(amount);
+        public bool TryPrepareHeal(float amount, out HealthState.HealTransaction transaction)
+        {
+            transaction = null;
+            return canExecuteAuthority && Health.TryPrepareHeal(amount, out transaction);
+        }
         public bool Revive(float health)
         {
             if (!canExecuteAuthority || IsAlive || !HealthState.IsPositiveFinite(health)) return false;

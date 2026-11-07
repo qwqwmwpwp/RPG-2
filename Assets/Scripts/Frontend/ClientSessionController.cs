@@ -3,19 +3,22 @@ using Mirror;
 using Mirror.Transports.Encryption;
 using RPG4.Networking;
 using RPG4.Networking.Contracts;
+using RPG4.Raid.Application.Client;
+using RPG4.Raid.Domain;
+using RPG4.Backpack.Inventory;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using HierarchicalMachine = RPG4.StateMachine.StateMachine;
 
 namespace RPG4.Frontend
 {
-    public enum ClientSessionState { Bootstrapping, MenuIdle, Connecting, Authenticating, LoadingGameplay, AwaitingPlayer, Playing, Disconnecting }
+    public enum ClientSessionState { Bootstrapping, MenuIdle, Connecting, Authenticating, LoadingLobby, Lobby, LoadingGameplay, AwaitingPlayer, Playing, Settling, ReturningLobby, Disconnecting }
     public readonly struct ClientSessionStatus
     {
         public ClientSessionState State { get; }
         public string Message { get; }
         public string Failure { get; }
-        public bool IsBusy => State != ClientSessionState.MenuIdle && State != ClientSessionState.Playing;
+        public bool IsBusy => State != ClientSessionState.MenuIdle && State != ClientSessionState.Playing && State != ClientSessionState.Lobby;
         internal ClientSessionStatus(ClientSessionState state, string message, string failure)
         { State = state; Message = message; Failure = failure; }
     }
@@ -41,15 +44,25 @@ namespace RPG4.Frontend
         public static ClientSessionController Instance { get; private set; }
         public event Action<ClientSessionStatus> StatusChanged;
         public event Action CredentialsDispatched;
+        public event Action LobbyInventoryChanged;
         public ClientSessionState State { get; private set; } = ClientSessionState.Bootstrapping;
-        public ClientSessionStatus Status => new ClientSessionStatus(State, PhaseText(State), context.FirstFailure);
+        public ClientSessionStatus Status => new ClientSessionStatus(State,
+            string.IsNullOrEmpty(rememberPasswordNotice) ? PhaseText(State) : PhaseText(State) + "\n" + rememberPasswordNotice, context.FirstFailure);
         public ClientServerCatalog ServerCatalog => serverCatalog;
         public bool CanSubmit => State == ClientSessionState.MenuIdle && !context.LoginRequested && !context.DisconnectRequested;
-        internal readonly ClientSessionNode[] Nodes = new ClientSessionNode[8];
+        public bool CanStartGame => State == ClientSessionState.Lobby && raid != null && raid.CanStartRaid;
+        public bool IsLobbyInventoryReady => raid != null && raid.IsInventoryReady;
+        public IBackpackView LobbyStash => raidInventory?.Stash;
+        public IBackpackView LobbyBackpack => raidInventory?.Backpack;
+        public IBackpackView LobbyEquipment => raidInventory?.Equipment;
+        public string LastRaidResultText => raid != null ? raid.LastResultText : string.Empty;
+        internal readonly ClientSessionNode[] Nodes = new ClientSessionNode[12];
         private HierarchicalMachine machine;
         private ClientSessionContext context = new ClientSessionContext();
         private long generation;
         private AuthoritativeNetworkManager manager;
+        private ClientRaidFlow raid;
+        private IClientLobbyInventoryViews raidInventory;
         private AccountAuthenticator authenticator;
         private NetworkPlayerController localPlayer;
         private AsyncOperation menuLoad;
@@ -61,6 +74,12 @@ namespace RPG4.Frontend
         private Action<ClientSessionIdentity> endedHandler;
         private Action<ClientFailureEvent> failureHandler;
         private Action<GameplayLifecycleEvent> gameplayHandler, gameplayFailureHandler;
+        private Action lobbyChangedHandler, raidChangedHandler;
+        private RaidPhase observedRaidPhase;
+        // Kept separately from public status/context, only until this exact attempt is accepted or cancelled.
+        private long pendingRememberAttempt;
+        private string pendingRememberServer, pendingRememberFingerprint, pendingRememberUsername, pendingRememberPassword;
+        private string rememberPasswordNotice;
         private static double Now => Time.realtimeSinceStartupAsDouble;
 
         private void Awake()
@@ -83,6 +102,7 @@ namespace RPG4.Frontend
                 // Do not expire the already-completed phase while waiting for its sibling transition.
                 bool phaseCompleted = (State == ClientSessionState.Connecting && context.Secure)
                     || (State == ClientSessionState.Authenticating && context.Accepted)
+                    || (State == ClientSessionState.LoadingLobby && raid != null && raid.LobbyVisible && raid.IsInventoryReady)
                     || (State == ClientSessionState.LoadingGameplay && context.SceneLoaded)
                     || (State == ClientSessionState.AwaitingPlayer && manager != null && manager.IsLocalGameplayReady);
                 if (!context.DisconnectRequested && !phaseCompleted && context.Deadline > 0 && Now >= context.Deadline)
@@ -98,11 +118,12 @@ namespace RPG4.Frontend
             if (!serverCatalog.Validate(index, address, port, out reason)
                 || !ClientServerCatalog.ValidateManager(networkManagerPrefab, out reason)) return false;
             if (sessionStatus == null) { reason = "连接状态界面配置不完整。"; return false; }
-            if (!Application.CanStreamedLevelBeLoaded(MenuScene) || !Application.CanStreamedLevelBeLoaded(EntryProtocol.GameplayScene))
+            if (!Application.CanStreamedLevelBeLoaded(MenuScene) || !Application.CanStreamedLevelBeLoaded(EntryProtocol.GameplayScene)
+                || !Application.CanStreamedLevelBeLoaded(AuthoritativeNetworkManager.LobbyScene))
             { reason = "客户端构建场景尚未配置，暂时无法登录。"; return false; }
             reason = null; return true;
         }
-        public bool TryLogin(int index, string address, int port, string username, string password, out string reason)
+        public bool TryLogin(int index, string address, int port, string username, string password, bool rememberPassword, out string reason)
         {
             if (!CanSubmit) { reason = "当前连接正在处理中。"; return false; }
             if (!ValidateConfiguration(index, address, port, out reason)) return false;
@@ -114,10 +135,20 @@ namespace RPG4.Frontend
             context = new ClientSessionContext { AttemptId = ++generation, BusinessGeneration = generation,
                 RequestId = Guid.NewGuid().ToString("N"), StartedAt = Now, LoginRequested = true };
             long attempt = context.AttemptId;
+            ClearPendingRememberedLogin();
+            rememberPasswordNotice = null;
             try
             {
                 var server = serverCatalog.Get(index);
+                if (rememberPassword && RememberedLoginStore.IsSupported)
+                {
+                    pendingRememberAttempt = attempt;
+                    pendingRememberServer = server.ServerId; pendingRememberFingerprint = server.PublicKeyFingerprint;
+                    pendingRememberUsername = username; pendingRememberPassword = password;
+                }
                 manager = Instantiate(networkManagerPrefab);
+                raid = manager.ClientRaid;
+                raidInventory = manager.ClientRaidInventory;
                 context.ManagerInstanceId = manager.GetInstanceID();
                 manager.networkAddress = address;
                 manager.offlineScene = MenuScene;
@@ -180,14 +211,17 @@ namespace RPG4.Frontend
                 if (!MatchesAuthentication(value.Context, attempt)) return;
                 if (!value.Succeeded) { RequestDisconnect(ClientFailureText.Authentication(value)); return; }
                 if (!context.Accepted)
-                { context.Accepted = true; context.AcceptedAt = Now; context.AuthenticatedSessionId = value.Response.Value.sessionId; }
+                {
+                    context.Accepted = true; context.AcceptedAt = Now; context.AuthenticatedSessionId = value.Response.Value.sessionId;
+                    SaveRememberedLogin(attempt);
+                }
             };
             changingHandler = value =>
             {
                 if (!ObserveIdentity(value.Session)) return;
                 CloseLocalInput();
                 if (!IsBusinessCurrent(attempt)) return;
-                if (value.Operation != SceneOperation.Normal || !IsGameplayScene(value.SceneName))
+                if (value.Operation != SceneOperation.Normal || (!IsGameplayScene(value.SceneName) && value.SceneName != AuthoritativeNetworkManager.LobbyScene))
                 { RequestDisconnect("服务器指定的场景不受支持，请更新客户端。"); return; }
                 context.SceneLoaded = false;
                 context.SceneChangingAt = Now;
@@ -195,6 +229,7 @@ namespace RPG4.Frontend
             loadedHandler = value =>
             {
                 if (!ObserveIdentity(value.Session) || !IsBusinessCurrent(attempt)) return;
+                if (value.SceneName == AuthoritativeNetworkManager.LobbyScene) { context.SceneLoaded = false; return; }
                 if (!IsGameplayScene(value.SceneName) && SceneManager.GetActiveScene().path != EntryProtocol.GameplayScene)
                 { RequestDisconnect("服务器场景无法进入，请更新客户端。"); return; }
                 if (!context.SceneLoaded) { context.SceneLoaded = true; context.SceneLoadedAt = Now; }
@@ -211,6 +246,7 @@ namespace RPG4.Frontend
             gameplayFailureHandler = value =>
             {
                 if (!ObserveIdentity(value.Session) || !IsBusinessCurrent(attempt) || !context.Accepted) return;
+                if (raid.Phase != RaidPhase.Loading && raid.Phase != RaidPhase.Active) return;
                 var current = manager.CurrentGameplayLifecycle;
                 if (value.Revision < context.Revision || value.Revision != current.Revision
                     || value.ServerWorldGeneration != current.ServerWorldGeneration
@@ -222,10 +258,26 @@ namespace RPG4.Frontend
             manager.ClientSceneChanging += changingHandler; manager.ClientSceneLoaded += loadedHandler;
             manager.ClientConnectionEnded += endedHandler; manager.ClientFailure += failureHandler;
             manager.LocalGameplayReadyChanged += gameplayHandler; manager.GameplayFailure += gameplayFailureHandler;
+            lobbyChangedHandler = () =>
+            {
+                if (!IsBusinessCurrent(attempt)) return;
+                LobbyInventoryChanged?.Invoke(); PublishStatus();
+            };
+            raidChangedHandler = () =>
+            {
+                if (!IsBusinessCurrent(attempt)) return;
+                if (raid.Phase == RaidPhase.Loading && observedRaidPhase != RaidPhase.Loading)
+                { context.SceneLoaded = false; context.SceneChangingAt = Now; }
+                observedRaidPhase = raid.Phase;
+                if (raid.Phase != RaidPhase.Active) CloseLocalInput();
+                PublishStatus();
+            };
+            raid.InventoryChanged += lobbyChangedHandler; raid.Changed += raidChangedHandler;
         }
         private static bool IsGameplayScene(string scene) => scene == EntryProtocol.GameplayScene || scene == "OnlineGame";
         private void ObserveGameplay(GameplayLifecycleEvent value)
         {
+            if (manager == null || (raid.Phase != RaidPhase.Loading && raid.Phase != RaidPhase.Active)) return;
             if (!context.Accepted || !IsBusinessCurrent(context.AttemptId) || !ObserveIdentity(value.Session)
                 || value.Revision < context.Revision) return;
             var current = manager.CurrentGameplayLifecycle;
@@ -247,9 +299,25 @@ namespace RPG4.Frontend
         }
         public void Cancel()
         {
+            if (State == ClientSessionState.LoadingGameplay || State == ClientSessionState.AwaitingPlayer)
+            { TryReturnToLobby(out _); return; }
             // Connect/Authenticate may run before the hierarchical machine has left MenuIdle this frame.
             if (context.LoginRequested || (State != ClientSessionState.MenuIdle && State != ClientSessionState.Bootstrapping))
                 RequestDisconnect(null);
+        }
+        public bool TryStartGame(out string reason)
+        {
+            if (!CanStartGame) { reason = "大厅或仓库尚未就绪，暂时无法出战。"; return false; }
+            context.SceneLoaded = false; context.SceneChangingAt = Now;
+            return raid.TryStartRaid(out reason);
+        }
+        public bool TryReturnToLobby(out string reason)
+        {
+            if (manager == null) { reason = "登录连接已结束。"; return false; }
+            if (State == ClientSessionState.Lobby) { reason = null; return true; }
+            if (State == ClientSessionState.Settling || State == ClientSessionState.ReturningLobby)
+            { reason = "正在结算，保存完成后将自动返回大厅。"; return false; }
+            return raid.TryAbandonRaid(out reason);
         }
         public void RequestQuit()
         {
@@ -259,6 +327,7 @@ namespace RPG4.Frontend
         }
         private void RequestDisconnect(string failure)
         {
+            ClearPendingRememberedLogin();
             if (!string.IsNullOrEmpty(failure) && string.IsNullOrEmpty(context.FirstFailure)) context.FirstFailure = failure;
             CloseLocalInput();
             if (context.DisconnectRequested) return;
@@ -276,12 +345,20 @@ namespace RPG4.Frontend
                 case ClientSessionState.Bootstrapping: return IsMenuLoaded() ? ClientSessionState.MenuIdle : state;
                 case ClientSessionState.MenuIdle: return context.LoginRequested ? ClientSessionState.Connecting : state;
                 case ClientSessionState.Connecting: return context.Secure ? ClientSessionState.Authenticating : state;
-                case ClientSessionState.Authenticating: return context.Accepted ? ClientSessionState.LoadingGameplay : state;
-                case ClientSessionState.LoadingGameplay: return context.SceneLoaded ? ClientSessionState.AwaitingPlayer : state;
+                case ClientSessionState.Authenticating: return context.Accepted ? ClientSessionState.LoadingLobby : state;
+                case ClientSessionState.LoadingLobby: return raid != null && raid.LobbyVisible && raid.IsInventoryReady ? ClientSessionState.Lobby : state;
+                case ClientSessionState.Lobby: return raid != null && raid.Phase == RaidPhase.Loading ? ClientSessionState.LoadingGameplay : state;
+                case ClientSessionState.LoadingGameplay: return raid != null && raid.Phase == RaidPhase.Settling ? ClientSessionState.Settling
+                    : raid != null && raid.LobbyVisible ? ClientSessionState.Lobby : context.SceneLoaded ? ClientSessionState.AwaitingPlayer : state;
                 case ClientSessionState.AwaitingPlayer: return !context.SceneLoaded ? ClientSessionState.LoadingGameplay
+                    : raid != null && raid.Phase == RaidPhase.Settling ? ClientSessionState.Settling
                     : manager != null && manager.IsLocalGameplayReady ? ClientSessionState.Playing : state;
-                case ClientSessionState.Playing: return !context.SceneLoaded ? ClientSessionState.LoadingGameplay
+                case ClientSessionState.Playing: return raid != null && raid.Phase == RaidPhase.Settling ? ClientSessionState.Settling
+                    : raid != null && raid.Phase == RaidPhase.Returned ? ClientSessionState.ReturningLobby : !context.SceneLoaded ? ClientSessionState.LoadingGameplay
                     : manager == null || !manager.IsLocalGameplayReady ? ClientSessionState.AwaitingPlayer : state;
+                case ClientSessionState.Settling: return raid != null && raid.LobbyVisible ? ClientSessionState.Lobby
+                    : raid != null && raid.Phase == RaidPhase.Returned ? ClientSessionState.ReturningLobby : state;
+                case ClientSessionState.ReturningLobby: return raid != null && raid.LobbyVisible && raid.IsInventoryReady ? ClientSessionState.Lobby : state;
                 case ClientSessionState.Disconnecting: return context.CleanupComplete ? ClientSessionState.MenuIdle : state;
                 default: return state;
             }
@@ -294,8 +371,9 @@ namespace RPG4.Frontend
             {
                 case ClientSessionState.Connecting: context.Deadline = context.StartedAt + connectionTimeout; break;
                 case ClientSessionState.Authenticating: context.Deadline = context.SecureAt + authenticationTimeout; break;
+                case ClientSessionState.LoadingLobby: context.Deadline = Now + sceneTimeout; break;
                 case ClientSessionState.LoadingGameplay:
-                    context.Deadline = (context.HasPlayed ? context.SceneChangingAt : context.AcceptedAt) + sceneTimeout; break;
+                    context.Deadline = (context.SceneChangingAt > 0 ? context.SceneChangingAt : Now) + sceneTimeout; break;
                 case ClientSessionState.AwaitingPlayer: context.Deadline = (readinessLost ? Now : context.SceneLoadedAt > 0 ? context.SceneLoadedAt : Now) + playerTimeout; break;
                 default: context.Deadline = 0; break;
             }
@@ -304,6 +382,7 @@ namespace RPG4.Frontend
             if (state == ClientSessionState.Disconnecting) BeginStop();
             if (state == ClientSessionState.MenuIdle)
             { context.LoginRequested = context.DisconnectRequested = context.CleanupComplete = false; Cursor.lockState = CursorLockMode.None; Cursor.visible = true; }
+            if (state == ClientSessionState.Lobby) { Cursor.lockState = CursorLockMode.None; Cursor.visible = true; }
             PublishStatus();
         }
         internal void UpdateState(ClientSessionState state)
@@ -314,6 +393,7 @@ namespace RPG4.Frontend
         }
         private void BeginStop()
         {
+            ClearPendingRememberedLogin();
             if (context.StopRequested) return;
             CloseLocalInput(); context.StopRequested = true;
             // Only authentication subscriptions are business callbacks; manager observations stay until truly stopped.
@@ -335,7 +415,7 @@ namespace RPG4.Frontend
             if (manager != null && !context.DestroyRequested)
             { context.DestroyRequested = true; Destroy(manager.gameObject); return; }
             if (manager != null || AuthoritativeNetworkManager.ObserveClientSceneChangePending()) return;
-            localPlayer = null; authenticator = null; context.Connection = null;
+            localPlayer = null; authenticator = null; raid = null; raidInventory = null; context.Connection = null;
             context.RequestId = context.AuthenticatedSessionId = null;
             if (context.Quit) { Application.Quit(); return; }
             EnsureMenu();
@@ -370,6 +450,8 @@ namespace RPG4.Frontend
         }
         private void Unsubscribe()
         {
+            if (raid != null)
+            { raid.InventoryChanged -= lobbyChangedHandler; raid.Changed -= raidChangedHandler; }
             if (!ReferenceEquals(authenticator, null))
             { authenticator.SecureConnectionReady -= secureHandler; authenticator.AuthenticationCompleted -= authenticationHandler; }
             if (!ReferenceEquals(manager, null))
@@ -388,6 +470,21 @@ namespace RPG4.Frontend
                 try { ((Action<ClientSessionStatus>)handler)(Status); }
                 catch (Exception) { Debug.LogError("A frontend status subscriber failed.", this); }
         }
+        private void SaveRememberedLogin(long attempt)
+        {
+            if (pendingRememberAttempt != attempt) return;
+            try
+            {
+                if (!RememberedLoginStore.TrySave(pendingRememberServer, pendingRememberFingerprint,
+                    pendingRememberUsername, pendingRememberPassword, out string reason)) rememberPasswordNotice = reason;
+            }
+            finally { ClearPendingRememberedLogin(); }
+        }
+        private void ClearPendingRememberedLogin()
+        {
+            pendingRememberAttempt = 0;
+            pendingRememberServer = pendingRememberFingerprint = pendingRememberUsername = pendingRememberPassword = null;
+        }
         private void PublishCredentialsDispatched()
         {
             var handlers = CredentialsDispatched;
@@ -403,15 +500,20 @@ namespace RPG4.Frontend
                 case ClientSessionState.Bootstrapping: return "正在准备主菜单…";
                 case ClientSessionState.Connecting: return "正在连接服务器…";
                 case ClientSessionState.Authenticating: return "正在验证账号…";
+                case ClientSessionState.LoadingLobby: return "正在进入大厅并读取仓库…";
+                case ClientSessionState.Lobby: return "已登录大厅";
                 case ClientSessionState.LoadingGameplay: return "正在进入场景…";
                 case ClientSessionState.AwaitingPlayer: return "正在同步角色与界面…";
                 case ClientSessionState.Playing: return "已进入游戏";
+                case ClientSessionState.Settling: return "正在保存战局结果，请稍候…";
+                case ClientSessionState.ReturningLobby: return "正在返回大厅…";
                 case ClientSessionState.Disconnecting: return "正在断开连接并返回菜单…";
                 default: return "请选择服务器并登录";
             }
         }
         private void OnDestroy()
         {
+            ClearPendingRememberedLogin();
             if (Instance != this) return;
             ++generation; CloseLocalInput(); Unsubscribe();
             // A public status subscriber can destroy us during State.OnEnter; do not invalidate the HSM's

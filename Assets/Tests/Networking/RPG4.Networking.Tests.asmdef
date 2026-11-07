@@ -1,0 +1,7 @@
+{
+    "name": "RPG4.Networking.Tests",
+    "references": ["RPG4.Networking", "RPG4.PlayerMovement", "RPG4.PlayerIntent", "Mirror"],
+    "includePlatforms": ["Editor"],
+    "optionalUnityReferences": ["TestAssemblies"],
+    "autoReferenced": false
+}

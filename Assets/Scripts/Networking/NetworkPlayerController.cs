@@ -15,21 +15,20 @@ namespace RPG4.Networking
     [DisallowMultipleComponent]
     [DefaultExecutionOrder(-300)]
     [RequireComponent(typeof(NetworkIdentity), typeof(Player))]
-    public sealed class NetworkPlayerController : NetworkBehaviour
+    public sealed partial class NetworkPlayerController : NetworkBehaviour
     {
         [SerializeField, Range(0.1f, 0.5f)] private float inputTimeout = 0.25f;
         [SerializeField, Range(1, 4)] private int gapWaitTicks = 2;
         [SerializeField, Range(1, 4)] private int snapshotEveryTicks = 1;
         [SerializeField, Range(0.02f, 0.25f)] private float interpolationDelay = 0.1f;
         [SerializeField] private Behaviour[] additionalClientPresentationBehaviours = Array.Empty<Behaviour>();
-        private const int PredictionCapacity = 128, OperationCapacity = 32;
+        private const int OperationCapacity = 32;
         private const int StateStream = 1, ShotStream = 2;
         private const double OwnerStateMaxDelay = 0.1d, ShotLifetime = 0.3d;
         private readonly ServerPlayerInputBuffer serverInputs = new ServerPlayerInputBuffer();
-        private readonly List<PlayerInputPacket> predictions = new List<PlayerInputPacket>(PredictionCapacity);
-        private readonly List<PlayerNetworkState> snapshots = new List<PlayerNetworkState>(32);
+        private readonly PlayerSnapshotTimeline snapshots = new PlayerSnapshotTimeline();
         private readonly Queue<Operation> operations = new Queue<Operation>();
-        private struct Operation { internal Action Execute; internal Action<string> Reject; }
+        private struct Operation { internal Action Execute; internal Action<string> Reject; internal double Received; }
         private Player player;
         private readonly Dictionary<Behaviour, bool> visualBehaviours = new Dictionary<Behaviour, bool>();
         private BackpackNetworkInventory inventory;
@@ -45,11 +44,16 @@ namespace RPG4.Networking
         private struct PendingShot { internal NetworkShotPresentation Shot; internal double Received; }
         private readonly List<OwnerPublication> ownerPublications = new List<OwnerPublication>(128);
         private struct OwnerPublication { internal long Tick; internal double SentAt; }
+        private struct ActionRequest { internal ulong Id, WeaponId, InputSequence; internal byte Kind; internal double Received; }
+        private readonly Queue<ActionRequest> actionRequests = new Queue<ActionRequest>(32);
+        private ulong nextActionRequest = 1, lastActionRequest, ownerTriggerRequest, triggerRequest, triggerWeapon;
+        private uint triggerOrdinal;
+        private struct ShotCorrelation { internal ulong Request; internal uint Ordinal; }
+        private readonly Dictionary<(ulong Weapon, ulong Shot), ShotCorrelation> shotCorrelations
+            = new Dictionary<(ulong Weapon, ulong Shot), ShotCorrelation>();
         private long lastServerTick, lastPublishedTick;
         private bool timeoutCleared;
         private double acceptedRewindDelay;
-        private double receivedAt;
-        private PlayerNetworkState latestState;
         private PlayerInputPacket previous, older;
         public Player Player => player;
         public long LastServerTick => lastServerTick;
@@ -74,6 +78,12 @@ namespace RPG4.Networking
                     if (behaviour != null && !visualBehaviours.ContainsKey(behaviour))
                         visualBehaviours.Add(behaviour, behaviour.enabled);
             SetClientPresentation(false);
+#if !UNITY_SERVER
+            // 在客户端动画/Rig 求值前采集原始骨骼，避免头发选区被初始姿态偏移裁成空网格。
+            // 这里只初始化；构建和模拟仍由客户端表现组件启用后的 Start 驱动。
+            foreach (var entry in visualBehaviours)
+                if (entry.Value && entry.Key is MagicaCloth2.MagicaCloth cloth) cloth.Initialize();
+#endif
             inventory = GetComponent<BackpackNetworkInventory>();
             characterBackpack = GetComponent<CharacterBackpack>();
             replicatedEquipment = GetComponent<BackpackNetworkEquipment>();
@@ -93,11 +103,14 @@ namespace RPG4.Networking
             player.ConfigureNetworkSimulation(true, isLocalPlayer);
             player.Attributes.ConfigureAuthority(true);
             player.Attributes.Died += OnServerDied;
+            player.Attributes.Revived += OnServerRevived;
             player.Equipment?.ConfigureAuthority(true, true);
             if (player.Equipment != null) player.Equipment.ShotResolved += OnShotResolved;
             if (inventory != null)
             {
                 inventory.ServerOperationScheduler = QueueOperation;
+                inventory.ServerConsumableUse = operation => player.Consumables.TryStart(inventory.AuthorityCore, operation, NetworkPlayerSimulation.Time);
+                inventory.ConsumableStateProvider = () => player.Consumables != null ? player.Consumables.GetViewState() : default;
                 inventory.ServerAccessValidator = ValidateAccess;
                 inventory.ServerBeforeEquipmentOrWeaponOperation = () => player.Equipment?.CancelWeaponActionForTransaction();
                 inventory.ServerBeforeWeaponOperation = operation => player.Equipment?.PrepareWeaponOperation(operation);
@@ -108,6 +121,7 @@ namespace RPG4.Networking
         {
             base.OnStartClient();
             clientStarted = true;
+            if (inventory != null) inventory.ConsumableStateProvider = () => player.Consumables != null ? player.Consumables.GetViewState() : default;
             if (replicatedEquipment != null)
             {
                 replicatedEquipment.AppearanceChanged += OnAppearanceChanged;
@@ -125,10 +139,13 @@ namespace RPG4.Networking
         public override void OnStartAuthority() { base.OnStartAuthority(); if (clientStarted) RefreshRole(); }
         public override void OnStopAuthority()
         {
+            InvalidateMovementSession();
             ResetInitialAuthoritativeState();
             player.Input.SetNetworkLocalInput(false);
+            player.ResetOwnerPresentation();
+            player.Equipment?.SetLocalPresentationWeapon(null);
             ClearLocalInputEdges();
-            player.ClearIntent(); predictions.Clear();
+            player.ClearIntent();
             if (characterBackpack != null) characterBackpack.IsLocalPlayer = false;
             SetLocalCameras(false);
             base.OnStopAuthority();
@@ -149,6 +166,7 @@ namespace RPG4.Networking
             SetClientPresentation(clientStarted);
             if (characterBackpack != null) characterBackpack.IsLocalPlayer = local;
             SetLocalCameras(local);
+            EnableOwnerMovementHistory();
         }
         private void ApplyDefaultLocalInputGate()
         {
@@ -172,12 +190,19 @@ namespace RPG4.Networking
         public void ClearLocalInputEdges()
         {
             localInput?.ClearLocalInputEdges();
-            predictions.Clear();
+            ClearOwnerMovementInput();
+
             previous = older = default;
+            ownerTriggerRequest = 0;
+            player?.ResetOwnerPresentation();
+            if (clientStarted && ready && isLocalPlayer && isOwned && !serverStarted
+                && NetworkClient.isConnected && NetworkClient.ready)
+                CmdCancelActions(nextActionRequest - 1);
             // Host's device feeds the same authoritative buffer; discard its queued samples without cancelling actions.
             if (serverStarted && isLocalPlayer && isOwned)
             {
                 serverInputs.DiscardPending();
+                RejectPendingActions();
                 timeoutCleared = true;
             }
         }
@@ -231,7 +256,7 @@ namespace RPG4.Networking
         private bool QueueOperation(Action execute, Action<string> reject)
         {
             if (!ValidateAccess(connectionToClient) || execute == null || operations.Count >= OperationCapacity) return false;
-            operations.Enqueue(new Operation { Execute = execute, Reject = reject });
+            operations.Enqueue(new Operation { Execute = execute, Reject = reject, Received = Time.realtimeSinceStartupAsDouble });
             return true;
         }
         internal void DrainOperations()
@@ -241,13 +266,26 @@ namespace RPG4.Networking
             for (int i = 0; i < count; i++)
             {
                 Operation op = operations.Dequeue();
+                if (Time.realtimeSinceStartupAsDouble - op.Received > 1d) { Reject(op, "库存请求已过期。"); continue; }
                 if (!ValidateAccess(connectionToClient)) { Reject(op, "角色当前不可交互。"); continue; }
                 try { op.Execute(); }
                 catch (Exception exception) { Debug.LogException(exception, this); Reject(op, "操作执行失败。"); }
             }
         }
         private void OnServerDied()
-        { serverInputs.DiscardPending(); RejectOperations("角色已死亡。"); }
+        {
+            player.CancelConsumableUse();
+            serverInputs.DiscardPending(); RejectPendingActions(); RejectOperations("角色已死亡。");
+            constraintRevision++;
+            pendingHardBaseline = true; correctionReason = MovementRejectReason.AuthorityChanged;
+            if (NetworkManager.singleton is AuthoritativeNetworkManager manager) manager.OnServerPlayerDied(this);
+        }
+        private void OnServerRevived()
+        {
+            serverInputs.DiscardPending(); RejectPendingActions();
+            constraintRevision++;
+            pendingHardBaseline = true; correctionReason = MovementRejectReason.AuthorityChanged;
+        }
         private void Reject(Operation operation, string reason)
         {
             try { operation.Reject?.Invoke(reason); }
@@ -258,41 +296,89 @@ namespace RPG4.Networking
         private void FixedUpdate() => NetworkPlayerSimulation.FixedStep();
         internal void SampleOwner(long tick, float deltaTime)
         {
-            if (!clientStarted || !isLocalPlayer || !isOwned || !localGameplayInputAllowed || (!serverStarted && !ready)) return;
-            PlayerInputFrame frame = player.Input.ConsumeSimulationInput();
-            var packet = new PlayerInputPacket
-            {
-                Sequence = nextSequence++, ObservedServerTick = serverStarted ? tick : lastServerTick,
-                Move = frame.Move, Look = frame.Look,
-                Crouch = frame.CrouchHeld, Aim = frame.AimHeld, FirePressed = frame.FirePressed,
-                FireHeld = frame.FireHeld, Reload = frame.ReloadPressed, Interact = frame.InteractPressed
-            };
-            if (serverStarted) ReceiveInputs(packet, previous, older);
-            else
-            {
-                if (predictions.Count == PredictionCapacity) predictions.RemoveAt(0);
-                predictions.Add(packet);
-                player.PredictNetworkMovement(packet.ToFrame(), player.SimulationTick + 1,
-                    player.SimulationTime + deltaTime, deltaTime);
-                CmdInputs(packet, previous, older);
-            }
-            older = previous; previous = packet;
+            if (!clientStarted || !isLocalPlayer || !isOwned) return;
+            // Recover readiness before the gameplay gate: a disabled owner may have missed a reliable baseline.
+            if (!serverStarted && !movementHistory.HasBaseline) { SampleMovementOwner(tick, deltaTime); return; }
+            if (!localGameplayInputAllowed || (!serverStarted && !ready)) return;
+            SampleMovementOwner(tick, deltaTime);
         }
-        [Command(channel = Channels.Unreliable)]
-        private void CmdInputs(PlayerInputPacket newest, PlayerInputPacket previousPacket, PlayerInputPacket olderPacket)
-            => ReceiveInputs(newest, previousPacket, olderPacket);
         private void ReceiveInputs(PlayerInputPacket newest, PlayerInputPacket previousPacket, PlayerInputPacket olderPacket)
         {
-            if (!serverStarted || !ValidateAccess(connectionToClient)) return;
+            if (!serverStarted || !isLocalPlayer || !ValidateAccess(connectionToClient)) return;
             int timeout = Mathf.Max(1, Mathf.CeilToInt(inputTimeout / Time.fixedDeltaTime));
             long tick = NetworkPlayerSimulation.Tick;
             AcceptPacket(olderPacket, tick, timeout);
             AcceptPacket(previousPacket, tick, timeout);
             AcceptPacket(newest, tick, timeout);
         }
+        private void SubmitOwnerActions(PlayerInputFrame frame)
+        {
+            if (frame.ReloadPressed) SubmitOwnerAction(frame, 2);
+            if (frame.FirePressed) SubmitOwnerAction(frame, 1);
+        }
+        private void SubmitOwnerAction(PlayerInputFrame frame, byte kind)
+        {
+            ulong id = nextActionRequest++;
+            ownerTriggerRequest = kind == 1 && frame.FireHeld ? id : 0;
+            ulong weapon = player.PublishedFrame.WeaponId;
+            if (!serverStarted)
+            {
+                var edge = new PlayerInputFrame(frame.Move, crouchHeld: frame.CrouchHeld, aimHeld: frame.AimHeld,
+                    firePressed: kind == 1, fireHeld: frame.FireHeld, reloadPressed: kind == 2);
+                player.AnticipateLocalActions(edge, id, Time.unscaledTimeAsDouble);
+                CmdAction(id, kind, weapon, nextSequence);
+            }
+            else ReceiveAction(id, kind, weapon, nextSequence);
+        }
+        // Reliable edges have their own result. A movement watermark never means an action succeeded.
+        [Command]
+        private void CmdAction(ulong requestId, byte kind, ulong weaponId, ulong inputSequence)
+            => ReceiveAction(requestId, kind, weaponId, inputSequence);
+        [Command]
+        private void CmdCancelActions(ulong throughRequest)
+        {
+            if (!serverStarted) return;
+            lastActionRequest = Math.Max(lastActionRequest, throughRequest);
+            RejectPendingActions();
+        }
+        private void ReceiveAction(ulong id, byte kind, ulong weapon, ulong inputSequence)
+        {
+            if (!serverStarted || id == 0 || id <= lastActionRequest) return;
+            lastActionRequest = id;
+            if (!ValidateAccess(connectionToClient) || lastPublishedTick <= 0 && !isLocalPlayer
+                || (kind != 1 && kind != 2) || inputSequence == 0 || actionRequests.Count >= 32)
+            { SendActionResult(id, false, weapon, 0, NetworkPlayerSimulation.Time, 0); return; }
+            actionRequests.Enqueue(new ActionRequest { Id = id, Kind = kind, WeaponId = weapon, InputSequence = inputSequence,
+                Received = Time.realtimeSinceStartupAsDouble });
+        }
+        private void SendActionResult(ulong id, bool accepted, ulong weapon, ulong shot, double time, uint ordinal)
+        {
+            if (serverStarted && NetworkServer.active && connectionToClient != null && !isLocalPlayer)
+                TargetActionResult(connectionToClient, id, accepted, weapon, shot, time, ordinal);
+        }
+        [TargetRpc]
+        private void TargetActionResult(NetworkConnectionToClient recipient, ulong id, bool accepted,
+            ulong weapon, ulong shot, double time, uint ordinal)
+        {
+            if (clientStarted && !serverStarted && isLocalPlayer && isOwned)
+                player.ApplyLocalActionResult(id, accepted, weapon, shot, time, ordinal);
+        }
+        private void RejectPendingActions()
+        {
+            while (actionRequests.Count > 0)
+            {
+                ActionRequest action = actionRequests.Dequeue();
+                SendActionResult(action.Id, false, action.WeaponId, 0, NetworkPlayerSimulation.Time, 0);
+            }
+            triggerRequest = triggerWeapon = 0; triggerOrdinal = 0;
+        }
         private void AcceptPacket(PlayerInputPacket packet, long tick, int timeout)
         {
-            if (packet.Sequence == 0) return;
+            if (packet.Sequence != 0 && ObservationIsFresh(packet, tick)) serverInputs.Enqueue(packet, tick, timeout);
+        }
+        private bool ObservationIsFresh(PlayerInputPacket packet, long tick)
+        {
+            if (!packet.IsValid) return false;
             double oneWay = connectionToClient != null ? Math.Max(0d, connectionToClient.rtt * 0.5d) : 0d;
             double rtt = oneWay * 2d;
             // A snapshot travels down before its observed tick travels back up. Bootstrap tolerates
@@ -312,15 +398,44 @@ namespace RPG4.Networking
             // Host input is sampled in this server tick. Remote claims must refer to snapshots actually sent.
             long ceiling = isLocalPlayer ? tick : lastPublishedTick;
             if (packet.ObservedServerTick <= 0 || packet.ObservedServerTick > ceiling
-                || packet.ObservedServerTick < tick - delayBudget) return;
-            serverInputs.Enqueue(packet, tick, timeout);
+                || packet.ObservedServerTick < tick - delayBudget) return false;
+            return true;
         }
         internal void MoveServer(long tick, double time, float deltaTime)
         {
             if (!serverStarted) return;
+            DetectExternalMotorChange();
             int timeout = Mathf.Max(1, Mathf.CeilToInt(inputTimeout / deltaTime));
-            PlayerInputFrame frame = serverInputs.Consume(tick, timeout, gapWaitTicks);
-            if (serverInputs.TimedOut)
+            PlayerInputFrame frame = isLocalPlayer ? serverInputs.Consume(tick, timeout, gapWaitTicks) : TakeMovementInput(tick);
+            ActionRequest action = default;
+            while (actionRequests.Count > 0)
+            {
+                ActionRequest candidate = actionRequests.Peek();
+                if (Time.realtimeSinceStartupAsDouble - candidate.Received > inputTimeout
+                    || !ValidateAccess(connectionToClient) || !player.CanAcceptNetworkAction(candidate.Kind, candidate.WeaponId))
+                { actionRequests.Dequeue(); SendActionResult(candidate.Id, false, candidate.WeaponId, 0, time, 0); continue; }
+                if ((isLocalPlayer ? serverInputs.Acknowledged : (hasMovementReport ? movementReport.Input.Sequence : movementTimeline.ProcessedInputSequence)) < candidate.InputSequence) break;
+                // Ack can skip a lost/expired sample. Require an actually consumed, still-fresh
+                // input context, even when the reliable action itself arrived only just now.
+                long inputReceived;
+                bool hasReceipt = isLocalPlayer ? serverInputs.TryGetConsumedInputReceipt(candidate.InputSequence, out inputReceived)
+                    : movementTimeline.TryGetConsumedInputReceipt(candidate.InputSequence, out inputReceived);
+                if (!hasReceipt || tick - inputReceived > timeout)
+                { actionRequests.Dequeue(); SendActionResult(candidate.Id, false, candidate.WeaponId, 0, time, 0); continue; }
+                action = actionRequests.Dequeue();
+                break;
+            }
+            if (!frame.FireHeld || (isLocalPlayer ? serverInputs.FireRequestId : currentFireRequest) != triggerRequest || action.Kind == 2
+                || triggerWeapon != player.PublishedFrame.WeaponId)
+            { triggerRequest = triggerWeapon = 0; triggerOrdinal = 0; }
+            if (action.Kind == 1)
+            { triggerRequest = action.Id; triggerWeapon = action.WeaponId; triggerOrdinal = 0; }
+            frame = new PlayerInputFrame(frame.Move, look: frame.Look, crouchHeld: frame.CrouchHeld,
+                aimHeld: frame.AimHeld, firePressed: action.Kind == 1,
+                fireHeld: frame.FireHeld && triggerRequest != 0 && (isLocalPlayer ? serverInputs.FireRequestId : currentFireRequest) == triggerRequest,
+                reloadPressed: action.Kind == 2,
+                interactPressed: frame.InteractPressed);
+            if (isLocalPlayer ? serverInputs.TimedOut : movementTimedOut)
             {
                 if (!timeoutCleared) player.ClearIntent();
                 timeoutCleared = true;
@@ -330,7 +445,24 @@ namespace RPG4.Networking
             acceptedRewindDelay = isLocalPlayer ? 0d : Math.Min(ServerCombatHistory.MaximumRewindSeconds,
                 Math.Max(0d, connectionToClient != null ? connectionToClient.rtt * 0.5d : 0d) + interpolationDelay);
             if (!ValidateAccess(connectionToClient)) { frame = default; player.ClearIntent(); RejectOperations("角色当前不可交互。"); }
-            player.SimulateNetworkTick(frame, tick, time, deltaTime);
+            var firingWeapon = player.Equipment != null ? player.Equipment.CurrentWeapon : null;
+            ulong priorShot = firingWeapon != null ? firingWeapon.Item.WeaponState.ShotSequence : 0;
+            player.SimulateNetworkTick(frame, tick, time, deltaTime, this);
+            FinishMovementStep();
+            // Freeze association at acceptance, before combat callbacks can kill/cancel the shooter.
+            if (triggerRequest != 0 && firingWeapon != null && firingWeapon.ItemId.Value == triggerWeapon
+                && firingWeapon.Item.WeaponState.ShotSequence > priorShot)
+            {
+                if (shotCorrelations.Count >= 64) shotCorrelations.Clear();
+                shotCorrelations[(triggerWeapon, firingWeapon.Item.WeaponState.ShotSequence)]
+                    = new ShotCorrelation { Request = triggerRequest, Ordinal = ++triggerOrdinal };
+            }
+            if (action.Id != 0)
+            {
+                bool accepted = player.WasNetworkActionAccepted(action.Kind);
+                SendActionResult(action.Id, accepted, action.WeaponId, 0, time, 0);
+                if (!accepted && action.Kind == 1) { triggerRequest = triggerWeapon = 0; triggerOrdinal = 0; }
+            }
             if (NetworkServer.aoi is BackpackSpatialInterestManagement spatial)
                 spatial.NotifyIdentityMoved(netIdentity);
         }
@@ -339,6 +471,17 @@ namespace RPG4.Networking
             if (!serverStarted || player.Equipment == null) return;
             double rewind = time - acceptedRewindDelay;
             player.Equipment.FlushPendingShots(null, history, rewind);
+        }
+        internal void CompleteDueUse(double now)
+        {
+            if (!serverStarted) return;
+            player.Consumables?.CompleteDueUse(now);
+            var current = player.Consumables != null ? player.Consumables.State : default;
+            if (hasRuleFingerprint && !current.Equals(ruleAuthority.Consumable))
+            {
+                constraintRevision++; ruleAuthority.Consumable = current;
+                pendingCorrection = true; correctionReason = MovementRejectReason.AuthorityChanged;
+            }
         }
         internal void PublishServer(long tick)
         {
@@ -350,27 +493,16 @@ namespace RPG4.Networking
                 lastServerTick = tick;
                 MarkInitialAuthoritativeStateReceived();
             }
+            PublishOwnerMovement(tick);
             if (tick % snapshotEveryTicks == 0)
             {
                 PlayerNetworkState state = PlayerNetworkState.Capture(player);
-                ulong acknowledged = serverInputs.Acknowledged;
                 foreach (NetworkConnectionToClient observer in netIdentity.observers.Values)
                 {
                     NetworkConnectionToClient recipient = observer;
-                    bool owner = ReferenceEquals(recipient, connectionToClient);
-                    NetworkSendScheduler.QueueLatest(recipient, netId, StateStream, owner ? 3 : 1, 256,
-                        owner ? OwnerStateMaxDelay : 0.25d, 0d,
-                        () =>
-                        {
-                            TargetState(recipient, state, acknowledged);
-                            if (ReferenceEquals(recipient, connectionToClient))
-                            {
-                                lastPublishedTick = state.Tick;
-                                if (ownerPublications.Count == 128) ownerPublications.RemoveAt(0);
-                                ownerPublications.Add(new OwnerPublication
-                                { Tick = state.Tick, SentAt = Time.realtimeSinceStartupAsDouble });
-                            }
-                        }, () => CanSendTo(recipient));
+                    if (ReferenceEquals(recipient, connectionToClient)) continue;
+                    NetworkSendScheduler.QueueLatest(recipient, netId, StateStream, 1, 256, 0.25d, 0d,
+                        () => TargetState(recipient, state, 0), () => CanSendTo(recipient));
                 }
             }
         }
@@ -383,48 +515,19 @@ namespace RPG4.Networking
         [TargetRpc(channel = Channels.Unreliable)]
         private void TargetState(NetworkConnectionToClient recipient, PlayerNetworkState state, ulong acknowledged)
         {
-            if (!clientStarted || !isActiveAndEnabled || serverStarted || state.Tick <= lastServerTick) return;
+            if (!clientStarted || !isActiveAndEnabled || serverStarted || isLocalPlayer && isOwned || state.Tick <= lastServerTick || !MovementValues.Valid(state.Consumable)) return;
             lastServerTick = state.Tick;
-            latestState = state;
-            receivedAt = Time.timeAsDouble;
             player.Attributes.ApplyReplicatedHealth(state.MaxHealth, state.Health);
-            if (isLocalPlayer && isOwned && inventory != null)
-                inventory.UpdateWeaponAction(state.Reloading, state.ReloadPhase, state.Time, state.ReloadDuration);
-            if (isLocalPlayer && isOwned)
-            {
-                predictions.RemoveAll(p => p.Sequence <= acknowledged);
-                player.ApplyNetworkPresentation(state);
-                player.RestoreMotorState(state.Motor);
-                for (int i = 0; localGameplayInputAllowed && i < predictions.Count; i++)
-                    player.PredictNetworkMovement(predictions[i].ToFrame(), state.Tick + i + 1,
-                        state.Time + (i + 1) * Time.fixedDeltaTime, Time.fixedDeltaTime);
-            }
-            else
-            {
-                if (snapshots.Count == 32) snapshots.RemoveAt(0);
-                snapshots.Add(state);
-                if (snapshots.Count == 1) ApplyRemote(state);
-            }
+            snapshots.Insert(state, snapshotEveryTicks * Time.fixedDeltaTime, interpolationDelay);
+            if (snapshots.Count == 1) ApplyRemote(snapshots.Step(0f));
             DrainPendingShots();
             MarkInitialAuthoritativeStateReceived();
         }
         private void Update()
         {
             if (!clientStarted || serverStarted || isLocalPlayer || snapshots.Count == 0) return;
-            double renderTime = latestState.Time + (Time.timeAsDouble - receivedAt) - interpolationDelay;
-            while (snapshots.Count > 2 && snapshots[1].Time <= renderTime) snapshots.RemoveAt(0);
-            PlayerNetworkState a = snapshots[0], b = snapshots.Count > 1 ? snapshots[1] : a;
-            float t = b.Time > a.Time ? Mathf.Clamp01((float)((renderTime - a.Time) / (b.Time - a.Time))) : 1f;
-            PlayerNetworkState result = t < 1f ? a : b;
-            PlayerMotorState motor = result.Motor;
-            motor.Position = Vector3.Lerp(a.Motor.Position, b.Motor.Position, t);
-            motor.Velocity = Vector3.Lerp(a.Motor.Velocity, b.Motor.Velocity, t);
-            motor.Yaw = Mathf.LerpAngle(a.Motor.Yaw, b.Motor.Yaw, t);
-            result.Motor = motor;
-            result.ViewYaw = Mathf.LerpAngle(a.ViewYaw, b.ViewYaw, t);
-            result.ViewPitch = Mathf.Lerp(a.ViewPitch, b.ViewPitch, t);
-            result.Time = a.Time + (b.Time - a.Time) * t;
-            ApplyRemote(result);
+            ApplyRemote(snapshots.Step(Time.unscaledDeltaTime));
+            DrainPendingShots();
         }
         private void ApplyRemote(PlayerNetworkState state)
         { player.RestoreMotorState(state.Motor); player.ApplyNetworkPresentation(state); }
@@ -446,6 +549,13 @@ namespace RPG4.Networking
                 DamageApplied = damage, Obstructed = obstructed, Impacts = impacts,
                 ServerTime = NetworkTime.time
             };
+            if (shotCorrelations.TryGetValue((shot.WeaponId, shot.Sequence), out ShotCorrelation correlation))
+            {
+                shotCorrelations.Remove((shot.WeaponId, shot.Sequence));
+                shot.RequestId = correlation.Request;
+                shot.Ordinal = correlation.Ordinal;
+                SendActionResult(shot.RequestId, true, shot.WeaponId, shot.Sequence, shot.Time, shot.Ordinal);
+            }
             foreach (NetworkConnectionToClient observer in netIdentity.observers.Values)
             {
                 NetworkConnectionToClient recipient = observer;
@@ -457,6 +567,8 @@ namespace RPG4.Networking
         private void TargetShot(NetworkConnectionToClient recipient, NetworkShotPresentation shot)
         {
             if (!clientStarted || !isActiveAndEnabled || serverStarted) return;
+            if (isLocalPlayer && isOwned && shot.RequestId != 0)
+                player.ApplyLocalActionResult(shot.RequestId, true, shot.WeaponId, shot.Sequence, shot.Time, shot.Ordinal);
             if (shotWatermarks.TryGetValue(shot.WeaponId, out ulong watermark) && shot.Sequence <= watermark) return;
             if (!shotWatermarks.ContainsKey(shot.WeaponId))
             {
@@ -466,7 +578,7 @@ namespace RPG4.Networking
             shotWatermarks[shot.WeaponId] = shot.Sequence;
             if (IsShotExpired(shot)) return;
             // State and the short-lived unreliable feedback may arrive in either order at spawn.
-            if (!ready)
+            if (!ready || !isLocalPlayer && (snapshots.Count == 0 || shot.Time > snapshots.SampleTime))
             {
                 if (pendingShots.Count == 16) pendingShots.Dequeue();
                 pendingShots.Enqueue(new PendingShot { Shot = shot, Received = Time.realtimeSinceStartupAsDouble });
@@ -478,11 +590,14 @@ namespace RPG4.Networking
             => NetworkTime.time - shot.ServerTime > ShotLifetime;
         private void DrainPendingShots()
         {
-            while (pendingShots.Count > 0)
+            int count = pendingShots.Count;
+            for (int i = 0; i < count; i++)
             {
                 PendingShot pending = pendingShots.Dequeue();
-                if (Time.realtimeSinceStartupAsDouble - pending.Received <= ShotLifetime && !IsShotExpired(pending.Shot))
-                    PresentShot(pending.Shot);
+                if (Time.realtimeSinceStartupAsDouble - pending.Received > ShotLifetime || IsShotExpired(pending.Shot)) continue;
+                if (!ready || !isLocalPlayer && (snapshots.Count == 0 || pending.Shot.Time > snapshots.SampleTime))
+                    pendingShots.Enqueue(pending);
+                else PresentShot(pending.Shot);
             }
         }
         private void PresentShot(NetworkShotPresentation shot)
@@ -495,8 +610,9 @@ namespace RPG4.Networking
         {
             serverStarted = false;
             player.Attributes.Died -= OnServerDied;
+            player.Attributes.Revived -= OnServerRevived;
             if (player.Equipment != null) player.Equipment.ShotResolved -= OnShotResolved;
-            if (inventory != null) { inventory.ServerOperationScheduler = null; inventory.ServerAccessValidator = null; inventory.ServerBeforeEquipmentOrWeaponOperation = null; inventory.ServerBeforeWeaponOperation = null; }
+            if (inventory != null) { inventory.ServerOperationScheduler = null; inventory.ServerConsumableUse = null; inventory.ConsumableStateProvider = null; inventory.ServerAccessValidator = null; inventory.ServerBeforeEquipmentOrWeaponOperation = null; inventory.ServerBeforeWeaponOperation = null; }
             Cleanup();
             base.OnStopServer();
         }
@@ -509,7 +625,7 @@ namespace RPG4.Networking
             if (serverStarted)
             {
                 player.ConfigureNetworkSimulation(true, false);
-                predictions.Clear(); snapshots.Clear();
+                snapshots.Clear();
                 if (characterBackpack != null) characterBackpack.IsLocalPlayer = false;
                 SetLocalCameras(false); SetClientPresentation(false);
             }
@@ -518,13 +634,24 @@ namespace RPG4.Networking
         }
         private void Cleanup()
         {
+            player?.CancelConsumableUse();
+            InvalidateMovementSession();
+            movementTimeline.ClearSession();
+            movementHeld = default; heldReceivedTick = lastMovementReceived = -1; currentFireRequest = 0;
+            movementInitialized = hasRuleFingerprint = hasAuthorityPublication = hasCommittedMotor = false;
+            pendingHardBaseline = pendingCorrection = false;
+            RejectPendingActions();
+            player?.ResetOwnerPresentation();
+            player?.Equipment?.SetLocalPresentationWeapon(null);
             CancelPendingOutput();
-            serverInputs.Clear(); predictions.Clear(); snapshots.Clear(); ResetInitialAuthoritativeState();
+            serverInputs.Clear(); snapshots.Clear(); ResetInitialAuthoritativeState();
             ResetLocalInputGate();
             nextSequence = 1; previous = older = default;
+            nextActionRequest = 1; lastActionRequest = ownerTriggerRequest = 0;
             lastServerTick = lastPublishedTick = 0; ownerPublications.Clear();
             shotWatermarks.Clear(); shotWeapons.Clear(); pendingShots.Clear();
-            receivedAt = acceptedRewindDelay = 0d; latestState = default; timeoutCleared = false;
+            shotCorrelations.Clear();
+            acceptedRewindDelay = 0d; timeoutCleared = false;
             RejectOperations("网络会话已结束。");
             player?.ClearIntent();
             if (player != null)
@@ -542,9 +669,15 @@ namespace RPG4.Networking
         private void OnDisable()
         {
             if (player == null) return;
+            if (clientStarted && ready && isLocalPlayer && isOwned && !serverStarted
+                && NetworkClient.isConnected && NetworkClient.ready)
+                CmdCancelActions(nextActionRequest - 1);
+            InvalidateMovementSession();
             CancelPendingOutput(); pendingShots.Clear(); ResetInitialAuthoritativeState();
-            serverInputs.DiscardPending(); predictions.Clear(); snapshots.Clear();
-            RejectOperations("角色已停用。"); player.ClearIntent();
+            RejectPendingActions(); player.ResetOwnerPresentation();
+            shotCorrelations.Clear();
+            serverInputs.DiscardPending(); snapshots.Clear();
+            RejectOperations("角色已停用。"); player.CancelConsumableUse(); player.ClearIntent();
             player.Input.SetNetworkLocalInput(false);
             if (characterBackpack != null) characterBackpack.IsLocalPlayer = false;
             NetworkPlayerSimulation.Unregister(this);
@@ -554,6 +687,7 @@ namespace RPG4.Networking
             if (netIdentity == null || netId == 0) return;
             NetworkSendScheduler.CancelSource(netId, StateStream);
             NetworkSendScheduler.CancelSource(netId, ShotStream);
+            NetworkSendScheduler.CancelSource(netId, OwnerAckStream);
         }
     }
     public struct NetworkShotImpact
@@ -564,6 +698,8 @@ namespace RPG4.Networking
     public struct NetworkShotPresentation
     {
         public ulong WeaponId, Sequence;
+        public ulong RequestId;
+        public uint Ordinal;
         public long Tick;
         public double Time;
         public double ServerTime;

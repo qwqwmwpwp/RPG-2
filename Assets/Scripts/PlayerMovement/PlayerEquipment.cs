@@ -13,7 +13,7 @@ namespace RPG4.PlayerMovement
     [DisallowMultipleComponent]
     [DefaultExecutionOrder(100)]
     [RequireComponent(typeof(BackpackInventory), typeof(EquipmentInventory))]
-    public sealed partial class PlayerEquipment : MonoBehaviour
+    public sealed partial class PlayerEquipment : MonoBehaviour, IInventoryCommitParticipant
     {
         [SerializeField] private BackpackInventory inventory;
         [SerializeField] private EquipmentInventory equipmentInventory;
@@ -39,6 +39,7 @@ namespace RPG4.PlayerMovement
         private bool canExecuteAuthority = true;
         private bool deferShots;
         private RuntimeItem replicatedEquipment;
+        private RuntimeItem localPresentationWeapon;
         public bool CanExecuteAuthority => canExecuteAuthority;
         /// <summary>远端与预测角色只能读状态。切换权限不会重放已经消费的射击。</summary>
         public void ConfigureAuthority(bool canExecute, bool deferShots = false)
@@ -66,6 +67,21 @@ namespace RPG4.PlayerMovement
         private bool EquipmentAvailable => equipmentInventory != null && equipmentInventory.gameObject == gameObject
             && equipmentInventory.isActiveAndEnabled && equipmentInventory.IsReady;
         internal PlayerWeaponRig WeaponRig => weaponRig;
+        internal bool TryGetPresentationWeapon(out ulong weaponId, out WeaponDefinitionFragment definition)
+        {
+            RuntimeItem item = canExecuteAuthority ? equipmentInventory?.EquippedItem
+                : localPresentationWeapon ?? replicatedEquipment;
+            definition = item?.GetFragment<WeaponDefinitionFragment>();
+            weaponId = item != null ? item.ItemId.Value : 0;
+            bool available = canExecuteAuthority ? RuntimeAvailable : isActiveAndEnabled
+                && player != null && player.isActiveAndEnabled;
+            return available && weaponId != 0 && definition != null;
+        }
+        /// <summary>Read-only owner mirror, supplied by replication; never equips or mutates the item.</summary>
+        public void SetLocalPresentationWeapon(RuntimeItem item) => localPresentationWeapon = item;
+        internal bool CanAnticipateShot => localPresentationWeapon?.WeaponState != null && inventory?.Catalog != null
+            && localPresentationWeapon.WeaponState.CanConsumeShot(inventory.Catalog);
+        internal ulong PresentationShotSequence => localPresentationWeapon?.WeaponState?.ShotSequence ?? 0;
         private bool RuntimeAvailable => isActiveAndEnabled && EquipmentAvailable
             && (player == null || player.isActiveAndEnabled);
 
@@ -73,12 +89,12 @@ namespace RPG4.PlayerMovement
         {
             if (inventory == null) inventory = GetComponent<BackpackInventory>();
             if (equipmentInventory == null) equipmentInventory = GetComponent<EquipmentInventory>();
-            if (weaponRig == null) weaponRig = GetComponent<PlayerWeaponRig>();
+            if (weaponRig == null) weaponRig = GetComponentInChildren<PlayerWeaponRig>(true);
             player = GetComponent<Player>();
             if (equipmentInventory != null && equipmentInventory.gameObject == gameObject)
             {
                 equipmentInventory.AdditionalAdmission = CanUseItem;
-                equipmentInventory.CommitConfirm = ConfirmEquipment;
+                equipmentInventory.CommitParticipant = this;
             }
         }
 
@@ -87,7 +103,7 @@ namespace RPG4.PlayerMovement
         private void Start()
         {
             SynchronizeEquipment();
-            if (!canExecuteAuthority || !InventoryAvailable || !EquipmentAvailable || equipmentInventory.EquippedItem != null) return;
+            if (!canExecuteAuthority || deferShots || !InventoryAvailable || !EquipmentAvailable || equipmentInventory.EquippedItem != null) return;
             inventory.CopyItems(items); // CopyItems 的契约为 ItemId 升序。
             foreach (RuntimeItem item in items)
                 if (TryEquip(item.ItemId, out _)) break;
@@ -142,12 +158,13 @@ namespace RPG4.PlayerMovement
                 if (!ReferenceEquals(preparedItem, item) || preparedWeapon == null)
                 {
                     // 恢复组件只重建槽内运行实例，不重新向背包索取物品。
-                    if (!ConfirmEquipment(item.ItemId, out _))
+                    if (!PrepareEquipmentForSynchronization(item.ItemId, out _))
                     {
                         ReleaseWeapon();
                         return;
                     }
                 }
+                player?.CancelConsumableUse();
                 Weapon next = preparedWeapon;
                 next.Rebind(item);
                 preparedWeapon = null;
@@ -181,26 +198,22 @@ namespace RPG4.PlayerMovement
             return false;
         }
 
-        // 事务已静默提交；仅暂存候选，Changed 之前保留旧武器、动作和模型。
-        private bool ConfirmEquipment(ItemId requiredItem, out string error)
+        // 每笔事务独立准备候选；仅在提交后的 Publish 中移交给既有同步逻辑。
+        public bool TryPrepare(ItemId requiredItem, out IInventoryPreparedCommit prepared, out string error)
         {
-            error = null;
-            if (!canExecuteAuthority) { ClearPreparedEquipment(); return true; }
+            prepared = null; error = null;
+            if (!canExecuteAuthority) { prepared = new PreparedEquipment(this, null, null); return true; }
             if (confirming) { error = "武器运行实例正在准备中。"; return false; }
             confirming = true;
             try
             {
-                ClearPreparedEquipment();
-                // None 同时用于卸装与回滚补偿；都不能提前撤下旧表现。
-                if (!requiredItem.IsValid) return true;
+                if (!requiredItem.IsValid) { prepared = new PreparedEquipment(this, null, null); return true; }
                 RuntimeItem item = equipmentInventory != null ? equipmentInventory.EquippedItem : null;
                 if (item == null || item.ItemId != requiredItem)
-                {
-                    error = "武器槽中没有待确认的物品。";
-                    return false;
-                }
+                { error = "武器槽中没有待确认的物品。"; return false; }
                 if (!CanUseItem(item, out error)) return false;
-                if (current != null && ReferenceEquals(current.Item, item)) return true;
+                if (current != null && ReferenceEquals(current.Item, item))
+                { prepared = new PreparedEquipment(this, item, null); return true; }
                 Weapon candidate;
                 try
                 {
@@ -210,15 +223,36 @@ namespace RPG4.PlayerMovement
                 catch (System.ArgumentException exception) { error = exception.Message; return false; }
                 catch (System.InvalidOperationException exception) { error = exception.Message; return false; }
                 if (!RuntimeAvailable || !ReferenceEquals(equipmentInventory.EquippedItem, item))
-                {
-                    error = "准备武器时角色或装备槽状态发生变化。";
-                    return false;
-                }
-                preparedWeapon = candidate;
-                preparedItem = item;
+                { error = "准备武器时角色或装备槽状态发生变化。"; return false; }
+                prepared = new PreparedEquipment(this, item, candidate);
                 return true;
             }
             finally { confirming = false; }
+        }
+
+        private bool PrepareEquipmentForSynchronization(ItemId itemId, out string error)
+        {
+            if (!TryPrepare(itemId, out IInventoryPreparedCommit prepared, out error)) return false;
+            prepared.Publish();
+            return true;
+        }
+
+        private sealed class PreparedEquipment : IInventoryPreparedCommit
+        {
+            private readonly PlayerEquipment owner;
+            private readonly RuntimeItem item;
+            private readonly Weapon weapon;
+            private bool finished;
+            internal PreparedEquipment(PlayerEquipment owner, RuntimeItem item, Weapon weapon)
+            { this.owner = owner; this.item = item; this.weapon = weapon; }
+            public void Publish()
+            {
+                if (finished) return;
+                finished = true;
+                owner.preparedItem = item;
+                owner.preparedWeapon = weapon;
+            }
+            public void Discard() { finished = true; }
         }
 
         public bool TryEquip(ItemId itemId, out string error)
@@ -417,7 +451,7 @@ namespace RPG4.PlayerMovement
             shotExecutor.ForgetShooter(gameObject);
             if (equipmentInventory == null) return;
             if (equipmentInventory.AdditionalAdmission == CanUseItem) equipmentInventory.AdditionalAdmission = null;
-            if (equipmentInventory.CommitConfirm == ConfirmEquipment) equipmentInventory.CommitConfirm = null;
+            if (ReferenceEquals(equipmentInventory.CommitParticipant, this)) equipmentInventory.CommitParticipant = null;
         }
     }
 }

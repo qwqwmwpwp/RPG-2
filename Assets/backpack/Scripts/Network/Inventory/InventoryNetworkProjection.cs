@@ -55,23 +55,18 @@ namespace RPG4.Backpack.Network
             (left, right) => left.ItemId.CompareTo(right.ItemId);
 
         private readonly List<RuntimeItem> orderedItems = new List<RuntimeItem>();
-        private readonly List<int> removalIndices = new List<int>();
         private readonly Dictionary<ulong, RuntimeItem> itemsById = new Dictionary<ulong, RuntimeItem>();
         private readonly Dictionary<ulong, int> indexById = new Dictionary<ulong, int>();
         private readonly HashSet<ulong> treeIds = new HashSet<ulong>();
         private readonly Dictionary<RuntimeItem, CachedEntry> cachedEntries = new Dictionary<RuntimeItem, CachedEntry>();
         private readonly HashSet<RuntimeItem> dirtyItems = new HashSet<RuntimeItem>();
-        private readonly HashSet<RuntimeItem> processingItems = new HashSet<RuntimeItem>();
-        private readonly Dictionary<ulong, StagedEntry> stagedEntries = new Dictionary<ulong, StagedEntry>();
-        private readonly HashSet<ulong> removedIds = new HashSet<ulong>();
         private readonly Dictionary<ulong, RuntimeItem> treeOwners = new Dictionary<ulong, RuntimeItem>();
         private readonly Dictionary<RuntimeItem, HashSet<ulong>> registeredTrees = new Dictionary<RuntimeItem, HashSet<ulong>>();
-        private readonly Dictionary<ulong, RuntimeItem> stagedTreeOwners = new Dictionary<ulong, RuntimeItem>();
         private InventoryContainer observedContainer;
         private IList<NetworkInventoryEntry> observedTarget;
         private bool needsFullSync = true, fullSyncPending = true;
         private long reportedEncoded, reportedCacheHits;
-        private ulong nextVersion;
+        private ulong nextVersion, dirtyGeneration, publicationEpoch, lastPublishedGeneration, invalidationEpoch;
 
         public int ItemCount => itemsById.Count;
         public bool HasPendingChanges => fullSyncPending || dirtyItems.Count > 0;
@@ -95,7 +90,6 @@ namespace RPG4.Backpack.Network
             observedContainer = container;
             observedTarget = target;
             observedContainer.ItemTouched += OnItemTouched;
-            RebuildIndex(target);
         }
 
         public void Clear()
@@ -104,19 +98,15 @@ namespace RPG4.Backpack.Network
             observedContainer = null;
             observedTarget = null;
             orderedItems.Clear();
-            removalIndices.Clear();
             itemsById.Clear();
             indexById.Clear();
             treeIds.Clear();
             cachedEntries.Clear();
             dirtyItems.Clear();
-            processingItems.Clear();
-            stagedEntries.Clear();
-            removedIds.Clear();
             treeOwners.Clear();
             registeredTrees.Clear();
-            stagedTreeOwners.Clear();
             needsFullSync = fullSyncPending = true;
+            unchecked { publicationEpoch++; dirtyGeneration++; invalidationEpoch++; }
         }
 
         public void ResetStatistics()
@@ -131,6 +121,7 @@ namespace RPG4.Backpack.Network
         private void OnItemTouched(RuntimeItem item, bool payloadChanged)
         {
             dirtyItems.Add(item);
+            unchecked { dirtyGeneration++; }
             // 静默事务在触碰前已推进对应版本；运行变化不可丢弃稳定结构缓存。
         }
 
@@ -263,123 +254,179 @@ namespace RPG4.Backpack.Network
         public void SyncContainer(InventoryContainer container, IList<NetworkInventoryEntry> target,
             out ProjectionSyncReport report)
         {
+            if (!TryPrepareContainer(container, target, ItemId.None, out IInventoryPreparedCommit prepared, out report, out _)) return;
+            try { prepared.Publish(); }
+            catch (Exception exception)
+            {
+                Invalidate();
+                report = FinishReport(0, 0, 0, 1, "投影发布失败：" + exception.Message, report.Considered);
+            }
+        }
+
+        /// <summary>只生成本批独立增量；不写 target、已发布索引或已发布物品图。</summary>
+        public bool TryPrepareContainer(InventoryContainer container, IList<NetworkInventoryEntry> target, ItemId requiredItem,
+            out IInventoryPreparedCommit prepared, out ProjectionSyncReport report, out string error)
+        {
             if (container == null) throw new ArgumentNullException(nameof(container));
             if (target == null) throw new ArgumentNullException(nameof(target));
             Bind(container, target);
+            prepared = null; error = null;
             if (!needsFullSync && !HasPendingChanges && target.Count == indexById.Count)
             {
-                report = default;
-                return;
+                if (requiredItem.IsValid && !itemsById.ContainsKey(requiredItem.Value))
+                { error = "候选投影中没有待确认物品。"; report = FinishReport(0, 0, 0, 1, error, 0); return false; }
+                report = default; prepared = EmptyPreparedCommit.Instance; return true;
             }
             SyncCount++;
             bool full = needsFullSync || fullSyncPending || target.Count != indexById.Count;
-            fullSyncPending = false;
+            var processing = new HashSet<RuntimeItem>(dirtyItems);
+            Dictionary<ulong, int> fullIndices = null;
+            var removed = new HashSet<ulong>();
             if (full)
             {
                 FullSyncCount++;
-                RebuildIndex(target);
-                container.FillItemsByItemId(orderedItems);
-                dirtyItems.UnionWith(orderedItems);
-                dirtyItems.UnionWith(itemsById.Values);
+                processing.UnionWith(container.Items); processing.UnionWith(itemsById.Values);
+                fullIndices = new Dictionary<ulong, int>();
+                for (int index = 0; index < target.Count; index++)
+                { fullIndices[target[index].itemId] = index; removed.Add(target[index].itemId); }
             }
-            processingItems.Clear();
-            processingItems.UnionWith(dirtyItems);
-            orderedItems.Clear();
-            orderedItems.AddRange(processingItems);
-            orderedItems.Sort(ItemIdComparison);
-            dirtyItems.Clear();
-            ConsideredItemCount += orderedItems.Count;
-            stagedEntries.Clear();
-            stagedTreeOwners.Clear();
-            removedIds.Clear();
-            if (full) removedIds.UnionWith(indexById.Keys);
-            int rejected = 0;
-            string firstError = null;
-            foreach (RuntimeItem item in orderedItems)
+            IDictionary<ulong, int> indices = full ? fullIndices : indexById;
+            var ordered = new List<RuntimeItem>(processing); ordered.Sort(ItemIdComparison);
+            var staged = new Dictionary<ulong, StagedEntry>();
+            var stagedOwners = new HashSet<ulong>();
+            int rejected = 0; string firstError = null;
+            foreach (RuntimeItem item in ordered)
             {
                 if (!container.Contains(item))
                 {
-                    if (itemsById.TryGetValue(item.ItemId.Value, out RuntimeItem previous)
-                        && ReferenceEquals(previous, item)) removedIds.Add(item.ItemId.Value);
-                    cachedEntries.Remove(item);
+                    if (itemsById.TryGetValue(item.ItemId.Value, out RuntimeItem previous) && ReferenceEquals(previous, item))
+                        removed.Add(item.ItemId.Value);
                     continue;
                 }
-                if (!TryBuildEntry(item, out NetworkInventoryEntry entry, out string error))
-                {
-                    rejected++;
-                    if (firstError == null) firstError = error;
-                    continue;
-                }
-                CachedEntry cached = cachedEntries[item];
-                if (!container.TryGetPlacement(item, out InventoryPlacement placement))
-                    error = "物品缺少权威放置记录。";
+                if (!TryBuildEntry(item, out NetworkInventoryEntry entry, out string failure))
+                { rejected++; firstError = firstError ?? failure; continue; }
+                if (!container.TryGetPlacement(item, out InventoryPlacement placement)) failure = "物品缺少权威放置记录。";
                 else
                 {
-                    entry.upperLeftIndex = placement.UpperLeftIndex;
-                    entry.width = placement.Dimensions.X;
-                    entry.height = placement.Dimensions.Y;
-                    entry.TryValidate(out error);
+                    entry.upperLeftIndex = placement.UpperLeftIndex; entry.width = placement.Dimensions.X; entry.height = placement.Dimensions.Y;
+                    entry.TryValidate(out failure);
                 }
-                if (error == null && stagedEntries.ContainsKey(entry.itemId)) error = "不同根物品有重复标识。";
-                if (error == null)
-                    foreach (ulong id in cached.TreeIds)
-                        if (stagedTreeOwners.ContainsKey(id)
-                            || (treeOwners.TryGetValue(id, out RuntimeItem owner) && !processingItems.Contains(owner)))
-                        { error = "不同根物品图有重复标识。"; break; }
-                if (error != null)
-                {
-                    rejected++;
-                    if (firstError == null) firstError = error;
-                    continue;
-                }
-                stagedEntries.Add(entry.itemId, new StagedEntry(item, entry, cached.TreeIds));
-                foreach (ulong id in cached.TreeIds) stagedTreeOwners.Add(id, item);
+                HashSet<ulong> ids = cachedEntries[item].TreeIds;
+                if (failure == null && staged.ContainsKey(entry.itemId)) failure = "不同根物品有重复标识。";
+                if (failure == null)
+                    foreach (ulong id in ids)
+                        if (stagedOwners.Contains(id) || (treeOwners.TryGetValue(id, out RuntimeItem owner) && !processing.Contains(owner)))
+                        { failure = "不同根物品图有重复标识。"; break; }
+                if (failure != null) { rejected++; firstError = firstError ?? failure; continue; }
+                staged.Add(entry.itemId, new StagedEntry(item, entry, new HashSet<ulong>(ids)));
+                stagedOwners.UnionWith(ids); removed.Remove(entry.itemId);
             }
+            // A later removed root with the same id must not remove its staged replacement.
+            removed.ExceptWith(staged.Keys);
+            if (requiredItem.IsValid && !staged.ContainsKey(requiredItem.Value)
+                && (!itemsById.TryGetValue(requiredItem.Value, out RuntimeItem required) || processing.Contains(required) || !container.Contains(required)))
+            { rejected++; firstError = firstError ?? "候选投影中没有待确认物品。"; }
             if (rejected > 0)
             {
-                // 不发布半批投影；事务可回滚，下一次变更或显式同步重新校验完整集合。
-                needsFullSync = true;
-                report = FinishReport(0, 0, 0, rejected, firstError, orderedItems.Count);
-                return;
+                Invalidate(); error = firstError;
+                report = FinishReport(0, 0, 0, rejected, firstError, ordered.Count); return false;
             }
+            int added = 0, updated = 0;
+            foreach (StagedEntry entry in staged.Values)
+                if (!indices.TryGetValue(entry.Entry.itemId, out int index)) added++;
+                else if (!target[index].StateEquals(entry.Entry)) updated++;
+            ConsideredItemCount += ordered.Count;
+            report = FinishReport(added, updated, removed.Count, 0, null, ordered.Count);
+            prepared = new PreparedProjection(this, container, target, ordered.ToArray(), staged, removed, fullIndices,
+                dirtyGeneration, publicationEpoch, invalidationEpoch);
+            return true;
+        }
 
-            foreach (RuntimeItem item in processingItems)
+        public void Invalidate()
+        {
+            needsFullSync = fullSyncPending = true;
+            unchecked { invalidationEpoch++; }
+        }
+
+        private sealed class EmptyPreparedCommit : IInventoryPreparedCommit
+        {
+            internal static readonly EmptyPreparedCommit Instance = new EmptyPreparedCommit();
+            public void Publish() { }
+            public void Discard() { }
+        }
+
+        private sealed class PreparedProjection : IInventoryPreparedCommit
+        {
+            private readonly InventoryNetworkProjection owner;
+            private readonly InventoryContainer container;
+            private readonly IList<NetworkInventoryEntry> target;
+            private readonly RuntimeItem[] processing;
+            private readonly Dictionary<ulong, StagedEntry> staged;
+            private readonly HashSet<ulong> removed;
+            private readonly Dictionary<ulong, int> fullIndices;
+            private readonly ulong generation, epoch, invalidation;
+            private bool finished;
+            internal PreparedProjection(InventoryNetworkProjection owner, InventoryContainer container, IList<NetworkInventoryEntry> target,
+                RuntimeItem[] processing, Dictionary<ulong, StagedEntry> staged, HashSet<ulong> removed,
+                Dictionary<ulong, int> fullIndices, ulong generation, ulong epoch, ulong invalidation)
             {
-                if (registeredTrees.TryGetValue(item, out HashSet<ulong> ids))
-                {
-                    foreach (ulong id in ids) treeOwners.Remove(id);
-                    registeredTrees.Remove(item);
-                }
-                if (itemsById.TryGetValue(item.ItemId.Value, out RuntimeItem previous)
-                    && ReferenceEquals(previous, item)) itemsById.Remove(item.ItemId.Value);
+                this.owner = owner; this.container = container; this.target = target; this.processing = processing;
+                this.staged = staged; this.removed = removed; this.fullIndices = fullIndices;
+                this.generation = generation; this.epoch = epoch; this.invalidation = invalidation;
             }
-            int added = 0, updated = 0, removed = 0;
-            foreach (KeyValuePair<ulong, StagedEntry> pair in stagedEntries)
+            public void Publish()
             {
-                StagedEntry staged = pair.Value;
-                removedIds.Remove(pair.Key);
-                if (indexById.TryGetValue(pair.Key, out int index))
+                if (finished) return;
+                finished = true;
+                try
                 {
-                    if (!target[index].StateEquals(staged.Entry)) { target[index] = staged.Entry; updated++; }
+                    if (!ReferenceEquals(owner.observedContainer, container) || !ReferenceEquals(owner.observedTarget, target))
+                        throw new InvalidOperationException("投影绑定已改变，不能发布旧候选。");
+                    if (invalidation != owner.invalidationEpoch)
+                        throw new InvalidOperationException("投影需要重建，不能发布已失效候选。");
+                    // The same participant can validate two required ids in one transaction. Its identical
+                    // independent candidates must publish once, without reapplying removal indices.
+                    if (epoch != owner.publicationEpoch)
+                    {
+                        if (owner.lastPublishedGeneration == generation) return;
+                        throw new InvalidOperationException("投影候选已过期，需要从权威库存重建。");
+                    }
+                    if (fullIndices != null)
+                    {
+                        owner.indexById.Clear();
+                        foreach (var pair in fullIndices) owner.indexById.Add(pair.Key, pair.Value);
+                    }
+                    foreach (RuntimeItem item in processing)
+                    {
+                        if (owner.registeredTrees.TryGetValue(item, out HashSet<ulong> ids))
+                        { foreach (ulong id in ids) owner.treeOwners.Remove(id); owner.registeredTrees.Remove(item); }
+                        if (owner.itemsById.TryGetValue(item.ItemId.Value, out RuntimeItem previous) && ReferenceEquals(previous, item))
+                            owner.itemsById.Remove(item.ItemId.Value);
+                        if (!container.Contains(item)) owner.cachedEntries.Remove(item);
+                    }
+                    foreach (StagedEntry entry in staged.Values)
+                    {
+                        if (owner.indexById.TryGetValue(entry.Entry.itemId, out int index))
+                        { if (!target[index].StateEquals(entry.Entry)) target[index] = entry.Entry; }
+                        else { owner.indexById[entry.Entry.itemId] = target.Count; target.Add(entry.Entry); }
+                        owner.itemsById[entry.Entry.itemId] = entry.Item;
+                        owner.registeredTrees[entry.Item] = entry.TreeIds;
+                        foreach (ulong id in entry.TreeIds) owner.treeOwners[id] = entry.Item;
+                    }
+                    var removalIndices = new List<int>();
+                    foreach (ulong id in removed) if (owner.indexById.TryGetValue(id, out int index)) removalIndices.Add(index);
+                    removalIndices.Sort();
+                    for (int index = removalIndices.Count - 1; index >= 0; index--) target.RemoveAt(removalIndices[index]);
+                    if (removalIndices.Count > 0) owner.RebuildIndex(target);
+                    unchecked { owner.publicationEpoch++; }
+                    owner.lastPublishedGeneration = generation;
+                    if (generation == owner.dirtyGeneration)
+                    { owner.dirtyItems.Clear(); owner.needsFullSync = owner.fullSyncPending = false; }
+                    else owner.Invalidate();
                 }
-                else
-                {
-                    target.Add(staged.Entry);
-                    indexById[pair.Key] = target.Count - 1;
-                    added++;
-                }
-                itemsById[pair.Key] = staged.Item;
-                registeredTrees[staged.Item] = staged.TreeIds;
-                foreach (ulong id in staged.TreeIds) treeOwners[id] = staged.Item;
+                catch { owner.Invalidate(); throw; }
             }
-            removalIndices.Clear();
-            foreach (ulong id in removedIds)
-                if (indexById.TryGetValue(id, out int index)) removalIndices.Add(index);
-            removalIndices.Sort();
-            for (int i = removalIndices.Count - 1; i >= 0; i--) { target.RemoveAt(removalIndices[i]); removed++; }
-            if (removed > 0) RebuildIndex(target);
-            needsFullSync = false;
-            report = FinishReport(added, updated, removed, 0, null, orderedItems.Count);
+            public void Discard() { if (!finished) { finished = true; owner.Invalidate(); } }
         }
 
         private ProjectionSyncReport FinishReport(int added, int updated, int removed, int rejected, string error, int considered)

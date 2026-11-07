@@ -16,6 +16,7 @@ namespace RPG4.PlayerMovement
         [SerializeField] private CrouchData crouch = new CrouchData();
         [SerializeField] private ReloadData reload = new ReloadData();
         [SerializeField] private HurtData hurt = new HurtData();
+        [SerializeField] private OwnerCorrectionPresentationData ownerCorrection = new OwnerCorrectionPresentationData();
         internal PlayerContentData Content => content;
         internal MovementData Movement => movement;
         internal ExplorationData Exploration => exploration;
@@ -25,6 +26,7 @@ namespace RPG4.PlayerMovement
         internal CrouchData Crouch => crouch;
         internal ReloadData Reload => reload;
         internal HurtData Hurt => hurt;
+        internal OwnerCorrectionPresentationData OwnerCorrection => ownerCorrection;
     }
 
     [Serializable]
@@ -34,10 +36,12 @@ namespace RPG4.PlayerMovement
         [SerializeField] private Rigidbody body;
         [SerializeField] private PlayerViewController viewController;
         [SerializeField] private PlayerAimPose aimPose;
+        [SerializeField] private Transform presentationRoot;
         internal Animator Animator => animator;
         internal Rigidbody Body => body;
         internal PlayerViewController ViewController => viewController;
         internal PlayerAimPose AimPose => aimPose;
+        internal Transform PresentationRoot => presentationRoot;
         internal CapsuleCollider Capsule { get; private set; }
         internal void Initialize(Player player)
         {
@@ -45,7 +49,21 @@ namespace RPG4.PlayerMovement
             Capsule = player.GetComponent<CapsuleCollider>();
             if (animator == null) animator = player.GetComponentInChildren<Animator>();
             if (aimPose == null && animator != null) aimPose = animator.GetComponent<PlayerAimPose>();
+            if (presentationRoot == null && animator != null && animator.transform != player.transform)
+                presentationRoot = animator.transform;
         }
+    }
+
+    [Serializable]
+    internal sealed class OwnerCorrectionPresentationData
+    {
+        [Tooltip("仅衰减网络纠错偏移，不插值相邻模拟步，也不延迟正常移动。")]
+        [SerializeField, Min(0f)] private float halfLife = 0.06f;
+        [SerializeField, Min(0f)] private float maximumDistance = 2f;
+        [SerializeField, Range(0f, 180f)] private float maximumYaw = 60f;
+        internal float HalfLife => halfLife;
+        internal float MaximumDistance => maximumDistance;
+        internal float MaximumYaw => maximumYaw;
     }
 
     [Serializable]

@@ -36,6 +36,12 @@ namespace RPG4.Backpack.Network
 
         public ItemIdGenerator ServerItemIds { get; private set; } // 服务端持有共享单调发号器：启动时接续场景已有离线物品，停止仅释放引用；纯客户端恒为 null。
 
+        public void ConfigurePersistentItemIdRange(ulong first, ulong last)
+        {
+            if (NetworkServer.active || NetworkClient.active) throw new InvalidOperationException("物品号段必须在网络启动前配置。");
+            InventoryHostCore.SharedItemIds.ConfigurePersistentRange(first, last);
+        }
+
         public bool IsServerRunning => NetworkServer.active; // 服务端是否处于运行状态。
 
         public bool IsClientRunning => NetworkClient.active; // 客户端是否处于连接中或已连接状态。

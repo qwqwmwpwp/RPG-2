@@ -20,6 +20,7 @@ namespace RPG4.PlayerIntent
         internal PlayerPublishedFrame Published => Volatile.Read(ref published);
         internal bool OwnerActive { get; set; }
         internal double HurtUntil { get; set; }
+        internal ConsumableActionSnapshot Consumable { get; set; }
         internal Vector3 PlanarVelocity { get; set; }
         internal float BodyYaw { get; set; }
         internal ulong WeaponId { get; set; }
@@ -90,6 +91,15 @@ namespace RPG4.PlayerIntent
         public bool Reloading { get; internal set; }
         public bool WeaponCancellationRequested { get; internal set; }
         public MonoBehaviour InteractionTarget { get; internal set; }
+    }
+
+    public readonly struct ConsumableActionSnapshot
+    {
+        public readonly ulong ActionId, ItemId;
+        public readonly double StartTime, EndTime;
+        public readonly bool Active;
+        public ConsumableActionSnapshot(ulong actionId, ulong itemId, double startTime, double endTime, bool active)
+        { ActionId = actionId; ItemId = itemId; StartTime = startTime; EndTime = endTime; Active = active; }
     }
 
     public readonly struct UpperBodyDemand

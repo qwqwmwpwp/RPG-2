@@ -60,6 +60,8 @@ namespace RPG4.Networking
             foreach (NetworkPlayerController player in stepPlayers) player.SampleOwner(Tick, deltaTime);
             if (!NetworkServer.active) return;
             foreach (NetworkPlayerController player in stepPlayers) player.DrainOperations();
+            // Include server-authored transform changes before detecting forced motor baselines.
+            Physics.SyncTransforms();
             foreach (NetworkPlayerController player in stepPlayers) player.MoveServer(Tick, Time, deltaTime);
             Physics.SyncTransforms();
             targets.Clear();
@@ -73,6 +75,7 @@ namespace RPG4.Networking
             history.Capture(Time, targets);
             // All accepted shots have already consumed ammunition. Later deaths cannot revoke them.
             foreach (NetworkPlayerController player in stepPlayers) player.FlushCombat(history, Tick, Time, deltaTime);
+            foreach (NetworkPlayerController player in stepPlayers) player.CompleteDueUse(Time);
             foreach (NetworkPlayerController player in stepPlayers) player.PublishServer(Tick);
         }
     }

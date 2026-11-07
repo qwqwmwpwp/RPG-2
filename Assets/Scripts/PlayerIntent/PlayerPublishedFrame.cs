@@ -39,6 +39,7 @@ namespace RPG4.PlayerIntent
         public readonly LocomotionPlan Plan;
         public readonly UpperBodyDemand WeaponDemand;
         public readonly WeaponActionSnapshot WeaponAction;
+        public readonly ConsumableActionSnapshot Consumable;
         public readonly ulong WeaponId, ShotSequence;
         public readonly double ShotTime;
         public readonly float ShotDuration, FadeDuration, ReloadDuration, ReloadPhase;
@@ -60,6 +61,7 @@ namespace RPG4.PlayerIntent
             CanStand = source.CanStand; CrouchHeld = source.CrouchHeld;
             ViewYaw = source.ViewYaw; ViewPitch = source.ViewPitch; Zoom = source.Zoom;
             BodyYaw = source.BodyYaw; PlanarVelocity = source.PlanarVelocity;
+            Consumable = source.Consumable;
             Plan = source.Plan; WeaponDemand = source.WeaponDemand; WeaponAction = source.WeaponAction;
             WeaponId = source.WeaponId; ShotSequence = source.ShotSequence; ShotTime = source.ShotTime;
             ShotDuration = source.ShotDuration; FadeDuration = source.FadeDuration;

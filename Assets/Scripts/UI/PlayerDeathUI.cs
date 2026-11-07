@@ -14,6 +14,12 @@ namespace RPG4.UI
         [SerializeField] private CharacterHealthView healthView;
         [SerializeField] private Button restartButton;
         [SerializeField] private TMP_Text statusLabel;
+        [SerializeField] private TMP_Text actionLabel;
+        public event System.Action ReturnToLobbyRequested;
+        private string raidResult;
+        private bool canReturnToLobby;
+        public void SetRaidResult(string result, bool canReturn)
+        { raidResult = result; canReturnToLobby = canReturn; if (!alive && !reloading) RefreshAction(); }
         private bool alive = true, reloading, cursorCaptured;
         private bool previousCursorVisible;
         private CursorLockMode previousLock;
@@ -67,14 +73,17 @@ namespace RPG4.UI
             bool networked = NetworkClient.active || NetworkServer.active;
             Scene scene = gameObject.scene;
             bool canRestart = !alive && !networked && scene.IsValid() && scene.buildIndex >= 0;
-            if (restartButton != null) restartButton.gameObject.SetActive(!networked);
-            if (restartButton != null) restartButton.interactable = canRestart;
-            if (statusLabel != null) statusLabel.text = networked ? "等待服务器安排重生"
+            if (restartButton != null) restartButton.gameObject.SetActive(!networked || ReturnToLobbyRequested != null);
+            if (restartButton != null) restartButton.interactable = canRestart || networked && canReturnToLobby;
+            if (actionLabel != null) actionLabel.text = networked ? "返回大厅" : "重新开始";
+            if (statusLabel != null) statusLabel.text = networked ? (!string.IsNullOrEmpty(raidResult) ? raidResult : "本局已死亡，正在等待服务器结算；随身物资留在战场。")
                 : canRestart ? "重新开始将重置当前场景与本局状态" : "当前场景未加入构建设置，无法重新开始";
         }
         private void Restart()
         {
-            if (reloading || alive || !IsOpen || NetworkClient.active || NetworkServer.active) return;
+            if (reloading || alive || !IsOpen) return;
+            if (NetworkClient.active || NetworkServer.active)
+            { if (canReturnToLobby) ReturnToLobbyRequested?.Invoke(); return; }
             Scene scene = gameObject.scene;
             if (!scene.IsValid() || scene.buildIndex < 0) return;
             reloading = true;

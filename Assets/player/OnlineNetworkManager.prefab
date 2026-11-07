@@ -109,7 +109,8 @@ MonoBehaviour:
   playerPrefab: {fileID: 1372487281175382266, guid: d69d71e5453a4c2186c5dba08349244d, type: 3}
   autoCreatePlayer: 1
   playerSpawnMethod: 1
-  spawnPrefabs: []
+  spawnPrefabs:
+  - {fileID: 100000, guid: 8b28a48c72b64a9597a1c424c1eb760b, type: 3}
   exceptionsDisconnect: 1
   snapshotSettings:
     bufferTimeMultiplier: 2
@@ -131,6 +132,9 @@ MonoBehaviour:
   localCamera: {fileID: 0}
   additionalCombatTargets: []
   usesGameplaySceneBindings: 1
+  lobbyCatalog: {fileID: 11400000, guid: 30764ee9304076d49882ee9672e4fab9, type: 2}
+  raidLootBagPrefab: {fileID: 11400004, guid: 8b28a48c72b64a9597a1c424c1eb760b, type: 3}
+  raidDurationSeconds: 1200
   offlineSceneObjects: []
   sendBytesPerSecond: 65536
   sendBurstBytes: 16384

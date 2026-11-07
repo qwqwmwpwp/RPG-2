@@ -10,7 +10,7 @@ namespace RPG4.Backpack.Inventory
 {
     public delegate bool ItemAdmissionHandler(RuntimeItem item, out string error);
 
-    /// <summary>库存真相源：统一承担物品集合、格子映射与读写查询，唯一权威地持有「物品集合 + 上左位置 + 格子占用」，两份状态只在提交阶段同源写入、不存在中间态；物品下标按 ItemId 排序并按需缓存，不另建权威数据；堆叠数不缓存（唯一来源 RuntimeItem.StackCount）；纯 C# 数据层，不引用 UI / MonoBehaviour / 网络；按主线程单线程访问、不加锁，查询复用轮次戳缓冲做到零 GC；变更成功后经 F6 事件总线广播（source 为容器实例）。</summary>
+    /// <summary>库存真相源：统一承担物品集合、格子映射与读写查询，唯一权威地持有「物品集合 + 上左位置 + 格子占用」，布局由唯一写入口同源更新，准备阶段保护写入，失败按事务记录恢复；物品下标按 ItemId 排序并按需缓存，不另建权威数据；堆叠数不缓存（唯一来源 RuntimeItem.StackCount）；纯 C# 数据层，不引用 UI / MonoBehaviour / 网络；按主线程单线程访问、不加锁，查询复用轮次戳缓冲做到零 GC；变更成功后经 F6 事件总线广播（source 为容器实例）。</summary>
     public sealed partial class InventoryContainer
     {
         public const int NoIndex = InventoryPlacement.NoIndex; // 无效索引常量。
@@ -24,7 +24,6 @@ namespace RPG4.Backpack.Inventory
         private readonly IReadOnlyCollection<RuntimeItem> itemsView; // placements 键的只读视图，避免每次枚举重新分配。
         private readonly List<RuntimeItem> indexedItems = new List<RuntimeItem>(); // 按 ItemId 排序的查询缓存，下标口径与 FillItemsByItemId 一致。
         private readonly int[] claimed; // 查询标记缓冲：值等于 claimStamp 才算「本轮已检查」。
-        private readonly List<StackStep> stackSteps = new List<StackStep>(); // 接收规划复用的合并缓冲，成功规划后复制到独立计划以隔离事件重入。
 
         private readonly HashSet<ItemId> pendingViewChanges = new HashSet<ItemId>();
 
@@ -416,6 +415,7 @@ namespace RPG4.Backpack.Inventory
             }
 
             return occupant == null || (isStackable
+                && !IsReserved(occupant.ItemId)
                 && occupant.IsStackable
                 && occupant.ItemType.MatchesTagExact(item.ItemType)
                 && occupant.StackCount < occupant.MaxStackSize);
@@ -446,146 +446,84 @@ namespace RPG4.Backpack.Inventory
         /// <summary>该格在本轮查询中是否已被某个成功区域占用。</summary>
         private bool IsClaimed(int index) => claimed[index] == claimStamp;
 
-        // 原子变更（先完整校验 / 规划，再一次性提交）
+        // 原子变更：规划不写状态，所有公开写入口共用一次事务。
 
-        /// <summary>在指定落点放置物品（不做堆叠合并）：要求物品不在容器内且落点整块为空；失败时容器与物品状态完全不变；已入包物品移动须使用 TryMoveItem。</summary>
         public bool TryPlaceItem(RuntimeItem item, int startIndex, out string error)
-        {
-            if (item != null && item.RootOwner != null) return Reject(out error, nameof(TryPlaceItem), "物品已归其他根容器所有，请使用转移事务。");
-            if (!CanInsert(item, nameof(TryPlaceItem), out error)) return false;
-
-            GridCoord dimensions = ResolveItemDimensions(item);
-            if (dimensions.X < 1 || dimensions.Y < 1
-                || !GridUtils.IsInGridBounds(startIndex, dimensions, Columns, Rows))
+            => InventoryTransactions.Execute(this, null, (InventoryTransactions tx, out string failure) =>
             {
-                return Reject(out error, nameof(TryPlaceItem), $"落点 {startIndex} + 尺寸 {dimensions} 越界。");
-            }
+                if (item != null && item.RootOwner != null) return Reject(out failure, nameof(TryPlaceItem), "物品已有根容器，请使用转移事务。");
+                if (!CanInsert(item, nameof(TryPlaceItem), out failure)) return false;
+                GridCoord size = ResolveItemDimensions(item);
+                if (!IsRegionAvailable(startIndex, size, null, null)) return Reject(out failure, nameof(TryPlaceItem), "目标矩形越界或已被占用。");
+                tx.Track(item);
+                CommitPlacement(item, startIndex, size);
+                if (!tx.Prepare(CommitParticipant, item.ItemId, out failure)) return false;
+                return tx.Commit(() => { NotifyChanged(); NotifyItemAdded(item); }, out failure);
+            }, out error);
 
-            if (!IsRegionEmpty(startIndex, dimensions))
-            {
-                return Reject(out error, nameof(TryPlaceItem), $"落点 {startIndex} 的 {dimensions} 区域已被占用。");
-            }
-
-            CommitPlacement(item, startIndex, dimensions);
-            BumpRevision();
-            error = null;
-            NotifyItemAdded(item);
-            return true;
-        }
-
-        /// <summary>移动到指定权威格子；只忽略物品自身原占格，失败不改变占格、版本或通知。</summary>
         public bool TryMoveItem(RuntimeItem item, int upperLeftIndex, out string error)
-            => TryMoveItem(item, upperLeftIndex, null, out error);
+            => TryMoveItem(item, upperLeftIndex, CommitParticipant, out error);
 
-        internal bool TryMoveItem(RuntimeItem item, int upperLeftIndex, CommitConfirmHandler confirm, out string error)
-        {
-            error = null;
-            if (item == null || !placements.TryGetValue(item, out InventoryPlacement previous))
-                return Reject(out error, nameof(TryMoveItem), "物品不在容器中。");
-            if (!CanAcceptItem(item, out error)) return false;
-            if (!IsRegionAvailable(upperLeftIndex, previous.Dimensions, item, null))
-                return Reject(out error, nameof(TryMoveItem), "目标矩形越界或被其他物品占用。");
-            if (previous.UpperLeftIndex == upperLeftIndex) return true;
-
-            ClearCells(previous);
-            RemovePlacement(item);
-            CommitPlacement(item, upperLeftIndex, previous.Dimensions);
-            if (confirm != null && !confirm(item.ItemId, out error))
+        internal bool TryMoveItem(RuntimeItem item, int upperLeftIndex, IInventoryCommitParticipant confirm, out string error)
+            => InventoryTransactions.Execute(this, null, (InventoryTransactions tx, out string failure) =>
             {
-                ClearCells(placements[item]);
-                RemovePlacement(item);
-                CommitPlacement(item, previous.UpperLeftIndex, previous.Dimensions);
-                confirm(ItemId.None, out _);
-                return false;
-            }
-            BumpRevision();
-            return true;
-        }
+                if (item == null || !placements.TryGetValue(item, out InventoryPlacement previous))
+                    return Reject(out failure, nameof(TryMoveItem), "物品不在容器中。");
+                if (!CanMutate(item, out failure) || !CanAcceptItem(item, out failure)) return false;
+                if (!IsRegionAvailable(upperLeftIndex, previous.Dimensions, item, null))
+                    return Reject(out failure, nameof(TryMoveItem), "目标矩形越界或被其他物品占用。");
+                if (previous.UpperLeftIndex == upperLeftIndex) { failure = null; return true; }
+                tx.Track(item);
+                ClearCells(previous); RemovePlacement(item);
+                CommitPlacement(item, upperLeftIndex, previous.Dimensions);
+                if (!tx.Prepare(confirm, item.ItemId, out failure)) return false;
+                return tx.Commit(NotifyChanged, out failure);
+            }, out error);
 
-        /// <summary>交换两物品的权威锚点；可跨容器，双方矩形须在释放双方原占格后合法且互不重叠。</summary>
         public bool TrySwapItems(RuntimeItem source, RuntimeItem target, InventoryContainer destination, out string error)
-            => TrySwapItems(source, target, destination, null, null, out error);
+            => TrySwapItems(source, target, destination, CommitParticipant, destination?.CommitParticipant, out error);
 
         internal bool TrySwapItems(RuntimeItem source, RuntimeItem target, InventoryContainer destination,
-            CommitConfirmHandler confirm, CommitConfirmHandler destinationConfirm, out string error)
+            IInventoryCommitParticipant confirm, IInventoryCommitParticipant destinationConfirm, out string error)
         {
-            error = null;
-            if (destination == null || source == null || target == null || ReferenceEquals(source, target)
-                || !placements.TryGetValue(source, out InventoryPlacement first)
-                || !destination.placements.TryGetValue(target, out InventoryPlacement second))
-                return Reject(out error, nameof(TrySwapItems), "来源与目标必须是各自库存内的不同物品。");
-            bool same = ReferenceEquals(this, destination);
-            if (!destination.CanAcceptItem(source, out error) || !CanAcceptItem(target, out error)) return false;
-            if (!same && (!destination.CanInsertGraph(source, target, out error) || !CanInsertGraph(target, source, out error))) return false;
-            bool changesLayout = !same && SingleCellItems != destination.SingleCellItems;
-            GridCoord sourceSize = changesLayout ? destination.ResolveItemDimensions(source) : first.Dimensions;
-            GridCoord targetSize = changesLayout ? ResolveItemDimensions(target) : second.Dimensions;
-            int sourceIndex = second.UpperLeftIndex;
-            int targetIndex = first.UpperLeftIndex;
-            if (changesLayout && !SingleCellItems)
-                targetIndex = FindSwapRegion(targetIndex, targetSize, source);
-            if (changesLayout && !destination.SingleCellItems)
-                sourceIndex = destination.FindSwapRegion(sourceIndex, sourceSize, target);
-            if (!same && ((source.ItemId.IsValid && destination.TryGetItemById(source.ItemId, out _))
-                    || (target.ItemId.IsValid && TryGetItemById(target.ItemId, out _))))
-                return Reject(out error, nameof(TrySwapItems), "交换后的矩形越界、重叠、被占用或标识重复。");
-            if (changesLayout && ((!SingleCellItems && targetIndex == NoIndex)
-                    || (!destination.SingleCellItems && sourceIndex == NoIndex)))
-                return Reject(out error, nameof(TrySwapItems), "原武器无法放回背包，请先腾出空间。");
-            if (!destination.IsRegionAvailable(sourceIndex, sourceSize, target, same ? source : null)
-                || !IsRegionAvailable(targetIndex, targetSize, source, same ? target : null)
-                || (same && RegionsOverlap(sourceIndex, sourceSize, targetIndex, targetSize)))
-                return Reject(out error, nameof(TrySwapItems), "交换后的矩形越界、重叠、被占用或标识重复。");
-
-            ClearCells(first);
-            destination.ClearCells(second);
-            RemovePlacement(source);
-            destination.RemovePlacement(target);
-            CommitPlacement(target, targetIndex, targetSize);
-            destination.CommitPlacement(source, sourceIndex, sourceSize);
-            itemIndicesDirty = destination.itemIndicesDirty = true;
-            bool accepted = confirm == null || confirm(target.ItemId, out error);
-            if (accepted && same && confirm != null) accepted = confirm(source.ItemId, out error);
-            if (accepted && !same && destinationConfirm != null) accepted = destinationConfirm(source.ItemId, out error);
-            if (!accepted)
+            if (destination == null) return Reject(out error, nameof(TrySwapItems), "目标容器为空。");
+            return InventoryTransactions.Execute(this, destination, (InventoryTransactions tx, out string failure) =>
             {
-                ClearCells(placements[target]);
-                destination.ClearCells(destination.placements[source]);
-                RemovePlacement(target);
-                destination.RemovePlacement(source);
-                CommitPlacement(source, first.UpperLeftIndex, first.Dimensions);
-                destination.CommitPlacement(target, second.UpperLeftIndex, second.Dimensions);
-                itemIndicesDirty = destination.itemIndicesDirty = true;
-                confirm?.Invoke(ItemId.None, out _);
-                if (!same) destinationConfirm?.Invoke(ItemId.None, out _);
-                return false;
-            }
-            AdvanceRevision();
-            if (!same) destination.AdvanceRevision();
-            NotifyChanged();
-            if (!same)
-            {
-                destination.NotifyChanged();
-                NotifyItemRemoved(source);
-                destination.NotifyItemRemoved(target);
-                NotifyItemAdded(target);
-                destination.NotifyItemAdded(source);
-            }
-            return true;
+                if (source == null || target == null || ReferenceEquals(source, target)
+                    || !placements.TryGetValue(source, out InventoryPlacement first)
+                    || !destination.placements.TryGetValue(target, out InventoryPlacement second))
+                    return Reject(out failure, nameof(TrySwapItems), "来源与目标必须是各自库存内的不同物品。");
+                bool same = ReferenceEquals(this, destination);
+                if (!CanMutate(source, out failure) || !destination.CanMutate(target, out failure)) return false;
+                if (!destination.CanAcceptItem(source, out failure) || !CanAcceptItem(target, out failure)) return false;
+                if (!same && (!destination.CanInsertGraph(source, target, out failure) || !CanInsertGraph(target, source, out failure))) return false;
+                if (!InventoryOperationPlanner.TrySwap(this, destination, source, target, first, second,
+                    out int sourceIndex, out GridCoord sourceSize, out int targetIndex, out GridCoord targetSize, out failure)) return false;
+                tx.Track(source); tx.Track(target);
+                ClearCells(first); destination.ClearCells(second);
+                RemovePlacement(source); destination.RemovePlacement(target);
+                CommitPlacement(target, targetIndex, targetSize);
+                destination.CommitPlacement(source, sourceIndex, sourceSize);
+                if (!tx.Prepare(confirm, target.ItemId, out failure)
+                    || !tx.Prepare(same ? confirm : destinationConfirm, source.ItemId, out failure)) return false;
+                return tx.Commit(() =>
+                {
+                    NotifyChanged();
+                    if (!same)
+                    {
+                        destination.NotifyChanged(); NotifyItemRemoved(source); destination.NotifyItemRemoved(target);
+                        NotifyItemAdded(target); destination.NotifyItemAdded(source);
+                    }
+                }, out failure);
+            }, out error);
         }
 
         private int FindSwapRegion(int preferredIndex, GridCoord dimensions, RuntimeItem outgoing)
-        {
-            if (IsRegionAvailable(preferredIndex, dimensions, outgoing, null)) return preferredIndex;
-            for (int index = 0; index < SlotCount; index++)
-                if (IsRegionAvailable(index, dimensions, outgoing, null)) return index;
-            return NoIndex;
-        }
+            => InventoryOperationPlanner.FindSwapRegion(this, preferredIndex, dimensions, outgoing);
 
-        private bool IsRegionAvailable(int startIndex, GridCoord dimensions, RuntimeItem ignored, RuntimeItem secondIgnored)
+        internal bool IsRegionAvailable(int startIndex, GridCoord dimensions, RuntimeItem ignored, RuntimeItem secondIgnored)
         {
-            if (dimensions.X < 1 || dimensions.Y < 1
-                || !GridUtils.IsInGridBounds(startIndex, dimensions, Columns, Rows)) return false;
+            if (dimensions.X < 1 || dimensions.Y < 1 || !GridUtils.IsInGridBounds(startIndex, dimensions, Columns, Rows)) return false;
             RegionCursor cursor = new RegionCursor(Columns, startIndex, dimensions);
             while (cursor.MoveNext(out int index))
             {
@@ -595,405 +533,186 @@ namespace RPG4.Backpack.Inventory
             return true;
         }
 
-        private bool RegionsOverlap(int firstIndex, GridCoord firstSize, int secondIndex, GridCoord secondSize)
-        {
-            int firstX = firstIndex % Columns, firstY = firstIndex / Columns;
-            int secondX = secondIndex % Columns, secondY = secondIndex / Columns;
-            return firstX < secondX + secondSize.X && secondX < firstX + firstSize.X
-                && firstY < secondY + secondSize.Y && secondY < firstY + firstSize.Y;
-        }
-
-        /// <summary>从容器移除物品并释放其全部格子，失败时状态不变。</summary>
-        public bool TryRemoveItem(RuntimeItem item, out string error)
-        {
-            if (item == null) return Reject(out error, nameof(TryRemoveItem), "物品为空。");
-
-            if (!placements.TryGetValue(item, out InventoryPlacement placement))
+        public bool TryRemoveItem(RuntimeItem item, out string error) => TryRemoveItem(item, CommitParticipant, out error);
+        internal bool TryRemoveItem(RuntimeItem item, IInventoryCommitParticipant confirm, out string error)
+            => InventoryTransactions.Execute(this, null, (InventoryTransactions tx, out string failure) =>
             {
-                return Reject(out error, nameof(TryRemoveItem), "物品不在容器中。");
-            }
+                if (item == null || !placements.TryGetValue(item, out InventoryPlacement placement))
+                    return Reject(out failure, nameof(TryRemoveItem), "物品不在容器中。");
+                if (!CanMutate(item, out failure)) return false;
+                tx.Track(item); ClearCells(placement); RemovePlacement(item);
+                if (!tx.Prepare(confirm, ItemId.None, out failure)) return false;
+                return tx.Commit(() => { NotifyChanged(); NotifyItemRemoved(item); }, out failure);
+            }, out error);
 
-            ClearCells(placement);
-            RemovePlacement(item);
-            BumpRevision();
-            error = null;
-            NotifyItemRemoved(item);
-            return true;
-        }
-
-        /// <summary>把 incoming 并入容器内的 target 堆叠，失败时双方状态完全不变；双方须都可堆叠且类型标签精确一致，可部分并入（受单堆上限限制）；movedCount 等于来源堆叠数时视为来源被完全消费、其字段不清零（不允许堆叠数为 0）而由调用方丢弃，否则来源保留剩余量可再次调用。</summary>
         public bool TryStackItem(RuntimeItem target, RuntimeItem incoming, out int movedCount, out string error)
         {
-            movedCount = 0;
-            if (incoming != null && incoming.RootOwner != null) return Reject(out error, nameof(TryStackItem), "来源物品已有根容器。");
-
-            if (target == null || incoming == null) return Reject(out error, nameof(TryStackItem), "物品为空。");
-            if (ReferenceEquals(target, incoming)) return Reject(out error, nameof(TryStackItem), "目标与来源是同一个物品实例。");
-            if (!placements.ContainsKey(target)) return Reject(out error, nameof(TryStackItem), "目标物品不在容器中。");
-            if (!CanInsert(incoming, nameof(TryStackItem), out error)) return false;
-            if (!CanAcceptItem(target, out error)) return false;
-            if (SingleCellItems) return Reject(out error, nameof(TryStackItem), "装备格不支持合堆。");
-            if (!target.IsStackable || !incoming.IsStackable) return Reject(out error, nameof(TryStackItem), "双方必须都可堆叠才能合并。");
-            if (!target.ItemType.MatchesTagExact(incoming.ItemType)) return Reject(out error, nameof(TryStackItem), "物品类型不一致（需整串精确匹配）。");
-
-            int room = target.MaxStackSize - target.StackCount;
-            if (room <= 0) return Reject(out error, nameof(TryStackItem), "目标堆叠已满。");
-
-            movedCount = Math.Min(room, incoming.StackCount);
-
-            // 提交：数值已校验，不会触及 SetStackCount 的取值范围约束。
-            SetItemStack(target, target.StackCount + movedCount);
-            if (movedCount < incoming.StackCount)
+            int moved = 0;
+            bool accepted = InventoryTransactions.Execute(this, null, (InventoryTransactions tx, out string failure) =>
             {
-                SetItemStack(incoming, incoming.StackCount - movedCount);
-            }
-
-            BumpRevision();
-            error = null;
-            NotifyStackChanged(target);
-            return true;
+                if (incoming != null && incoming.RootOwner != null) return Reject(out failure, nameof(TryStackItem), "来源物品已有根容器。");
+                if (target == null || incoming == null || ReferenceEquals(target, incoming) || !Contains(target))
+                    return Reject(out failure, nameof(TryStackItem), "目标与来源必须是不同实例，且目标须在容器中。");
+                if (!CanInsert(incoming, nameof(TryStackItem), out failure)
+                    || !CanMutate(target, out failure) || !CanAcceptItem(target, out failure)) return false;
+                if (SingleCellItems || !InventoryOperationPlanner.TryStackAmount(target, incoming, incoming.StackCount, out moved))
+                    return Reject(out failure, nameof(TryStackItem), "双方不能合堆或目标堆叠已满。");
+                tx.Track(target); tx.Track(incoming);
+                SetItemStack(target, target.StackCount + moved);
+                if (moved < incoming.StackCount) SetItemStack(incoming, incoming.StackCount - moved);
+                if (!tx.Prepare(CommitParticipant, target.ItemId, out failure)) return false;
+                return tx.Commit(() => { NotifyChanged(); NotifyStackChanged(target); }, out failure);
+            }, out error);
+            movedCount = accepted ? moved : 0;
+            return accepted;
         }
 
-        /// <summary>修改容器内物品的堆叠数量：校验归属与 1..单堆上限后直改，数量未变化时不提交；成功提交推进版本号并广播堆叠变化，失败零变更。堆叠不缓存在容器，唯一来源仍是 RuntimeItem.StackCount。</summary>
         public bool TrySetStackCount(RuntimeItem item, int stackCount, out string error)
-        {
-            if (item == null) return Reject(out error, nameof(TrySetStackCount), "物品为空。");
-            if (!placements.ContainsKey(item)) return Reject(out error, nameof(TrySetStackCount), "物品不在容器中。");
-            if (!CanAcceptItem(item, out error)) return false;
-            if (SingleCellItems && stackCount != 1) return Reject(out error, nameof(TrySetStackCount), "装备格只能容纳一件物品。");
-
-            if (stackCount < 1 || stackCount > item.MaxStackSize)
+            => TrySetStackCount(item, stackCount, CommitParticipant, out error);
+        internal bool TrySetStackCount(RuntimeItem item, int stackCount, IInventoryCommitParticipant confirm, out string error)
+            => InventoryTransactions.Execute(this, null, (InventoryTransactions tx, out string failure) =>
             {
-                return Reject(out error, nameof(TrySetStackCount), $"堆叠数量 {stackCount} 必须在 1..{item.MaxStackSize} 范围内。");
-            }
+                if (item == null || !Contains(item)) return Reject(out failure, nameof(TrySetStackCount), "物品不在容器中。");
+                if (!CanMutate(item, out failure) || !CanAcceptItem(item, out failure)) return false;
+                if ((SingleCellItems && stackCount != 1) || stackCount < 1 || stackCount > item.MaxStackSize)
+                    return Reject(out failure, nameof(TrySetStackCount), "堆叠数量超出容器或物品允许范围。");
+                if (item.StackCount == stackCount) { failure = null; return true; }
+                tx.Track(item); SetItemStack(item, stackCount);
+                if (!tx.Prepare(confirm, item.ItemId, out failure)) return false;
+                return tx.Commit(() => { NotifyChanged(); NotifyStackChanged(item); }, out failure);
+            }, out error);
 
-            if (item.StackCount == stackCount)
-            {
-                error = null;
-                return true;
-            }
-
-            SetItemStack(item, stackCount);
-            BumpRevision();
-            error = null;
-            NotifyStackChanged(item);
-            return true;
-        }
-
-        /// <summary>同一或不同容器内合并或交换堆叠数；双方静默修改，确认成功后才推进版本和广播。</summary>
         internal bool TryChangeStackPair(RuntimeItem source, RuntimeItem target, int count, bool swap,
-            CommitConfirmHandler confirm, out int movedCount, out string error,
-            InventoryContainer destination = null, CommitConfirmHandler destinationConfirm = null)
+            IInventoryCommitParticipant confirm, out int movedCount, out string error,
+            InventoryContainer destination = null, IInventoryCommitParticipant destinationConfirm = null)
         {
-            movedCount = 0;
             destination = destination ?? this;
-            bool same = ReferenceEquals(this, destination);
-            const string operation = "堆叠操作";
-            if (source == null || target == null || ReferenceEquals(source, target)
-                || !placements.TryGetValue(source, out InventoryPlacement sourcePlacement) || !destination.Contains(target))
-                return Reject(out error, operation, "来源与目标必须是库存内的不同物品。");
-            if (!source.IsStackable || !target.IsStackable || !source.ItemType.MatchesTagExact(target.ItemType))
-                return Reject(out error, operation, "双方必须是同类型的可堆叠物品。");
-            if (!CanAcceptItem(source, out error) || !destination.CanAcceptItem(target, out error)) return false;
-            if (SingleCellItems || destination.SingleCellItems)
-                return Reject(out error, operation, "装备格不支持堆叠数量操作。");
-
-            int sourceCount = source.StackCount;
-            int targetCount = target.StackCount;
-            if (swap)
+            InventoryContainer receiver = destination;
+            int moved = 0;
+            bool accepted = InventoryTransactions.Execute(this, receiver, (InventoryTransactions tx, out string failure) =>
             {
-                if (sourceCount > target.MaxStackSize || targetCount > source.MaxStackSize)
-                    return Reject(out error, operation, "交换后的数量超过单堆上限。");
-                if (sourceCount == targetCount)
+                bool same = ReferenceEquals(this, receiver);
+                if (source == null || target == null || ReferenceEquals(source, target) || !Contains(source) || !receiver.Contains(target))
+                    return Reject(out failure, "堆叠操作", "来源与目标必须是库存内的不同物品。");
+                if (!CanMutate(source, out failure) || !receiver.CanMutate(target, out failure)
+                    || !CanAcceptItem(source, out failure) || !receiver.CanAcceptItem(target, out failure)) return false;
+                if (SingleCellItems || receiver.SingleCellItems || !source.IsStackable || !target.IsStackable
+                    || !source.ItemType.MatchesTagExact(target.ItemType))
+                    return Reject(out failure, "堆叠操作", "双方必须是同类型可堆叠物品，且不能位于装备格。");
+                int sourceCount = source.StackCount, targetCount = target.StackCount;
+                if (swap)
                 {
-                    error = null;
-                    return true;
+                    if (sourceCount > target.MaxStackSize || targetCount > source.MaxStackSize)
+                        return Reject(out failure, "堆叠操作", "交换后的数量超过单堆上限。");
+                    if (sourceCount == targetCount) { failure = null; return true; }
                 }
-                SetItemStack(source, targetCount);
-                destination.SetItemStack(target, sourceCount);
-            }
-            else
-            {
-                if (count < 1 || count > sourceCount)
-                    return Reject(out error, operation, "合并数量必须大于零且不超过来源数量。");
-                movedCount = Math.Min(count, target.MaxStackSize - targetCount);
-                if (movedCount == 0) return Reject(out error, operation, "目标堆叠已满。");
-                destination.SetItemStack(target, targetCount + movedCount);
-                if (movedCount == sourceCount)
+                else if (!InventoryOperationPlanner.TryStackAmount(target, source, count, out moved))
+                    return Reject(out failure, "堆叠操作", "合并数量非法或目标堆叠已满。");
+                tx.Track(source); tx.Track(target);
+                bool sourceRemoved = !swap && moved == sourceCount;
+                if (swap) { SetItemStack(source, targetCount); receiver.SetItemStack(target, sourceCount); }
+                else
                 {
-                    ClearCells(sourcePlacement);
-                    RemovePlacement(source);
-                    itemIndicesDirty = true;
+                    receiver.SetItemStack(target, targetCount + moved);
+                    if (sourceRemoved) { ClearCells(placements[source]); RemovePlacement(source); }
+                    else SetItemStack(source, sourceCount - moved);
                 }
-                else SetItemStack(source, sourceCount - movedCount);
-            }
-
-            error = null;
-            bool confirmed = confirm == null || confirm(same ? target.ItemId : (Contains(source) ? source.ItemId : ItemId.None), out error);
-            if (confirmed && same && Contains(source) && confirm != null) confirmed = confirm(source.ItemId, out error);
-            if (confirmed && !same && destinationConfirm != null) confirmed = destinationConfirm(target.ItemId, out error);
-            if (!confirmed)
-            {
-                SetItemStack(source, sourceCount);
-                destination.SetItemStack(target, targetCount);
-                if (!Contains(source)) CommitPlacement(source, sourcePlacement.UpperLeftIndex, sourcePlacement.Dimensions);
-                itemIndicesDirty = true;
-                confirm?.Invoke(ItemId.None, out _);
-                if (!same) destinationConfirm?.Invoke(ItemId.None, out _);
-                movedCount = 0;
-                return false;
-            }
-
-            AdvanceRevision();
-            if (!same) destination.AdvanceRevision();
-            NotifyChanged();
-            if (!same) destination.NotifyChanged();
-            destination.NotifyStackChanged(target);
-            if (Contains(source)) NotifyStackChanged(source);
-            else NotifyItemRemoved(source);
-            return true;
+                if (!tx.Prepare(confirm, same ? target.ItemId : sourceRemoved ? ItemId.None : source.ItemId, out failure)) return false;
+                if (same && !sourceRemoved && !tx.Prepare(confirm, source.ItemId, out failure)) return false;
+                if (!same && !tx.Prepare(destinationConfirm, target.ItemId, out failure)) return false;
+                return tx.Commit(() =>
+                {
+                    NotifyChanged(); if (!same) receiver.NotifyChanged(); receiver.NotifyStackChanged(target);
+                    if (sourceRemoved) NotifyItemRemoved(source); else NotifyStackChanged(source);
+                }, out failure);
+            }, out error);
+            movedCount = accepted ? moved : 0;
+            return accepted;
         }
 
-        /// <summary>兼容原有添加入口，接收规则统一委托 TryReceiveItem；仍为整批成功或失败，remainder 保留旧契约恒为 0。</summary>
         public bool TryAddItem(RuntimeItem item, out int remainder, out string error)
-        {
-            remainder = 0;
-            return TryReceiveItem(item, out error);
-        }
+        { remainder = 0; return TryReceiveItem(item, out error); }
 
-        /// <summary>整批接收外部物品，可供拾取使用：先按行优先合并已有同类型堆叠，再将剩余量放入首个合法空白区域；空间不足时容器与物品完全不变。调用方须持有尚未入包且尚未被消费的实例，包内物品请用 TryTransferItem；成功后交出实例并移除对应拾取物，即使全部并入既有堆叠、此实例没有成为容器条目也不能再次接收（StackCount 不清零）。</summary>
-        public bool TryReceiveItem(RuntimeItem item, out string error)
-            => TryReceiveItem(item, null, out error);
-
-        internal bool TryReceiveItem(RuntimeItem item, CommitConfirmHandler confirm, out string error)
-        {
-            if (item != null && item.RootOwner != null) return Reject(out error, nameof(TryReceiveItem), "物品已有根容器，请使用转移事务。");
-            if (!TryPlanReceiveItem(item, nameof(TryReceiveItem), out ReceivePlan plan, out error)) return false;
-            int previousCount = item.StackCount;
-            CommitReceiveItem(item, plan);
-            itemIndicesDirty = true;
-            if (confirm != null && !confirm(plan.PlaceIndex != NoIndex ? item.ItemId : ItemId.None, out error))
+        /// <summary>整批接收；全部合堆时交出原实例，成功后不得重复接收。</summary>
+        public bool TryReceiveItem(RuntimeItem item, out string error) => TryReceiveItem(item, CommitParticipant, out error);
+        internal bool TryReceiveItem(RuntimeItem item, IInventoryCommitParticipant confirm, out string error)
+            => InventoryTransactions.Execute(this, null, (InventoryTransactions tx, out string failure) =>
             {
-                if (plan.PlaceIndex != NoIndex)
-                {
-                    ClearCells(placements[item]);
-                    RemovePlacement(item);
-                }
-                for (int i = 0; i < plan.StackSteps.Length; i++)
-                {
-                    StackStep step = plan.StackSteps[i];
-                    SetItemStack(step.Target, step.Target.StackCount - step.Amount);
-                }
-                SetItemStack(item, previousCount);
-                itemIndicesDirty = true;
-                confirm(ItemId.None, out _);
-                return false;
-            }
-            BumpRevision();
-            NotifyReceivedItem(item, plan);
-            return true;
-        }
+                if (item != null && item.RootOwner != null) return Reject(out failure, nameof(TryReceiveItem), "物品已有根容器，请使用转移事务。");
+                if (!TryPlanReceiveItem(item, nameof(TryReceiveItem), out ReceivePlan plan, out failure)) return false;
+                TrackReceive(tx, item, plan); CommitReceiveItem(item, plan);
+                if (!tx.Prepare(confirm, plan.PlaceIndex != NoIndex ? item.ItemId : ItemId.None, out failure)) return false;
+                return tx.Commit(() => { NotifyChanged(); NotifyReceivedItem(item, plan); }, out failure,
+                    () => { if (plan.PlaceIndex == NoIndex) item.RootOwner = ConsumedItemOwner; });
+            }, out error);
 
-        /// <summary>将容器内物品整件或整堆转移到 destination，目标使用与拾取相同的接收规则；先完整规划再提交双方归属、占格与数量，失败双方零变更。保留未被完全合并的原实例与标识，不拆分、不重新随机化；双方版本与查询缓存均更新后才广播通知。</summary>
         public bool TryTransferItem(RuntimeItem item, InventoryContainer destination, out string error)
-            => TryTransferItemCore(item, destination, true, nameof(TryTransferItem), out error);
-
-        /// <summary>将来源物品整件或整堆转入目标首个合法空白矩形，不合并任何已有堆叠；保留原实例、标识与数量，目标落点由权威容器选择；失败双方零变更，成功在双方版本与缓存更新后广播通知。</summary>
+            => TryTransferItemCore(item, destination, true, nameof(TryTransferItem), out error, CommitParticipant, destination?.CommitParticipant);
         public bool TryTransferItemToEmptySpace(RuntimeItem item, InventoryContainer destination, out string error)
-            => TryTransferItemCore(item, destination, false, nameof(TryTransferItemToEmptySpace), out error);
-
+            => TryTransferItemCore(item, destination, false, nameof(TryTransferItemToEmptySpace), out error, CommitParticipant, destination?.CommitParticipant);
         internal bool TryTransferItemToEmptySpace(RuntimeItem item, InventoryContainer destination,
-            CommitConfirmHandler confirm, CommitConfirmHandler destinationConfirm, out string error)
+            IInventoryCommitParticipant confirm, IInventoryCommitParticipant destinationConfirm, out string error)
             => TryTransferItemCore(item, destination, false, nameof(TryTransferItemToEmptySpace), out error, confirm, destinationConfirm);
-
         internal bool TryTransferItem(RuntimeItem item, InventoryContainer destination, int upperLeftIndex,
-            CommitConfirmHandler confirm, CommitConfirmHandler destinationConfirm, out string error)
-            => TryTransferItemCore(item, destination, upperLeftIndex == NoIndex, nameof(TryTransferItem),
-                out error, confirm, destinationConfirm, upperLeftIndex);
+            IInventoryCommitParticipant confirm, IInventoryCommitParticipant destinationConfirm, out string error)
+            => TryTransferItemCore(item, destination, upperLeftIndex == NoIndex, nameof(TryTransferItem), out error, confirm, destinationConfirm, upperLeftIndex);
 
-        /// <summary>从来源堆叠扣除 splitItem 的数量，并将调用方恢复出的新实例放入目标首个空白矩形；支持同容器，不合堆。新实例必须具有未在双方出现的有效标识，失败时数量、占格与版本均不变。</summary>
-        public bool TrySplitStackToEmptySpace(RuntimeItem source, RuntimeItem splitItem, InventoryContainer destination, out string error)
-            => TrySplitStackToEmptySpace(source, splitItem, destination, null, null, out error);
-
-        /// <summary>宿主拆分使用的确认入口：在广播前确认双方投影，确认失败静默还原并补偿投影；确认钩子只负责投影，不得重入修改容器，同容器只执行来源确认。</summary>
-        internal bool TrySplitStackToEmptySpace(RuntimeItem source, RuntimeItem splitItem, InventoryContainer destination, CommitConfirmHandler confirm, CommitConfirmHandler destinationConfirm, out string error, int upperLeftIndex = NoIndex)
+        internal bool TrySplitStackToEmptySpace(RuntimeItem source, RuntimeItem splitItem, InventoryContainer destination,
+            IInventoryCommitParticipant confirm, IInventoryCommitParticipant destinationConfirm, out string error, int upperLeftIndex = NoIndex)
         {
-            const string operation = nameof(TrySplitStackToEmptySpace);
-            if (destination == null) return Reject(out error, operation, "目标容器为空。");
-            if (source == null || !placements.ContainsKey(source)) return Reject(out error, operation, "物品不在来源容器中。");
-            if (!source.IsStackable) return Reject(out error, operation, "来源物品不可堆叠。");
-            if (!CanInsert(splitItem, operation, out error)) return false;
-            if (!splitItem.ItemId.IsValid) return Reject(out error, operation, "拆分实例缺少有效标识。");
-            if (!splitItem.IsStackable || !source.ItemType.MatchesTagExact(splitItem.ItemType))
-                return Reject(out error, operation, "拆分实例与来源堆叠类型不一致。");
-            if (splitItem.StackCount < 1 || splitItem.StackCount >= source.StackCount)
-                return Reject(out error, operation, "拆分数量必须大于零且小于来源堆叠数。");
-            if (!CanAcceptItem(source, out error)) return false;
-            GridCoord splitSize = SingleCellItems != destination.SingleCellItems
-                ? destination.ResolveItemDimensions(splitItem) : placements[source].Dimensions;
-            if (!destination.TryPlanReceiveItem(splitItem, operation, out ReceivePlan plan, out error, false, upperLeftIndex, splitSize)) return false;
-
-            bool sameContainer = ReferenceEquals(this, destination);
-            int previousStack = source.StackCount;
-            SetItemStack(source, previousStack - splitItem.StackCount);
-            destination.CommitReceiveItem(splitItem, plan);
-            itemIndicesDirty = true;
-            destination.itemIndicesDirty = true;
-
-            ItemId requiredItem = sameContainer ? splitItem.ItemId : source.ItemId;
-            bool confirmed = confirm == null || confirm(requiredItem, out error);
-            if (confirmed && !sameContainer && destinationConfirm != null)
-                confirmed = destinationConfirm(splitItem.ItemId, out error);
-            if (!confirmed)
+            if (destination == null) return Reject(out error, nameof(TrySplitStackToEmptySpace), "目标容器为空。");
+            return InventoryTransactions.Execute(this, destination, (InventoryTransactions tx, out string failure) =>
             {
-                destination.ClearCells(destination.placements[splitItem]);
-                destination.RemovePlacement(splitItem);
-                SetItemStack(source, previousStack);
-                itemIndicesDirty = true;
-                destination.itemIndicesDirty = true;
-                confirm?.Invoke(ItemId.None, out _);
-                if (!sameContainer) destinationConfirm?.Invoke(ItemId.None, out _);
-                return false;
-            }
-
-            AdvanceRevision();
-            if (!sameContainer) destination.AdvanceRevision();
-            NotifyChanged();
-            if (!sameContainer) destination.NotifyChanged();
-            NotifyStackChanged(source);
-            destination.NotifyReceivedItem(splitItem, plan);
-            error = null;
-            return true;
+                const string operation = nameof(TrySplitStackToEmptySpace);
+                if (source == null || !Contains(source) || !source.IsStackable) return Reject(out failure, operation, "来源必须是库存内可堆叠物品。");
+                if (!CanMutate(source, out failure) || !CanInsert(splitItem, operation, out failure) || !CanAcceptItem(source, out failure)) return false;
+                if (!splitItem.ItemId.IsValid || !splitItem.IsStackable || !source.ItemType.MatchesTagExact(splitItem.ItemType)
+                    || splitItem.StackCount < 1 || splitItem.StackCount >= source.StackCount)
+                    return Reject(out failure, operation, "拆分实例标识、类型或数量非法。");
+                GridCoord splitSize = SingleCellItems != destination.SingleCellItems ? destination.ResolveItemDimensions(splitItem) : placements[source].Dimensions;
+                if (!destination.TryPlanReceiveItem(splitItem, operation, out ReceivePlan plan, out failure, false, upperLeftIndex, splitSize)) return false;
+                bool same = ReferenceEquals(this, destination);
+                tx.Track(source); TrackReceive(tx, splitItem, plan);
+                SetItemStack(source, source.StackCount - splitItem.StackCount); destination.CommitReceiveItem(splitItem, plan);
+                if (!tx.Prepare(confirm, same ? splitItem.ItemId : source.ItemId, out failure)
+                    || (!same && !tx.Prepare(destinationConfirm, splitItem.ItemId, out failure))) return false;
+                return tx.Commit(() =>
+                {
+                    NotifyChanged(); if (!same) destination.NotifyChanged(); NotifyStackChanged(source); destination.NotifyReceivedItem(splitItem, plan);
+                }, out failure);
+            }, out error);
         }
 
         private bool TryTransferItemCore(RuntimeItem item, InventoryContainer destination, bool mergeStacks, string operation,
-            out string error, CommitConfirmHandler confirm = null, CommitConfirmHandler destinationConfirm = null, int upperLeftIndex = NoIndex)
+            out string error, IInventoryCommitParticipant confirm = null, IInventoryCommitParticipant destinationConfirm = null, int upperLeftIndex = NoIndex)
         {
-            if (destination == null) return Reject(out error, operation, "目标容器为空。");
-            if (ReferenceEquals(this, destination)) return Reject(out error, operation, "来源与目标是同一个容器。");
-            if (item == null) return Reject(out error, operation, "物品为空。");
-            if (!placements.TryGetValue(item, out InventoryPlacement placement))
+            if (destination == null || ReferenceEquals(this, destination)) return Reject(out error, operation, "来源与目标必须是不同的有效容器。");
+            return InventoryTransactions.Execute(this, destination, (InventoryTransactions tx, out string failure) =>
             {
-                return Reject(out error, operation, "物品不在来源容器中。");
-            }
-
-            GridCoord incomingSize = SingleCellItems != destination.SingleCellItems
-                ? destination.ResolveItemDimensions(item) : placement.Dimensions;
-            if (!destination.TryPlanReceiveItem(item, operation, out ReceivePlan plan, out error,
-                    mergeStacks && !SingleCellItems && !destination.SingleCellItems, upperLeftIndex, incomingSize)) return false;
-
-            // 双方静默提交：只使派生缓存失效，不发业务通知；不能用两个公开增删操作拼接转移。
-            ClearCells(placement);
-            RemovePlacement(item);
-            int previousStack = item.StackCount;
-            destination.CommitReceiveItem(item, plan);
-            itemIndicesDirty = true;
-            destination.itemIndicesDirty = true;
-
-            bool confirmed = confirm == null || confirm(ItemId.None, out error);
-            if (confirmed && destinationConfirm != null)
-                confirmed = destinationConfirm(plan.PlaceIndex != NoIndex ? item.ItemId : ItemId.None, out error);
-            if (!confirmed)
-            {
-                if (plan.PlaceIndex != NoIndex)
+                if (item == null || !placements.TryGetValue(item, out InventoryPlacement placement)) return Reject(out failure, operation, "物品不在来源容器中。");
+                if (!CanMutate(item, out failure)) return false;
+                GridCoord size = SingleCellItems != destination.SingleCellItems ? destination.ResolveItemDimensions(item) : placement.Dimensions;
+                if (!destination.TryPlanReceiveItem(item, operation, out ReceivePlan plan, out failure,
+                    mergeStacks && !SingleCellItems && !destination.SingleCellItems, upperLeftIndex, size)) return false;
+                TrackReceive(tx, item, plan); ClearCells(placement); RemovePlacement(item); destination.CommitReceiveItem(item, plan);
+                if (!tx.Prepare(confirm, ItemId.None, out failure)
+                    || !tx.Prepare(destinationConfirm, plan.PlaceIndex != NoIndex ? item.ItemId : ItemId.None, out failure)) return false;
+                return tx.Commit(() =>
                 {
-                    destination.ClearCells(destination.placements[item]);
-                    destination.RemovePlacement(item);
-                }
-                for (int i = 0; i < plan.StackSteps.Length; i++)
-                {
-                    StackStep step = plan.StackSteps[i];
-                    destination.SetItemStack(step.Target, step.Target.StackCount - step.Amount);
-                }
-                SetItemStack(item, previousStack);
-                CommitPlacement(item, placement.UpperLeftIndex, placement.Dimensions);
-                itemIndicesDirty = true;
-                destination.itemIndicesDirty = true;
-                confirm?.Invoke(ItemId.None, out _);
-                destinationConfirm?.Invoke(ItemId.None, out _);
-                return false;
-            }
-
-            AdvanceRevision();
-            destination.AdvanceRevision();
-
-            NotifyChanged();
-            destination.NotifyChanged();
-            NotifyItemRemoved(item);
-            destination.NotifyReceivedItem(item, plan);
-            return true;
+                    NotifyChanged(); destination.NotifyChanged(); NotifyItemRemoved(item); destination.NotifyReceivedItem(item, plan);
+                }, out failure, () => { if (plan.PlaceIndex == NoIndex) item.RootOwner = ConsumedItemOwner; });
+            }, out error);
         }
+
+        private static void TrackReceive(InventoryTransactions transaction, RuntimeItem item, ReceivePlan plan)
+        { transaction.Track(item); foreach (StackStep step in plan.StackSteps) transaction.Track(step.Target); }
 
         // 内部实现
 
         /// <summary>只读规划接收：默认完整优先扫描已有堆叠，再寻找剩余量的空白矩形；空位转移关闭合堆，直接为整件寻找空白矩形。不能用会在早期空格处提前结束的容量查询代替。</summary>
-        private bool TryPlanReceiveItem(RuntimeItem item, string operation, out ReceivePlan plan, out string error, bool mergeStacks = true, int upperLeftIndex = NoIndex, GridCoord? frozenDimensions = null)
-        {
-            plan = default;
-            if (!CanInsert(item, operation, out error)) return false;
-
-            GridCoord dimensions = frozenDimensions ?? ResolveItemDimensions(item);
-            if (upperLeftIndex < NoIndex) return Reject(out error, operation, "目标索引非法。");
-            if (dimensions.X < 1 || dimensions.Y < 1)
-            {
-                return Reject(out error, operation, $"物品占格尺寸 {dimensions} 非法。");
-            }
-
-            stackSteps.Clear();
-            int remaining = item.StackCount;
-
-            if (mergeStacks && !SingleCellItems && item.IsStackable)
-            {
-                for (int index = 0; index < cells.Length && remaining > 0; index++)
-                {
-                    InventoryPlacement placement = cells[index];
-                    if (!placement.IsValid || placement.UpperLeftIndex != index) continue;
-
-                    RuntimeItem occupant = placement.Item;
-                    if (!occupant.IsStackable || !occupant.ItemType.MatchesTagExact(item.ItemType)) continue;
-
-                    int move = Math.Min(remaining, occupant.MaxStackSize - occupant.StackCount);
-                    if (move <= 0) continue;
-
-                    stackSteps.Add(new StackStep(occupant, move));
-                    remaining -= move;
-                }
-            }
-
-            int placeIndex = NoIndex;
-            if (remaining > 0)
-            {
-                if (remaining > item.MaxStackSize)
-                {
-                    return Reject(out error, operation, $"剩余量 {remaining} 超过单堆上限 {item.MaxStackSize}，需先拆分。");
-                }
-
-                if (upperLeftIndex != NoIndex)
-                {
-                    if (GridUtils.IsInGridBounds(upperLeftIndex, dimensions, Columns, Rows)
-                        && IsRegionEmpty(upperLeftIndex, dimensions)) placeIndex = upperLeftIndex;
-                }
-                else
-                {
-                    for (int index = 0; index < cells.Length; index++)
-                    {
-                        if (!GridUtils.IsInGridBounds(index, dimensions, Columns, Rows)
-                            || !IsRegionEmpty(index, dimensions)) continue;
-                        placeIndex = index;
-                        break;
-                    }
-                }
-
-                if (placeIndex == NoIndex)
-                {
-                    return Reject(out error, operation, "容器空间不足，无法接收整批物品。");
-                }
-            }
-
-            plan = new ReceivePlan(dimensions, remaining, placeIndex, stackSteps.ToArray());
-            error = null;
-            return true;
-        }
+        private bool TryPlanReceiveItem(RuntimeItem item, string operation, out ReceivePlan plan, out string error,
+            bool mergeStacks = true, int upperLeftIndex = NoIndex, GridCoord? frozenDimensions = null)
+            => InventoryOperationPlanner.TryReceive(this, item, operation, out plan, out error, mergeStacks, upperLeftIndex, frozenDimensions);
 
         /// <summary>应用已校验的接收计划，只使派生缓存失效，不推进业务版本或广播；转移用此入口确保双方状态先全部落盘。</summary>
         private void CommitReceiveItem(RuntimeItem item, ReceivePlan plan)
@@ -1034,9 +753,10 @@ namespace RPG4.Backpack.Inventory
         }
 
         /// <summary>插入前置校验：非空、不在容器内且有效标识不与已有实例重复；None 保留离线无标识口径。</summary>
-        private bool CanInsert(RuntimeItem item, string operation, out string error)
+        internal bool CanInsert(RuntimeItem item, string operation, out string error)
         {
             if (item == null) return Reject(out error, operation, "物品为空。");
+            if (!CanMutate(item, out error)) return false;
             if (item.ParentItem != null) return Reject(out error, operation, "已安装子物品不可作为根条目插入。");
             if (!CanAcceptItem(item, out error)) return false;
             if (placements.ContainsKey(item)) return Reject(out error, operation, "物品已在容器中。");
@@ -1050,23 +770,12 @@ namespace RPG4.Backpack.Inventory
             return true;
         }
 
-        /// <summary>区域是否全空。调用方需先做越界守卫。</summary>
-        private bool IsRegionEmpty(int startIndex, GridCoord dimensions)
-        {
-            RegionCursor cursor = new RegionCursor(Columns, startIndex, dimensions);
-            while (cursor.MoveNext(out int index))
-            {
-                if (cells[index].IsValid) return false;
-            }
-
-            return true;
-        }
-
         /// <summary>提交一条放置记录：索引与占用矩阵的唯一写入口（保证两份状态同源）。</summary>
         private void CommitPlacement(RuntimeItem item, int startIndex, GridCoord dimensions)
         {
             InventoryPlacement placement = new InventoryPlacement(item, startIndex, dimensions);
             placements.Add(item, placement);
+            itemIndicesDirty = true;
             item.RootOwner = this;
             item.Changed += OnItemStateChanged;
             FillCells(startIndex, dimensions, placement);
@@ -1076,6 +785,7 @@ namespace RPG4.Backpack.Inventory
         private void RemovePlacement(RuntimeItem item)
         {
             if (!placements.Remove(item)) return;
+            itemIndicesDirty = true;
             item.Changed -= OnItemStateChanged;
             item.RootOwner = null;
             TouchItem(item, false);
@@ -1085,7 +795,7 @@ namespace RPG4.Backpack.Inventory
         {
             if (!Contains(item)) return;
             TouchItem(item, true);
-            BumpRevision();
+            if (!committedItemNotifications.Remove(item)) BumpRevision();
         }
 
         private void TouchItem(RuntimeItem item, bool payloadChanged)
@@ -1218,36 +928,5 @@ namespace RPG4.Backpack.Inventory
             EventBus.Global.Publish(InvChannels.StackChanged, this, QueryAvailability(item));
         }
 
-        /// <summary>一笔接收操作的独立计划；步骤数组不与后续或重入操作共用。</summary>
-        private readonly struct ReceivePlan
-        {
-            public ReceivePlan(GridCoord dimensions, int remaining, int placeIndex, StackStep[] stackSteps)
-            {
-                Dimensions = dimensions;
-                Remaining = remaining;
-                PlaceIndex = placeIndex;
-                StackSteps = stackSteps;
-            }
-
-            public GridCoord Dimensions { get; }
-            public int Remaining { get; }
-            public int PlaceIndex { get; }
-            public StackStep[] StackSteps { get; }
-        }
-
-        /// <summary>一条待提交的堆叠合并步骤（规划阶段产出、提交阶段执行）。</summary>
-        private readonly struct StackStep
-        {
-            /// <summary>以目标堆叠与并入量构造。</summary>
-            public StackStep(RuntimeItem target, int amount)
-            {
-                Target = target;
-                Amount = amount;
-            }
-
-            public RuntimeItem Target { get; } // 目标堆叠。
-
-            public int Amount { get; } // 并入量。
-        }
     }
 }

@@ -13,19 +13,19 @@ namespace RPG4.Editor.Build
             "Mirror.Transports.Encryption.EncryptionTransport", "kcp2k.KcpTransport",
             "RPG4.Networking.Transports.ConnectionAdmissionTransport", "RPG4.Networking.AccountAuthenticator",
             "RPG4.Networking.AuthoritativeNetworkManager", "RPG4.Networking.GameplaySceneBindings",
-            "RPG4.Networking.OnlineSpawnConfiguration", "RPG4.Networking.OnlinePlayerIdentity",
+            "RPG4.Networking.OnlineSpawnConfiguration", "RPG4.Networking.ExtractionZone", "RPG4.Networking.RaidLootBag", "RPG4.Networking.OnlinePlayerIdentity",
             "RPG4.Networking.NetworkPlayerController", "RPG4.Networking.NetworkCharacterHealth",
             "RPG4.CharacterAttributes.CharacterAttributes", "RPG4.Combat.TrainingDummy", "RPG4.Combat.ContactDamage",
             "RPG4.PlayerMovement.Player", "RPG4.PlayerMovement.PlayerEquipment", "RPG4.Input.PlayerInput",
             "RPG4.Backpack.Runtime.BackpackInventory", "RPG4.Backpack.Runtime.EquipmentInventory",
             "RPG4.Backpack.Runtime.CharacterBackpack", "RPG4.Backpack.Runtime.ChestInventory",
             "RPG4.Backpack.Network.BackpackNetworkPlayer", "RPG4.Backpack.Network.BackpackNetworkInventory",
-            "RPG4.Backpack.Network.BackpackNetworkEquipment"
+            "RPG4.Backpack.Network.BackpackNetworkEquipment", "RPG4.Backpack.Network.NetworkWorldPickup"
         };
         internal static readonly HashSet<string> ManagedTypes = new HashSet<string>(StringComparer.Ordinal)
         {
             "GridFragment", "ImageFragment", "TextFragment", "LabeledNumberFragment", "StackableFragment",
-            "ConsumableFragment", "EquipmentFragment", "ConsumeModifier", "EquipModifier", "WeaponDefinitionFragment",
+            "ConsumableFragment", "ConsumableUseDefinitionFragment", "EquipmentFragment", "ConsumeModifier", "EquipModifier", "WeaponDefinitionFragment",
             "AmmoDefinitionFragment", "MagazineDefinitionFragment", "AttachmentDefinitionFragment"
         };
         internal static readonly string[] SourceRoots = {
@@ -47,8 +47,9 @@ namespace RPG4.Editor.Build
             "Assets/Mirror/Plugins/Mono.Cecil/Mono.CecilX.Pdb.dll", "Assets/Mirror/Plugins/Mono.Cecil/Mono.CecilX.Mdb.dll"
         };
         internal static readonly HashSet<string> ExcludedSourceNames = new HashSet<string>(StringComparer.Ordinal)
-        { "EntryContentManifest.cs", "ClientPresentationRoot.cs", "PlayerCameraController.cs", "PlayerViewController.cs", "PlayerPresenter.cs", "PlayerAimPose.cs", "PlayerWeaponRig.cs", "PlayerBodyAimConstraint.cs", "PlayerShotPoseConstraint.cs",
-            "WeaponView.cs", "WeaponAttachmentView.cs", "PlayerLocomotionPresentation.cs", "PlayerWeaponPresentation.cs", "PlayerPresentationTargets.cs" };
+        { "CharacterEquipmentPresentation.cs", "CharacterPresentation.cs", "EntryContentManifest.cs", "ClientPresentationRoot.cs", "PlayerCameraController.cs", "PlayerViewController.cs", "PlayerPresenter.cs", "PlayerAimPose.cs", "PlayerWeaponRig.cs", "PlayerBodyAimConstraint.cs", "PlayerShotPoseConstraint.cs",
+            "WeaponView.cs", "WeaponAttachmentView.cs", "PlayerConsumablePresentation.cs", "PlayerLocomotionPresentation.cs", "PlayerWeaponPresentation.cs", "PlayerPresentationTargets.cs",
+            "PlayerRenderPose.cs", "PlayerLocalWeaponPresentation.cs", "PlayerLocalActionAnticipation.cs" };
 
         internal static bool ExcludeSourcePath(string path) => path.Contains("/Rigging/")
             || path.Contains("/Editor/") && !path.StartsWith("Assets/Mirror/Editor/Weaver/", StringComparison.Ordinal);
@@ -76,6 +77,7 @@ namespace RPG4.Editor.Build
             {
                 case "RPG4.Networking.ClientPresentationRoot": case "RPG4.Frontend.GameplayUiBindingAdapter":
                 case "RPG4.PlayerMovement.PlayerCameraController": case "RPG4.PlayerMovement.PlayerViewController":
+                case "RPG4.PlayerMovement.CharacterPresentation":
                 case "RPG4.PlayerMovement.PlayerAimPose": case "RPG4.PlayerMovement.PlayerWeaponRig":
                 case "RPG4.PlayerMovement.PlayerBodyAimConstraint": case "RPG4.PlayerMovement.PlayerShotPoseConstraint":
                 case "RPG4.Interaction.PlayerInteraction": // Local camera targeting; server access limits live in the network ingress.
@@ -87,6 +89,7 @@ namespace RPG4.Editor.Build
                 case "RPG4.UI.UIManager": case "RPG4.UI.CharacterHealthView": case "RPG4.UI.CharacterStatusHUD":
                 case "RPG4.UI.PlayerDeathUI": case "RPG4.UI.UiTextScale":
                 case "RPG4.Backpack.UI.InventoryUICoordinator": case "RPG4.Backpack.UI.InventoryUIInputRouter":
+                case "RPG4.Backpack.UI.ConsumableHUD": case "RPG4.Backpack.UI.ConsumableHudOwner":
                 case "RPG4.Backpack.UI.WeaponAmmoHUD": return true;
                 default: return false;
             }
@@ -109,7 +112,8 @@ namespace RPG4.Editor.Build
                 switch (path)
                 {
                     case "presentationEnabled": case "stateData.content.animator": case "stateData.content.viewController":
-                    case "stateData.content.aimPose": case "stateData.attack": case "stateData.exploration.animationTransitionDuration":
+                    case "stateData.content.aimPose": case "stateData.content.presentationRoot": case "stateData.ownerCorrection":
+                    case "stateData.attack": case "stateData.exploration.animationTransitionDuration":
                     case "stateData.aim.aimAnimation": case "stateData.aim.animationTransitionDuration":
                     case "stateData.aim.animationParameterSmoothTime": case "stateData.aim.turnAnimationThreshold":
                     case "stateData.aim.turnAnimationMoveThreshold": case "stateData.aim.turnAnimationTransitionDuration":

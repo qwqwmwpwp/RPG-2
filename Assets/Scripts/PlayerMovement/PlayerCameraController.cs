@@ -43,6 +43,10 @@ namespace RPG4.PlayerMovement
         internal float ExplorationFieldOfView => explorationFieldOfView;
         internal float AttackDistance => attackDistance;
         internal float AttackFieldOfView => attackFieldOfView;
+        internal void ResetRenderHistory()
+        {
+            if (virtualCamera != null) virtualCamera.PreviousStateIsValid = false;
+        }
         private Cinemachine3rdPersonFollow follow;
         private float currentDistance;
         private float fieldOfViewVelocity;

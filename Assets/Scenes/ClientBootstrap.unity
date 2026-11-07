@@ -1147,7 +1147,7 @@ MonoBehaviour:
   m_Color: {r: 0.88, g: 0.92, b: 0.95, a: 1}
   m_RaycastTarget: 0
   m_Maskable: 1
-  m_text: "\u8fd4\u56de\u83dc\u5355"
+  m_text: "\u653e\u5f03\u5e76\u8fd4\u56de\u5927\u5385"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: f12b676d56524a258bf2c7b19fee6454, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: f12b676d56524a258bf2c7b19fee6454, type: 2}

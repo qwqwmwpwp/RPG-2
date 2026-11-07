@@ -138,6 +138,15 @@ namespace RPG4.Input
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": true
+                },
+                {
+                    ""name"": ""useConsumable"",
+                    ""type"": ""Button"",
+                    ""id"": ""b3fbc9d5-2821-41bc-863a-34efb9a280cb"",
+                    ""expectedControlType"": ""Button"",
+                    ""processors"": """",
+                    ""interactions"": ""Press(behavior=0)"",
+                    ""initialStateCheck"": false
                 }
             ],
             ""bindings"": [
@@ -193,6 +202,17 @@ namespace RPG4.Input
                     ""processors"": """",
                     ""groups"": """",
                     ""action"": ""pointerPosition"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""01906559-a4ae-465f-b138-031bb1cb6650"",
+                    ""path"": ""<Keyboard>/h"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""useConsumable"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
                 }
@@ -431,6 +451,7 @@ namespace RPG4.Input
             m_backpack_BackPackUI = m_backpack.FindAction("BackPackUI", throwIfNotFound: true);
             m_backpack_cancel = m_backpack.FindAction("cancel", throwIfNotFound: true);
             m_backpack_pointerPosition = m_backpack.FindAction("pointerPosition", throwIfNotFound: true);
+            m_backpack_useConsumable = m_backpack.FindAction("useConsumable", throwIfNotFound: true);
             // player
             m_player = asset.FindActionMap("player", throwIfNotFound: true);
             m_player_move = m_player.FindAction("move", throwIfNotFound: true);
@@ -527,6 +548,7 @@ namespace RPG4.Input
         private readonly InputAction m_backpack_BackPackUI;
         private readonly InputAction m_backpack_cancel;
         private readonly InputAction m_backpack_pointerPosition;
+        private readonly InputAction m_backpack_useConsumable;
         /// <summary>
         /// Provides access to input actions defined in input action map "backpack".
         /// </summary>
@@ -558,6 +580,10 @@ namespace RPG4.Input
             /// Provides access to the underlying input action "backpack/pointerPosition".
             /// </summary>
             public InputAction @pointerPosition => m_Wrapper.m_backpack_pointerPosition;
+            /// <summary>
+            /// Provides access to the underlying input action "backpack/useConsumable".
+            /// </summary>
+            public InputAction @useConsumable => m_Wrapper.m_backpack_useConsumable;
             /// <summary>
             /// Provides access to the underlying input action map instance.
             /// </summary>
@@ -599,6 +625,9 @@ namespace RPG4.Input
                 @pointerPosition.started += instance.OnPointerPosition;
                 @pointerPosition.performed += instance.OnPointerPosition;
                 @pointerPosition.canceled += instance.OnPointerPosition;
+                @useConsumable.started += instance.OnUseConsumable;
+                @useConsumable.performed += instance.OnUseConsumable;
+                @useConsumable.canceled += instance.OnUseConsumable;
             }
 
             /// <summary>
@@ -625,6 +654,9 @@ namespace RPG4.Input
                 @pointerPosition.started -= instance.OnPointerPosition;
                 @pointerPosition.performed -= instance.OnPointerPosition;
                 @pointerPosition.canceled -= instance.OnPointerPosition;
+                @useConsumable.started -= instance.OnUseConsumable;
+                @useConsumable.performed -= instance.OnUseConsumable;
+                @useConsumable.canceled -= instance.OnUseConsumable;
             }
 
             /// <summary>
@@ -873,6 +905,13 @@ namespace RPG4.Input
             /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
             /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
             void OnPointerPosition(InputAction.CallbackContext context);
+            /// <summary>
+            /// Method invoked when associated input action "useConsumable" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+            /// </summary>
+            /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+            /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+            /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+            void OnUseConsumable(InputAction.CallbackContext context);
         }
         /// <summary>
         /// Interface to implement callback methods for all input action callbacks associated with input actions defined by "player" which allows adding and removing callbacks.

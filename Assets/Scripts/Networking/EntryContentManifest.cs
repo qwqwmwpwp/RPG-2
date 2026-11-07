@@ -8,8 +8,9 @@ namespace RPG4.Networking
     public sealed class EntryContentManifest : ScriptableObject
     {
         public const string OnlineScenePath = "Assets/Scenes/OnlineGame.unity";
+        public const string LobbyScenePath = "Assets/Scenes/Lobby.unity";
         public const string MainMenuScenePath = "Assets/Scenes/MainMenu.unity";
-        public const string GenerationRule = "rpg-entry-content-v2";
+        public const string GenerationRule = "rpg-entry-content-v3";
         [SerializeField] private string contentHash = string.Empty;
         [SerializeField] private string generationRule = string.Empty;
         [SerializeField] private uint protocolVersion;

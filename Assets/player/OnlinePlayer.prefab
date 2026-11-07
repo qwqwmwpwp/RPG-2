@@ -368,6 +368,7 @@ MonoBehaviour:
   inputTimeout: 0.25
   gapWaitTicks: 2
   snapshotEveryTicks: 1
+  movementSendEveryTicks: 2
   interpolationDelay: 0.1
   additionalClientPresentationBehaviours:
     - {fileID: 1360000000000000002}

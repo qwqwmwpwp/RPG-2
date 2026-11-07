@@ -1170,7 +1170,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1956070584, guid: 3a3cc0360af447918940eb53044c927f, type: 3}
       propertyPath: ShoulderOffset.x
-      value: 1.869595e-22
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 1956070584, guid: 3a3cc0360af447918940eb53044c927f, type: 3}
       propertyPath: ShoulderOffset.y

@@ -42,7 +42,7 @@ namespace RPG4.PlayerMovement
         {
             UpperBodyDemand demand = blackboard.WeaponDemand;
             bool allowed = context.CanUseWeapon;
-            if (!allowed && (demand.Strafe || demand.AimCamera || demand.ShotPose || demand.Reloading || demand.AttackCamera))
+            if (!allowed && (demand.AimCamera || demand.ShotPose || demand.Reloading || demand.AttackCamera))
                 blackboard.WeaponCancellationRequested = true;
             allowed &= !blackboard.WeaponCancellationRequested;
             blackboard.IsAiming = allowed && demand.AimCamera;

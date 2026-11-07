@@ -18,4 +18,4 @@ MonoBehaviour:
     serverId: local-dev-01
     address: 127.0.0.1
     port: 7777
-    publicKeyFingerprint: 3e5f838ae7f737043f2c11500352c6a1f904e9d264e90d9484f66a5c5bec433b
+    publicKeyFingerprint: 17f75bc2b2cb94002e795c741436b3caa914ca51226466105cb0f58ce4c04d18

@@ -8,6 +8,16 @@ namespace RPG4.Backpack.Items
         public const ulong FirstValue = 1UL; // 首个有效标识的底层值。
 
         private ulong lastIssued; // 最近一次发放的底层值。
+        private ulong lastAllowed = ulong.MaxValue;
+
+        /// <summary>Install a durably reserved range before server world creation. Exhaustion always fails closed.</summary>
+        public void ConfigurePersistentRange(ulong first, ulong last)
+        {
+            if (first == 0 || first > last || first <= lastIssued)
+                throw new ArgumentOutOfRangeException(nameof(first), "持久物品号段必须位于已发放标识之后。");
+            lastIssued = first - 1;
+            lastAllowed = last;
+        }
 
         /// <summary>创建从 FirstValue 开始发放的生成器。</summary>
         public ItemIdGenerator()
@@ -25,7 +35,7 @@ namespace RPG4.Backpack.Items
         /// <summary>产出下一个唯一标识；标识空间（ulong）耗尽时抛出 OverflowException，绝不回绕。</summary>
         public ItemId Next()
         {
-            if (lastIssued == ulong.MaxValue)
+            if (lastIssued >= lastAllowed)
             {
                 throw new OverflowException("ItemId 标识空间已耗尽（ulong.MaxValue），拒绝回绕以避免产生重复标识。");
             }

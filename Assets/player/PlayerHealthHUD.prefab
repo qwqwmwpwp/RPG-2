@@ -1322,6 +1322,7 @@ MonoBehaviour:
   healthView: {fileID: 950000003}
   restartButton: {fileID: 970001204}
   statusLabel: {fileID: 970001143}
+  actionLabel: {fileID: 970001213}
 --- !u!1 &970001100
 GameObject:
   m_ObjectHideFlags: 0

@@ -182,6 +182,7 @@ namespace RPG4.PlayerMovement
             blackboard.OwnerActive = owner != null && (owner.IsNetworkSimulation ? owner.isActiveAndEnabled : owner.SimulationActive);
             if (owner.HasSimulationAuthority)
             {
+            blackboard.Consumable = owner.Consumables != null ? owner.Consumables.State : default;
             blackboard.HurtUntil = owner != null ? owner.HurtUntil : 0d;
             blackboard.CurrentHealth = owner != null && owner.Attributes != null ? owner.Attributes.CurrentHealth : 0f;
             blackboard.MaxHealth = owner != null && owner.Attributes != null ? owner.Attributes.MaxHealth : 0f;

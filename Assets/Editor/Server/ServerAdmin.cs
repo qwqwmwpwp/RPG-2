@@ -14,7 +14,7 @@ namespace RPG4.Editor.Server
     public sealed class ServerAdmin : EditorWindow
     {
         [SerializeField] private string configurationPath = "服务器/配置/server.json";
-        [SerializeField] private string migrationPath = "../数据库/迁移/001_initial.sql";
+        [SerializeField] private string migrationPath = "../数据库/迁移/002_inventory_raid.sql";
         [SerializeField] private string username = string.Empty, displayName = string.Empty;
         [NonSerialized] private string password = string.Empty;
         [NonSerialized] private CancellationTokenSource operation;
@@ -33,7 +33,7 @@ namespace RPG4.Editor.Server
                 if (GUILayout.Button("GenerateIdentity：创建固定服务器身份文件")) GenerateIdentity();
                 EditorGUILayout.Space();
                 migrationPath = EditorGUILayout.TextField("SQL（相对配置目录）", migrationPath);
-                if (GUILayout.Button("MigrateDatabase：应用 schema 1")) _ = MigrateDatabaseAsync();
+                if (GUILayout.Button("MigrateDatabase：应用 schema 2")) _ = MigrateDatabaseAsync();
                 EditorGUILayout.Space();
                 username = EditorGUILayout.TextField("账号", username);
                 displayName = EditorGUILayout.TextField("角色显示名", displayName);
@@ -67,7 +67,7 @@ namespace RPG4.Editor.Server
                 string sql = File.ReadAllText(path);
                 var repository = new MySqlAccountRepository(loaded);
                 await repository.MigrateAsync(sql, token);
-                return "Schema 1 已检查并应用。未启动游戏服务器。";
+                return "Schema 2 已检查并应用。未启动游戏服务器。";
             });
         }
 

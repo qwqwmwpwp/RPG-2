@@ -14,6 +14,8 @@ namespace RPG4.Frontend
         private string selectedAddress;
         private int selectedPort;
         private bool subscribed;
+        private bool usernameEdited, passwordAutofilled;
+        private string rememberPasswordMessage;
         private void Start()
         {
             session = ClientSessionController.Instance;
@@ -30,8 +32,12 @@ namespace RPG4.Frontend
             settings.closeButton.onClick.AddListener(ClosePanels); settings.CloseRequested += ClosePanels;
             servers.servers.onValueChanged.AddListener(SelectServer);
             servers.continueButton.onClick.AddListener(ConfirmServer);
-            login.username.onValueChanged.AddListener(_ => ValidateLogin());
-            login.password.onValueChanged.AddListener(_ => ValidateLogin());
+            login.username.onValueChanged.AddListener(UsernameChanged);
+            login.password.onValueChanged.AddListener(PasswordChanged);
+            login.rememberPassword.SetIsOnWithoutNotify(false);
+            login.rememberPassword.interactable = RememberedLoginStore.IsSupported;
+            login.rememberPassword.onValueChanged.AddListener(RememberPasswordChanged);
+            if (!RememberedLoginStore.IsSupported) rememberPasswordMessage = "当前平台暂不支持记住密码。";
             servers.address.onValueChanged.AddListener(_ => ValidateEndpoint());
             servers.port.onValueChanged.AddListener(_ => ValidateEndpoint());
             var choices = new List<TMP_Dropdown.OptionData>();
@@ -53,6 +59,8 @@ namespace RPG4.Frontend
         }
         private void SelectServer(int index)
         {
+            login.ClearPassword(); passwordAutofilled = false; usernameEdited = false;
+            login.rememberPassword.SetIsOnWithoutNotify(false);
             selectedIndex = index;
             var server = session.ServerCatalog != null ? session.ServerCatalog.Get(index) : null;
             selectedAddress = server != null ? PlayerPrefs.GetString("RPG4.Frontend.Address." + server.ServerId, server.Address) : string.Empty;
@@ -67,6 +75,7 @@ namespace RPG4.Frontend
             servers.Close(); settings.Close(); main.SetInputEnabled(false);
             var server = session.ServerCatalog != null ? session.ServerCatalog.Get(selectedIndex) : null;
             login.serverLabel.text = server != null ? server.DisplayName + "  ·  " + selectedAddress + ":" + selectedPort : "尚未配置服务器";
+            RestoreRememberedLogin();
             login.Open(); ValidateLogin();
         }
         private void OpenServers() { if (!session.CanSubmit) return; login.Close(); settings.Close(); main.SetInputEnabled(false); servers.Open(); ValidateEndpoint(); }
@@ -99,14 +108,51 @@ namespace RPG4.Frontend
             bool form = RPG4.Networking.Contracts.EntryProtocol.IsUsername(login.username.text)
                 && RPG4.Networking.Contracts.EntryProtocol.IsUtf8(login.password.text, 1, RPG4.Networking.Contracts.EntryProtocol.MaxPasswordBytes);
             login.submitButton.interactable = session.CanSubmit && configuration && form;
-            login.validationLabel.text = !configuration ? reason : !form ? "请输入已有账号和密码；账号由服务器管理员创建。" : "安全配置已就绪，可以登录。";
+            login.rememberPassword.interactable = session.CanSubmit && RememberedLoginStore.IsSupported;
+            string validation = !configuration ? reason : !form ? "请输入已有账号和密码；账号由服务器管理员创建。" : "安全配置已就绪，可以登录。";
+            login.validationLabel.text = string.IsNullOrEmpty(rememberPasswordMessage) ? validation : rememberPasswordMessage + "\n" + validation;
+        }
+        private void RestoreRememberedLogin()
+        {
+            login.ClearPassword(); passwordAutofilled = false;
+            if (!RememberedLoginStore.IsSupported) return;
+            var server = session.ServerCatalog != null ? session.ServerCatalog.Get(selectedIndex) : null;
+            if (RememberedLoginStore.TryRead(server, out string username, out string password, out string reason))
+            {
+                if (usernameEdited && login.username.text != username) return;
+                login.username.SetTextWithoutNotify(username);
+                login.password.SetTextWithoutNotify(password);
+                login.rememberPassword.SetIsOnWithoutNotify(true);
+                passwordAutofilled = true;
+            }
+            rememberPasswordMessage = reason;
+        }
+        private void UsernameChanged(string value)
+        {
+            usernameEdited = true;
+            if (passwordAutofilled) { login.ClearPassword(); passwordAutofilled = false; }
+            ValidateLogin();
+        }
+        private void PasswordChanged(string value) { passwordAutofilled = false; ValidateLogin(); }
+        private void RememberPasswordChanged(bool remember)
+        {
+            if (!session.CanSubmit)
+            { login.rememberPassword.SetIsOnWithoutNotify(!remember); return; }
+            rememberPasswordMessage = null;
+            if (!remember)
+            {
+                if (!RememberedLoginStore.TryDelete(out rememberPasswordMessage)) login.rememberPassword.SetIsOnWithoutNotify(true);
+                else rememberPasswordMessage = "已清除保存的密码。";
+            }
+            ValidateLogin();
         }
         private void Submit()
         {
             if (!login.IsOpen || !session.CanSubmit || !login.submitButton.IsInteractable()) return;
             try
             {
-                if (session.TryLogin(selectedIndex, selectedAddress, selectedPort, login.username.text, login.password.text, out string reason))
+                if (session.TryLogin(selectedIndex, selectedAddress, selectedPort, login.username.text, login.password.text,
+                    login.rememberPassword.isOn, out string reason))
                 {
                     PlayerPrefs.SetString("RPG4.Frontend.Username", login.username.text);
                     var server = session.ServerCatalog.Get(selectedIndex);
@@ -123,6 +169,7 @@ namespace RPG4.Frontend
                 login.ClearPassword();
                 // Clearing without a value-changed event must also invalidate the previous form result.
                 login.submitButton.interactable = false;
+                login.rememberPassword.interactable = session.CanSubmit && RememberedLoginStore.IsSupported;
             }
         }
         private void ClearCredentials() { if (login != null) login.ClearPassword(); }
@@ -138,7 +185,13 @@ namespace RPG4.Frontend
         private void OnDestroy()
         {
             if (subscribed && !ReferenceEquals(session, null)) { session.StatusChanged -= RenderStatus; session.CredentialsDispatched -= ClearCredentials; }
-            if (login != null) { login.ClearPassword(); login.Submitted -= Submit; login.CloseRequested -= ClosePanels; }
+            if (login != null)
+            {
+                login.ClearPassword(); login.Submitted -= Submit; login.CloseRequested -= ClosePanels;
+                login.username.onValueChanged.RemoveListener(UsernameChanged);
+                login.password.onValueChanged.RemoveListener(PasswordChanged);
+                login.rememberPassword.onValueChanged.RemoveListener(RememberPasswordChanged);
+            }
             if (servers != null) servers.CloseRequested -= ClosePanels;
             if (settings != null) settings.CloseRequested -= ClosePanels;
         }

@@ -1,149 +1,44 @@
-using RPG4.PlayerIntent;
 using RPG4.StateMachine;
-using UnityEngine;
 using HierarchicalStateMachine = RPG4.StateMachine.StateMachine;
 
 namespace RPG4.PlayerMovement
 {
-    /// <summary>组织上身需求和角色扳机会话，武器推进只发生在正常帧准备阶段。</summary>
+    /// <summary>上身互斥动作分组；消耗品事实仍由 PlayerConsumableUse 持有。</summary>
     internal sealed class UpperBodyRootState : State
     {
         private readonly PlayerContext context;
-        private readonly WeaponActionTimeline timeline;
-        private bool frameAvailable;
-        private bool fireArmed = true;
-        private long fireRearmFrame = -1;
+        internal WeaponState Weapon { get; }
+        internal ConsumableUseState Consumable { get; }
+        internal bool UsingConsumable => context.Owner.Consumables != null && context.Owner.Consumables.Active;
+        internal bool ConsumableStateActive => ActiveChild == Consumable;
         internal double Now { get; private set; }
-        internal bool CanAct => frameAvailable && context.CanUseWeapon;
-        internal bool AimHeld => CanAct && context.ReadState.Input.AimHeld;
-        internal bool ReloadPressed => CanAct && context.ReadState.Input.ReloadPressed && context.Weapon.CanReload;
-        internal bool FireInputAvailable => CanAct && fireArmed && context.Owner.SimulationTick > fireRearmFrame;
-        internal bool FireHeld => FireInputAvailable && context.ReadState.Input.FireHeld;
-        internal bool FirePressed => FireInputAvailable && context.ReadState.Input.FirePressed;
-        internal bool IsReloading => context.Weapon != null && context.Weapon.IsReloading;
-        internal WeaponActionSnapshot Action => timeline.Action;
-        internal NormalState Normal { get; }
-        internal AimState Aim { get; }
-        internal AttackState Attack { get; }
-        internal ReloadState Reload { get; }
+        internal float FrameDeltaTime { get; private set; }
+
         internal UpperBodyRootState(HierarchicalStateMachine machine, PlayerContext context) : base(machine)
         {
             this.context = context;
-            timeline = new WeaponActionTimeline();
-            Normal = new NormalState(machine, this);
-            Aim = new AimState(machine, this);
-            Attack = new AttackState(machine, this, context);
-            Reload = new ReloadState(machine, this);
+            Weapon = new WeaponState(machine, this, context);
+            Consumable = new ConsumableUseState(machine, this, context);
         }
-        protected override State GetInitialState() => ReloadPressed ? (State)Reload
-            : Attack.CanEnter ? Attack : AimHeld ? Aim : Normal;
-
-        // 准备时间与硬中断；不消费射击，也不维护第二套活动模式。
+        protected override State GetInitialState() => UsingConsumable ? (State)Consumable : Weapon;
         internal void PrepareFrame(float deltaTime, double now)
         {
             Now = now;
-            frameAvailable = deltaTime > 0f && context.CanUseWeapon
-                && !context.ReadState.Weapon.WeaponCancellationRequested;
-            if (!frameAvailable) CancelWeaponAction();
-            else
-            {
-                // 取消前的 held 不能自行恢复；之后明确的新按下边沿也能开启下一次扳机会话。
-                if (context.Owner.SimulationTick > fireRearmFrame
-                    && (!context.ReadState.Input.FireHeld || context.ReadState.Input.FirePressed)) fireArmed = true;
-                context.Weapon.BeginFrame(now, context.Owner.SimulationTick, FireHeld);
-                timeline.Advance(context.Weapon, now, context.Owner.SimulationTick);
-            }
+            FrameDeltaTime = deltaTime;
+            if (UsingConsumable) Consumable.PrepareFrame();
+            else Weapon.PrepareFrame(deltaTime, now);
         }
-        internal void AdvanceAction() => timeline.Advance(context.Weapon, Now, context.Owner.SimulationTick);
-        internal void ClearAction() => timeline.ClearAction();
-        private void RequireRelease()
+        // 外部事实变更只同步状态与需求，不推进武器时序或消费输入。
+        internal void PreparePublication()
         {
-            fireArmed = false;
-            fireRearmFrame = context.Owner.SimulationTick;
+            FrameDeltaTime = 0f;
+            Weapon.SuspendFrame();
         }
-        // 来源切换已撤回旧输入；新来源提交的首个新边沿不属于旧扳机会话。
-        internal void BeginInputSession()
-        {
-            fireArmed = true;
-            fireRearmFrame = -1;
-        }
-
-        internal void TickReady(bool aiming)
-        {
-            bool aim = CanAct && aiming;
-            context.Intents.RecordWeapon(new UpperBodyDemand(aim, aim, false, false,
-                aim ? context.Data.Aim.MoveSpeed : context.Data.Exploration.MoveSpeed, 1f), default, 0f);
-        }
-
-        internal void BeginReload()
-        {
-            RequireRelease();
-            timeline.ClearAction();
-            if (CanAct) context.Weapon.TryBeginReload();
-        }
-        internal void TickReload()
-        {
-            context.Intents.RecordWeapon(new UpperBodyDemand(true, false, false, true,
-                context.Data.Reload.MoveSpeed, 1f), default, context.Weapon != null ? context.Weapon.ReloadPhase : 0f);
-        }
-        internal void EndReload()
-        {
-            RequireRelease();
-            context.Weapon?.CancelAction();
-            timeline.ClearAction();
-            context.Intents.RecordEvent(PlayerEventKind.WeaponCancelled);
-        }
-
-        internal void CancelWeaponAction()
-        {
-            frameAvailable = false;
-            RequireRelease();
-            context.Weapon?.CancelAction();
-            timeline.ClearAction();
-            context.Intents.RecordWeapon(new UpperBodyDemand(false, false, false, false,
-                context.Data.Exploration.MoveSpeed, 1f), default, 0f);
-            context.Intents.ClearWeaponInput();
-            context.Intents.AcknowledgeWeaponCancellation();
-        }
+        internal void RecordInactiveDemand()
+            => context.Intents.RecordWeapon(PlayerMovementDemand.Compose(context.Data, false,
+                false, false, false, false, false, UsingConsumable), default, 0f);
+        internal void CancelWeaponAction() => Weapon.CancelWeaponAction();
+        internal void BeginInputSession() => Weapon.BeginInputSession();
         protected override void OnExit() => CancelWeaponAction();
-    }
-
-    internal sealed class NormalState : State
-    {
-        private readonly UpperBodyRootState root;
-        internal NormalState(HierarchicalStateMachine machine, UpperBodyRootState parent)
-            : base(machine, parent) { root = parent; }
-        protected override State GetTransition() => root.ReloadPressed ? (State)root.Reload
-            : root.Attack.CanEnter ? root.Attack : root.AimHeld ? root.Aim : null;
-        protected override void OnUpdate(float deltaTime) => root.TickReady(false);
-    }
-
-    internal sealed class AimState : State
-    {
-        private readonly UpperBodyRootState root;
-        internal AimState(HierarchicalStateMachine machine, UpperBodyRootState parent)
-            : base(machine, parent) { root = parent; }
-        protected override State GetTransition() => root.ReloadPressed ? (State)root.Reload
-            : root.Attack.CanEnter ? root.Attack : !root.AimHeld ? root.Normal : null;
-        protected override void OnUpdate(float deltaTime) => root.TickReady(true);
-    }
-
-    internal sealed class ReloadState : State
-    {
-        private readonly UpperBodyRootState root;
-        internal ReloadState(HierarchicalStateMachine machine, UpperBodyRootState parent)
-            : base(machine, parent) { root = parent; }
-        protected override void OnEnter()
-        {
-            root.BeginReload();
-        }
-        protected override State GetTransition()
-        {
-            if (!root.CanAct) return root.Normal;
-            if (root.IsReloading) return null;
-            return root.AimHeld ? (State)root.Aim : root.Normal;
-        }
-        protected override void OnUpdate(float deltaTime) => root.TickReload();
-        protected override void OnExit() => root.EndReload();
     }
 }

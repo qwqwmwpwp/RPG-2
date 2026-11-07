@@ -12,7 +12,7 @@ namespace RPG4.Networking
     /// <summary>Legacy offline lifecycle plus an explicit opt-in scene-owned online lifecycle.</summary>
     [DisallowMultipleComponent]
     [AddComponentMenu("RPG4/Authoritative Network Manager")]
-    public sealed class AuthoritativeNetworkManager : BackpackNetworkManager
+    public sealed partial class AuthoritativeNetworkManager : BackpackNetworkManager
     {
         [SerializeField] private GameObject offlinePlayer;
         [SerializeField] private PlayerCameraController localCamera;
@@ -41,7 +41,6 @@ namespace RPG4.Networking
         private string lastGameplayFailure = string.Empty;
         private long lastObservedWorldGeneration, lastObservedClientSessionId;
         private bool serverSceneSpawnComplete;
-        private readonly HashSet<NetworkConnectionToClient> pendingPlayerEntries = new HashSet<NetworkConnectionToClient>();
 
         public bool UsesGameplaySceneBindings => usesGameplaySceneBindings;
         /// <summary>Failed before Mirror installed its disconnect pipeline. Release this manager after stop;
@@ -305,6 +304,7 @@ namespace RPG4.Networking
             NetworkPlayerSimulation.Reset();
             if (!usesGameplaySceneBindings) NetworkPlayerSimulation.SetAdditionalCombatTargets(additionalCombatTargets);
             base.OnStartServer();
+            if (usesGameplaySceneBindings) StartRaidServerMessages();
             if (usesGameplaySceneBindings) RefreshGameplaySceneBindings();
             PublishGameplayLifecycle();
         }
@@ -328,6 +328,7 @@ namespace RPG4.Networking
                 }
             }
             base.OnStartClient();
+            if (usesGameplaySceneBindings) StartRaidClientMessages();
             if (usesGameplaySceneBindings) RefreshGameplaySceneBindings();
         }
         public void BindLocalPlayer(Player player)
@@ -383,6 +384,7 @@ namespace RPG4.Networking
         }
         public override void OnStopServer()
         {
+            StopRaidServerMessages();
             serverLifecycleStarted = false;
             serverSceneSpawnComplete = false;
             serverWorldGeneration++;
@@ -393,6 +395,7 @@ namespace RPG4.Networking
         }
         public override void OnStopClient()
         {
+            StopRaidClientMessages();
             // Also covers setup failures whose fallback invokes OnStopClient without a disconnect callback.
             PreserveClientSceneCleanupOwner();
             clientLifecycleStarted = false;
@@ -408,6 +411,7 @@ namespace RPG4.Networking
         {
             // NetworkManager advances asynchronous scene transitions here.
             base.LateUpdate();
+            TickRaidSessions();
             // Mirror's no-scene-change StartServer branch calls SpawnObjects without OnServerSceneChanged.
             // At LateUpdate the synchronous branch has returned, or the asynchronous scene work has completed.
             if (serverLifecycleStarted && NetworkServer.active && !HasMirrorSceneWork
@@ -486,55 +490,7 @@ namespace RPG4.Networking
         public override void OnServerAddPlayer(NetworkConnectionToClient conn)
         {
             if (!usesGameplaySceneBindings) { base.OnServerAddPlayer(conn); return; }
-            if (conn == null) return;
-            // Trusted inventory/equipment callbacks can synchronously re-enter the manager while the
-            // original object is still unpublished. One connection owns at most one pending spawn.
-            if (!pendingPlayerEntries.Add(conn)) { DisconnectFailedPlayerEntry(conn); return; }
-            GameObject player = null;
-            bool published = false;
-            try
-            {
-                if (!conn.isAuthenticated || conn.identity != null
-                    || !(conn.authenticationData is AuthenticatedIdentity identity)
-                    || !(authenticator is AccountAuthenticator accountAuthenticator)
-                    || !accountAuthenticator.IsAuthenticatedSessionCurrent(conn)
-                    || !ValidateServerGameplayWorld(out _)
-                    || !(gameplaySceneBindings.TrustedSpawnConfiguration is IServerPlayerSpawnInitializer initializer))
-                    throw new System.InvalidOperationException();
-                long generation = serverWorldGeneration;
-                GameplaySceneBindings bindings = gameplaySceneBindings;
-                var itemIds = ServerItemIds;
-                Transform spawn = GetStartPosition();
-                if (spawn == null || !IsCurrentPlayerEntry(conn, identity, bindings, generation))
-                    throw new System.InvalidOperationException();
-                player = Instantiate(playerPrefab, spawn.position, spawn.rotation);
-                var context = new TrustedPlayerSpawnContext(identity, bindings, spawn, itemIds, generation);
-                if (!initializer.TryInitializeBeforeSpawn(player, context, out _)
-                    || !ValidateServerGameplayWorld(out _) || !accountAuthenticator.IsAuthenticatedSessionCurrent(conn)
-                    || player == null || bindings == null || player.scene != bindings.gameObject.scene
-                    || !player.TryGetComponent(out NetworkIdentity networkIdentity) || networkIdentity.netId != 0
-                    || !player.TryGetComponent(out OnlinePlayerIdentity profile) || !profile.MatchesServerIdentity(identity, generation)
-                    || !IsCurrentPlayerEntry(conn, identity, bindings, generation))
-                    throw new System.InvalidOperationException();
-                // No user callbacks follow the final connection/world/reference check before publication.
-                published = NetworkServer.AddPlayerForConnection(conn, player);
-                if (!published) throw new System.InvalidOperationException();
-            }
-            catch (System.Exception)
-            {
-                ReportGameplayFailure("Trusted player initialization or entry failed.");
-                DisconnectFailedPlayerEntry(conn);
-            }
-            finally
-            {
-                pendingPlayerEntries.Remove(conn);
-                if (!published && player != null)
-                {
-                    if (player.TryGetComponent(out NetworkIdentity failedIdentity) && failedIdentity.netId != 0)
-                        NetworkServer.Destroy(player);
-                    else Destroy(player);
-                }
-            }
+            BeginAuthorizedRaidSpawn(conn);
         }
 
         private bool IsCurrentPlayerEntry(NetworkConnectionToClient conn, AuthenticatedIdentity identity,
@@ -560,6 +516,7 @@ namespace RPG4.Networking
 
         public override void OnServerDisconnect(NetworkConnectionToClient conn)
         {
+            if (usesGameplaySceneBindings) CaptureDisconnectedRaid(conn);
             if (authenticator is AccountAuthenticator accountAuthenticator)
                 accountAuthenticator.NotifyServerDisconnected(conn);
             base.OnServerDisconnect(conn);
@@ -595,6 +552,11 @@ namespace RPG4.Networking
 
         public override void OnClientSceneChanged()
         {
+            if (usesGameplaySceneBindings)
+            {
+                CompleteControlledClientScene();
+                return;
+            }
             // Keep Mirror's normal Ready/AddPlayer sequence. Frontends must not call it a second time.
             base.OnClientSceneChanged();
             clientSceneChangeRequested = false;

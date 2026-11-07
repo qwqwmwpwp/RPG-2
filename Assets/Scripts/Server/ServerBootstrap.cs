@@ -1,3 +1,4 @@
+using RPG4.Raid.Domain;
 using System;
 using System.IO;
 using System.Threading;
@@ -26,6 +27,7 @@ namespace RPG4.Server
         private AuthoritativeNetworkManager manager;
         private AccountAuthenticator authenticator;
         private MySqlAuthenticationProvider provider;
+        private Inventory.MySqlInventoryRaidService inventoryRaids;
         private ServerConfiguration settings;
         private ServerAuthenticationCleanup cleanup;
         private Task startTask, initializationTask, stopTask, healthTask;
@@ -81,6 +83,13 @@ namespace RPG4.Server
                 initializationTask = provider.InitializeAsync(startup.Token);
                 await initializationTask;
                 startup.Token.ThrowIfCancellationRequested();
+                var inventoryStore = new MySqlAccountRepository(loaded);
+                inventoryRaids = new Inventory.MySqlInventoryRaidService(inventoryStore.CreateConnection, inventoryStore.ValidateSchemaAsync,
+                    inventoryStore.CommandTimeout, loaded.Settings.serverId);
+                Task<PersistentItemIdRange> inventoryInitialization = inventoryRaids.InitializeAsync(startup.Token);
+                initializationTask = inventoryInitialization;
+                PersistentItemIdRange itemIds = await inventoryInitialization;
+                startup.Token.ThrowIfCancellationRequested();
                 manager = Instantiate(networkManagerPrefab);
                 startup.Token.ThrowIfCancellationRequested();
                 if (manager == null || NetworkManager.singleton != manager) throw new ServerOperationException("network_manager_duplicate");
@@ -88,6 +97,8 @@ namespace RPG4.Server
                 manager.offlineScene = string.Empty;
                 manager.onlineScene = EntryProtocol.GameplayScene;
                 manager.maxConnections = settings.maxConnections;
+                manager.ConfigurePersistentItemIdRange(itemIds.First, itemIds.Last);
+                manager.ConfigureInventoryRaidService(inventoryRaids);
                 manager.ConfigureGameplaySceneBindings(true);
                 authenticator = manager.authenticator as AccountAuthenticator;
                 var encryption = manager.transport as EncryptionTransport;
@@ -207,6 +218,7 @@ namespace RPG4.Server
                 if (cleanup != null && cleanup.ReleaseFailureCount > 0)
                 { FailureCode = "server_session_release_failed"; exitCode = Math.Max(exitCode, 1); }
                 provider?.FinishStop();
+                inventoryRaids?.Dispose();
                 if (manager != null && NetworkManager.loadingSceneAsync == null) Destroy(manager.gameObject);
                 SetPhase(exitCode == 0 ? ServerStartupPhase.Stopped : ServerStartupPhase.Failed);
             }
@@ -214,6 +226,7 @@ namespace RPG4.Server
             {
                 FailureCode = "server_shutdown_failed"; exitCode = Math.Max(exitCode, 1);
                 provider?.FinishStop(); SetPhase(ServerStartupPhase.Failed);
+                inventoryRaids?.Dispose();
             }
             finally { completion.TrySetResult(true); }
         }
@@ -252,6 +265,7 @@ namespace RPG4.Server
         {
             if (Phase == phase) return;
             Phase = phase;
+            Debug.Log("Dedicated server phase=" + phase + ".");
             var listeners = PhaseChanged;
             if (listeners == null) return;
             foreach (Action<ServerStartupPhase> listener in listeners.GetInvocationList())

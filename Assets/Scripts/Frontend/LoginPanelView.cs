@@ -11,6 +11,7 @@ namespace RPG4.Frontend
         public TMP_InputField username, password;
         public TMP_Text serverLabel, validationLabel, passwordVisibilityLabel;
         public Button submitButton, closeButton, passwordVisibilityButton;
+        public Toggle rememberPassword;
         public event Action Submitted;
         private bool passwordVisible;
         protected override void Awake()

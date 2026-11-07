@@ -1,4 +1,4 @@
--- Explicit ServerAdmin migration only. MySQL 8 / InnoDB. DDL commits implicitly.
+-- Explicit ServerAdmin migration only. Supported MySQL / InnoDB; repository enforces the version allowlist. DDL commits implicitly.
 -- Safe to retry interrupted creation; never drops or rewrites an existing table/version.
 CREATE TABLE IF NOT EXISTS schema_version (
     id TINYINT UNSIGNED NOT NULL PRIMARY KEY,

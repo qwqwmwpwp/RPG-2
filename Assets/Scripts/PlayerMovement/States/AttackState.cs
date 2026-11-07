@@ -8,7 +8,7 @@ namespace RPG4.PlayerMovement
     /// <summary>腰射/瞄准射击共享武器使用状态；模式切换不重建武器或时序。</summary>
     internal sealed class AttackState : State
     {
-        private readonly UpperBodyRootState root;
+        private readonly WeaponState root;
         private readonly PlayerContext context;
         internal HipAttackState Hip { get; }
         internal AimAttackState Aim { get; }
@@ -20,7 +20,7 @@ namespace RPG4.PlayerMovement
         // 自动枪允许长按在冷却中等待；半自动仅响应合格的按下，不排队短按。
         internal bool CanEnter => WaitingAutomatic || CanStartShot;
 
-        internal AttackState(HierarchicalStateMachine machine, UpperBodyRootState parent, PlayerContext context)
+        internal AttackState(HierarchicalStateMachine machine, WeaponState parent, PlayerContext context)
             : base(machine, parent)
         {
             root = parent;
@@ -47,13 +47,8 @@ namespace RPG4.PlayerMovement
         internal void Present(bool aiming)
         {
             WeaponActionSnapshot frame = root.Action;
-            bool aim = root.CanAct && aiming;
-            bool hasWeapon = root.CanAct && (WaitingAutomatic || frame.ShotActive || frame.FadingOut);
-            float speed = aim ? context.Data.Aim.MoveSpeed
-                : hasWeapon ? context.Data.HipFire.MoveSpeed : context.Data.Exploration.MoveSpeed;
-            context.Intents.RecordWeapon(new UpperBodyDemand(aim || hasWeapon, aim,
-                root.CanAct && (frame.ShotActive || frame.FadingOut), false, speed, !aim && hasWeapon ? 1.35f : 1f,
-                attackCamera: hasWeapon), frame, 0f);
+            context.Intents.RecordWeapon(PlayerMovementDemand.Compose(context.Data, root.CanAct,
+                aiming, false, frame.ShotActive, frame.FadingOut, WaitingAutomatic), frame, 0f);
         }
         protected override void OnExit() => root.ClearAction();
     }
@@ -61,8 +56,8 @@ namespace RPG4.PlayerMovement
     internal sealed class HipAttackState : State
     {
         private readonly AttackState attack;
-        private readonly UpperBodyRootState root;
-        internal HipAttackState(HierarchicalStateMachine machine, AttackState parent, UpperBodyRootState root)
+        private readonly WeaponState root;
+        internal HipAttackState(HierarchicalStateMachine machine, AttackState parent, WeaponState root)
             : base(machine, parent) { attack = parent; this.root = root; }
         protected override State GetTransition() => root.AimHeld ? attack.Aim : null;
         protected override void OnUpdate(float deltaTime) => attack.Present(false);
@@ -71,8 +66,8 @@ namespace RPG4.PlayerMovement
     internal sealed class AimAttackState : State
     {
         private readonly AttackState attack;
-        private readonly UpperBodyRootState root;
-        internal AimAttackState(HierarchicalStateMachine machine, AttackState parent, UpperBodyRootState root)
+        private readonly WeaponState root;
+        internal AimAttackState(HierarchicalStateMachine machine, AttackState parent, WeaponState root)
             : base(machine, parent) { attack = parent; this.root = root; }
         protected override State GetTransition() => !root.AimHeld ? attack.Hip : null;
         protected override void OnUpdate(float deltaTime) => attack.Present(true);

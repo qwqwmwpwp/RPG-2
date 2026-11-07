@@ -19,7 +19,11 @@ namespace RPG4.PlayerMovement
         private readonly PlayerStateData data;
         private bool hasShotProjection, ads, automatic, fadingProjection;
         private bool resetAnimator = true, reloadProjection, crouchReload;
+        private bool hasProjectedIdentity, anticipatedIdentity;
         private ulong projectedWeapon, projectedSequence;
+        private ulong anticipatedWeapon, highestAnticipatedSequence;
+        private bool anticipatedProjectionOpen, hasEndedAnticipation;
+        private ulong endedAnticipatedWeapon, endedAnticipatedSequence;
         private float ShotDuration = 0.01f, FadeDuration, reloadDuration = 1f;
         private Animator Animator => data.Content.Animator;
         private bool AnimatorAvailable => Animator != null && Animator.runtimeAnimatorController != null
@@ -27,6 +31,15 @@ namespace RPG4.PlayerMovement
         internal PlayerWeaponPresentation(PlayerStateData data) { this.data = data; }
         internal void Apply(PlayerWeaponTarget target)
         {
+            if (anticipatedProjectionOpen && (target.Reloading
+                || !target.WeaponAction.ShotActive && !target.WeaponAction.FadingOut))
+            {
+                // 只有实际启动过的投影才能结束；迟到确认不能重新打开已退场的姿态/相机。
+                endedAnticipatedWeapon = anticipatedWeapon;
+                endedAnticipatedSequence = highestAnticipatedSequence;
+                hasEndedAnticipation = true;
+                anticipatedProjectionOpen = false;
+            }
             ShotDuration = Mathf.Max(0.01f, target.ShotDuration);
             FadeDuration = Mathf.Max(0f, target.FadeDuration);
             reloadDuration = Mathf.Max(0.01f, target.ReloadDuration);
@@ -49,11 +62,28 @@ namespace RPG4.PlayerMovement
             AnimationClip clip = data.Reload.Clip(crouched);
             if (clip == null) return;
             Animator animator = Animator;
-            animator.SetFloat(ReloadSpeed, clip.length / reloadDuration);
+            float speed = clip.length / reloadDuration;
+            int stateHash = crouched ? CrouchReloadAnimation : ReloadAnimation;
+            if (reloadProjection && crouchReload == crouched)
+            {
+                AnimatorStateInfo state = animator.GetCurrentAnimatorStateInfo(ShootingLayer);
+                if (animator.IsInTransition(ShootingLayer))
+                {
+                    AnimatorStateInfo next = animator.GetNextAnimatorStateInfo(ShootingLayer);
+                    if (next.fullPathHash == stateHash) state = next;
+                }
+                if (state.fullPathHash == stateHash)
+                {
+                    // 用确认相位轻微校准速率，不 seek、不倒播；同帧重复提交也不累积修正。
+                    float error = Mathf.Clamp01(phase) - Mathf.Clamp01(state.normalizedTime);
+                    speed *= Mathf.Clamp(1f + error * 2f, 0.8f, 1.2f);
+                }
+            }
+            animator.SetFloat(ReloadSpeed, speed);
             if (!reloadProjection || crouchReload != crouched)
             {
                 // 逻辑时间控制完成；站蹲互切保留进度，不重复从头换弹。
-                animator.Play(crouched ? CrouchReloadAnimation : ReloadAnimation, ShootingLayer, phase);
+                animator.Play(stateHash, ShootingLayer, phase);
                 reloadProjection = true;
                 crouchReload = crouched;
                 resetAnimator = false;
@@ -63,6 +93,10 @@ namespace RPG4.PlayerMovement
         internal void Reset()
         {
             resetAnimator = true;
+            hasProjectedIdentity = false;
+            anticipatedWeapon = highestAnticipatedSequence = 0;
+            anticipatedProjectionOpen = hasEndedAnticipation = false;
+            endedAnticipatedWeapon = endedAnticipatedSequence = 0;
             reloadProjection = false;
             ClearPresentation();
             if (AnimatorAvailable) Animator.SetLayerWeight(ShootingLayer, 0f);
@@ -72,14 +106,14 @@ namespace RPG4.PlayerMovement
         {
             WeaponActionSnapshot frame = target.WeaponAction;
             bool wantsAds = target.IsAiming;
-            bool shotStarted = frame.ShotActive && (!hasShotProjection || projectedWeapon != target.WeaponId
-                || projectedSequence != target.ShotSequence);
+            // 身份在退场结束后仍保留；迟到确认不能把已播完的同一发重新作为新射击。
+            bool anticipatedSeen = target.AnticipatedIdentity && anticipatedWeapon == target.WeaponId
+                && target.ShotSequence <= highestAnticipatedSequence;
+            bool identityChanged = !hasProjectedIdentity || projectedWeapon != target.WeaponId
+                || projectedSequence != target.ShotSequence || anticipatedIdentity != target.AnticipatedIdentity;
+            bool shotStarted = frame.ShotActive && (!anticipatedSeen && identityChanged
+                || resetAnimator && !hasShotProjection);
             bool fadeStarted = frame.FadingOut && hasShotProjection && !fadingProjection;
-            if (shotStarted)
-            {
-                projectedWeapon = target.WeaponId;
-                projectedSequence = target.ShotSequence;
-            }
             Animator animator = Animator;
             if (!AnimatorAvailable || data.Attack.ShotClip == null)
             {
@@ -100,6 +134,16 @@ namespace RPG4.PlayerMovement
                 fadeInDuration = 0f;
             if (shotStarted)
             {
+                projectedWeapon = target.WeaponId;
+                projectedSequence = target.ShotSequence;
+                anticipatedIdentity = target.AnticipatedIdentity;
+                hasProjectedIdentity = true;
+                if (target.AnticipatedIdentity)
+                {
+                    anticipatedWeapon = target.WeaponId;
+                    highestAnticipatedSequence = target.ShotSequence;
+                    anticipatedProjectionOpen = true;
+                }
                 float startOffset = frame.ShotPhase * ShotDuration;
                 AnimationClip clip = wantsAutomatic ? data.Attack.AutoShotClip : data.Attack.ShotClip;
                 animator.SetFloat(ShotSpeed, clip.length / ShotDuration);
@@ -146,6 +190,10 @@ namespace RPG4.PlayerMovement
                 fadingProjection = false;
             }
         }
+
+        internal bool ShouldSuppressAnticipation(ulong weaponId, ulong sequence) =>
+            anticipatedWeapon == weaponId && sequence < highestAnticipatedSequence
+            || hasEndedAnticipation && endedAnticipatedWeapon == weaponId && endedAnticipatedSequence == sequence;
 
         private void SwitchAutomaticState(int state, float fadeInDuration)
         {

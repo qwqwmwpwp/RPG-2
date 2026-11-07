@@ -25,7 +25,12 @@ namespace RPG4.Networking
             WeaponActionSnapshot a = s.Action;
             w.WriteBool(a.ShotStarted); w.WriteBool(a.FadeStarted); w.WriteBool(a.ShotActive); w.WriteBool(a.FadingOut);
             w.WriteBool(a.IsAutomatic); w.WriteFloat(a.ShotPhase);
+            w.WriteConsumableAction(s.Consumable);
         }
+        public static void WriteConsumableAction(this NetworkWriter w, ConsumableActionSnapshot s)
+        { w.WriteULong(s.ActionId); w.WriteULong(s.ItemId); w.WriteDouble(s.StartTime); w.WriteDouble(s.EndTime); w.WriteBool(s.Active); }
+        public static ConsumableActionSnapshot ReadConsumableAction(this NetworkReader r)
+            => new ConsumableActionSnapshot(r.ReadULong(), r.ReadULong(), r.ReadDouble(), r.ReadDouble(), r.ReadBool());
         public static PlayerNetworkState ReadPlayerNetworkState(this NetworkReader r)
         {
             var s = new PlayerNetworkState
@@ -43,6 +48,7 @@ namespace RPG4.Networking
             s.Demand = new UpperBodyDemand(r.ReadBool(), r.ReadBool(), r.ReadBool(), r.ReadBool(),
                 r.ReadFloat(), r.ReadFloat(), r.ReadBool());
             s.Action = new WeaponActionSnapshot(r.ReadBool(), r.ReadBool(), r.ReadBool(), r.ReadBool(), r.ReadBool(), r.ReadFloat());
+            s.Consumable = r.ReadConsumableAction();
             return s;
         }
     }

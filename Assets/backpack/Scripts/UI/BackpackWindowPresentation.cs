@@ -1,4 +1,4 @@
-using TMPro;
+﻿using TMPro;
 using UnityEngine;
 
 namespace RPG4.Backpack.UI
@@ -62,7 +62,8 @@ namespace RPG4.Backpack.UI
             BackpackInteractionController interaction = ui.interaction;
             bool active = interaction != null && interaction.IsSessionActive;
             SetText(ui.actionHint, active ? interaction.ContextHint + (!interaction.IsCarrying && !interaction.IsChoosingSplitQuantity ? " · F 检查枪械 / 弹匣" : string.Empty) : "等待库存就绪…");
-            SetText(ui.operationStatus, active ? interaction.OperationFeedback : string.Empty);
+            SetText(ui.operationStatus, !string.IsNullOrEmpty(InventoryUIInputRouter.ConsumableFeedback)
+                ? InventoryUIInputRouter.ConsumableFeedback : active ? interaction.OperationFeedback : string.Empty);
             if (ui.itemDetails != null)
             {
                 ui.itemDetails.Show(active && !interaction.IsCarrying && !interaction.IsChoosingSplitQuantity

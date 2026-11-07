@@ -25,7 +25,7 @@ namespace RPG4.Editor.Build
         private const string ManifestPath = "Assets/Settings/EntryContentManifest.asset";
         private const string CatalogPath = "Assets/Settings/ClientServerCatalog.asset";
         private const string ManagerPath = "Assets/player/OnlineNetworkManager.prefab";
-        private static readonly string[] ClientScenes = { "Assets/Scenes/ClientBootstrap.unity", EntryContentManifest.MainMenuScenePath, EntryProtocol.GameplayScene };
+        private static readonly string[] ClientScenes = { "Assets/Scenes/ClientBootstrap.unity", EntryContentManifest.MainMenuScenePath, EntryContentManifest.LobbyScenePath, EntryProtocol.GameplayScene };
         private static readonly string[] ServerScenes = { "Assets/Scenes/ServerBootstrap.unity", EntryProtocol.GameplayScene };
         private static readonly string[] DatabasePlugins = {
             "MySqlConnector.dll", "Microsoft.Extensions.DependencyInjection.Abstractions.dll",
@@ -82,7 +82,7 @@ namespace RPG4.Editor.Build
             EntrySceneValidation.Validate();
             EntrySceneValidation.ValidateSceneOrder(ClientScenes, false);
             EditorBuildSettings.scenes = ClientScenes.Select(path => new EditorBuildSettingsScene(path, true)).ToArray();
-            Debug.Log("Default build scenes set to ClientBootstrap, MainMenu, OnlineGame. Dedicated Server uses its explicit entry list.");
+            Debug.Log("Default build scenes set to ClientBootstrap, MainMenu, Lobby, OnlineGame. Dedicated Server uses its explicit entry list.");
         });
 
         [MenuItem("RPG4/Build/Validate Deployment Identity")]

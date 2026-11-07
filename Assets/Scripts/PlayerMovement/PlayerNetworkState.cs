@@ -14,6 +14,7 @@ namespace RPG4.PlayerMovement
         public LocomotionPlan Plan;
         public UpperBodyDemand Demand;
         public WeaponActionSnapshot Action;
+        public ConsumableActionSnapshot Consumable;
         public static PlayerNetworkState Capture(Player player)
         {
             PlayerPublishedFrame frame = player.PublishedFrame;
@@ -26,7 +27,7 @@ namespace RPG4.PlayerMovement
                 ReloadPhase = frame.ReloadPhase, Plan = frame.Plan, Demand = frame.WeaponDemand,
                 Action = frame.WeaponAction, WeaponId = frame.WeaponId, ShotSequence = frame.ShotSequence,
                 ShotTime = frame.ShotTime, ShotDuration = frame.ShotDuration,
-                FadeDuration = frame.FadeDuration, ReloadDuration = frame.ReloadDuration
+                FadeDuration = frame.FadeDuration, ReloadDuration = frame.ReloadDuration, Consumable = frame.Consumable
             };
         }
     }

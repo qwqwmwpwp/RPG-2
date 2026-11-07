@@ -12,7 +12,7 @@ namespace RPG4.Frontend
         }
         protected override State GetInitialState() => initial;
     }
-    /// <summary>Eight sibling states share policy through the controller and a credential-free context.</summary>
+    /// <summary>Sibling states share policy through the controller and a credential-free context.</summary>
     internal sealed class ClientSessionNode : State
     {
         private readonly ClientSessionController owner;

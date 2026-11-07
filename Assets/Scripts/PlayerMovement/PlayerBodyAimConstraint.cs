@@ -92,7 +92,7 @@ namespace RPG4.PlayerMovement
         {
             return new PlayerBodyAimJob
             {
-                // 物理根只读场景姿态；Rig 的通用只读句柄会把 Animator 自身也绑定进动画流。
+                // 表现根只读场景姿态（包含 owner 纠错偏移）；避免把 Animator 自身写入动画流。
                 characterRoot = animator.BindSceneTransform(data.characterRoot),
                 skeletonRoot = ReadWriteTransformHandle.Bind(animator, data.skeletonRoot),
                 skeletonLocalRotation = data.skeletonLocalRotation,

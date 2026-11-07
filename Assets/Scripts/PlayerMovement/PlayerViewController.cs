@@ -35,11 +35,11 @@ namespace RPG4.PlayerMovement
         internal void Initialize(Transform ownerRoot, PlayerPresenter presenter)
         {
             Presenter = presenter;
-            if (transform.parent != ownerRoot || skeletonRoot == null || skeletonRoot == ownerRoot
+            if (!transform.IsChildOf(ownerRoot) || transform == ownerRoot || skeletonRoot == null || skeletonRoot == ownerRoot
                 || !skeletonRoot.IsChildOf(ownerRoot) || transform.IsChildOf(skeletonRoot)
                 || skeletonRoot.GetComponent<Rigidbody>() != null)
             {
-                Debug.LogError("PlayerViewController 需要角色直属子节点和独立的可见骨架引用。", this);
+                Debug.LogError("PlayerViewController 需要角色表现子树内的视角节点和独立的可见骨架引用。", this);
                 enabled = false;
             }
         }

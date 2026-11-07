@@ -66,21 +66,21 @@ namespace RPG4.Backpack.Network
         private void CmdExecuteWeaponOperation(ulong ticket, int requestId, int kind, ulong targetId, ulong candidateId, int count, int slot)
         {
             NetworkConnectionToClient conn = connectionToClient;
-            if (!BeginTicket(ticket, requestId, true, () => TargetWeaponOperationCompleted(conn, requestId, targetId, false, "请求已过期或队列已满。"))) return;
+            if (!BeginTicket(ticket, requestId, RequestCategory.Weapon, () => TargetWeaponOperationCompleted(conn, requestId, targetId, false, "请求已过期或队列已满。"))) return;
             void Complete(WeaponOperationResult result)
             {
                 if (connectionToClient != conn || operationOwner != conn) return;
                 CompleteTicket(ticket, () => TargetWeaponOperationCompleted(conn, result.RequestId, result.TargetItemId.Value, result.Success, result.Error));
             }
-            ScheduleOperation(() =>
+            ScheduleResultOperation(() =>
             {
                 if (!IsAuthenticatedIngress(conn))
-                { Complete(new WeaponOperationResult(requestId, new ItemId(targetId), false, "角色已不能操作库存。")); return; }
+                    return new WeaponOperationResult(requestId, new ItemId(targetId), false, "角色已不能操作库存。");
                 var operation = new WeaponOperation(requestId, (WeaponOperationKind)kind,
                     new ItemId(targetId), new ItemId(candidateId), count, (WeaponAttachmentSlot)slot);
                 ServerBeforeWeaponOperation?.Invoke(operation);
-                Complete(core.ExecuteWeaponOperation(operation));
-            }, reason => Complete(new WeaponOperationResult(requestId, new ItemId(targetId), false, reason)));
+                return core.ExecuteWeaponOperation(operation);
+            }, Complete, reason => new WeaponOperationResult(requestId, new ItemId(targetId), false, reason));
         }
 
         [TargetRpc]

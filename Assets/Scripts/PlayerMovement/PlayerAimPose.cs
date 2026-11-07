@@ -34,7 +34,8 @@ namespace RPG4.PlayerMovement
             if (rigBuilder == null) rigBuilder = GetComponent<RigBuilder>();
             if (shotPose == null) shotPose = GetComponentInChildren<PlayerShotPoseConstraint>(true);
             if (bodyAim == null || !bodyAim.IsValid() || weaponRig == null || rigBuilder == null
-                || bodyAim.data.characterRoot != ownerRoot)
+                || bodyAim.data.characterRoot != transform
+                || transform != ownerRoot && !transform.IsChildOf(ownerRoot))
             {
                 Debug.LogError("PlayerAimPose 需要完整的 BodyAim、Weapon、SupportHand Rig 和角色引用。", this);
                 enabled = false;
@@ -55,7 +56,7 @@ namespace RPG4.PlayerMovement
             else if (preparedFrame != frameId || !wasPosing)
             {
                 float targetPitch = Mathf.Clamp(target.Pitch, pitchRange.x, pitchRange.y);
-                if (pitchSmoothTime <= 0f) pitch = targetPitch;
+                if (target.ImmediateView || pitchSmoothTime <= 0f) pitch = targetPitch;
                 else if (deltaTime > 0f)
                     pitch = Mathf.SmoothDamp(pitch, targetPitch, ref pitchVelocity,
                         pitchSmoothTime, Mathf.Infinity, deltaTime);
@@ -112,6 +113,9 @@ namespace RPG4.PlayerMovement
         {
             ResetPose();
         }
+
+        // Animator 位于表现根；根运动仍由逻辑侧 motor 独占，不能覆盖纠错偏移。
+        private void OnAnimatorMove() { }
 
         private void OnValidate()
         {

@@ -1,3 +1,4 @@
+using RPG4.Raid.Domain;
 using System;
 using System.Collections.Generic;
 using Mirror;
@@ -41,11 +42,13 @@ namespace RPG4.Networking
         public Transform SpawnPoint { get; }
         public ItemIdGenerator ItemIds { get; }
         public long ServerWorldGeneration { get; }
+        public RaidReservation Reservation { get; }
         internal TrustedPlayerSpawnContext(AuthenticatedIdentity identity, GameplaySceneBindings bindings,
-            Transform spawnPoint, ItemIdGenerator itemIds, long worldGeneration)
+            Transform spawnPoint, ItemIdGenerator itemIds, long worldGeneration, RaidReservation reservation)
         {
             Identity = identity; Bindings = bindings; SpawnPoint = spawnPoint;
             ItemIds = itemIds; ServerWorldGeneration = worldGeneration;
+            Reservation = reservation;
         }
     }
 

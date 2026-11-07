@@ -10,7 +10,7 @@ namespace RPG4.Backpack.Core
 
         private static LogSettings settings;
 
-        /// <summary>当前日志配置：可显式注入（推荐由启动流程 / Bootstrap 赋值为 <c>Assets/backpack/Data/LogSettings.asset</c>），未注入或赋 <c>null</c> 时退化为运行时默认值（<c>Info</c> 级别 + 全模块放行）；输出通道映射为 Trace/Debug/Info → Log、Warn → LogWarning、Error/Fatal → LogError。</summary>
+        /// <summary>当前日志配置：默认从 <c>Assets/Resources/LogSettings.asset</c> 按需加载；可显式注入覆盖，资产缺失或赋 <c>null</c> 时使用运行时默认值（<c>Info</c> 级别 + 全模块放行）；输出通道映射为 Trace/Debug/Info → Log、Warn → LogWarning、Error/Fatal → LogError。</summary>
         public static LogSettings Settings
         {
             get
@@ -213,7 +213,7 @@ namespace RPG4.Backpack.Core
         /// <summary>解析日志配置：先按 <see cref="LogSettings.ResourceName"/> 走 <c>Resources.Load</c>，缺失则退回开发期默认值。</summary>
         private static LogSettings ResolveSettings()
         {
-            // 兜底①：任一 Resources/ 目录下存在同名资产即可自动生效（当前仅为预留钩子）。
+            // 加载 Resources/LogSettings.asset 中保存的日志配置。
             LogSettings fromResources = Resources.Load<LogSettings>(LogSettings.ResourceName);
             if (fromResources != null)
             {

@@ -5,8 +5,8 @@ namespace RPG4.Networking.Contracts
 {
     public static class EntryProtocol
     {
-        public const uint Version = 1;
-        public const string Name = "rpg-entry-v1";
+        public const uint Version = 4;
+        public const string Name = "rpg-entry-v4";
         public const string MapId = "online_game";
         public const string GameplayScene = "Assets/Scenes/OnlineGame.unity";
         public const int MaxMessageBytes = 2048; // Includes Mirror's two-byte message ID.

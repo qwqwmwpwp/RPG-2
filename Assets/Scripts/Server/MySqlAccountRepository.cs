@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using MySqlConnector;
@@ -28,9 +29,12 @@ namespace RPG4.Server
     /// <summary>Each operation owns its own pooled connection. No connection/transaction spans KDF work.</summary>
     public sealed class MySqlAccountRepository
     {
-        public const int SchemaVersion = 1;
+        public const int SchemaVersion = 2;
         private readonly string connectionString;
         private readonly int commandTimeout;
+        internal MySqlConnection CreateConnection(bool pooled = true) => new MySqlConnection(pooled ? connectionString
+            : new MySqlConnectionStringBuilder(connectionString) { Pooling = false }.ConnectionString);
+        internal int CommandTimeout => commandTimeout;
 
         public MySqlAccountRepository(LoadedServerConfiguration configuration)
             : this(ResolveDatabasePaths(configuration), configuration.Settings.databaseTimeoutSeconds,
@@ -67,17 +71,20 @@ namespace RPG4.Server
         private MySqlCommand Command(MySqlConnection connection, string sql, MySqlTransaction transaction = null)
         { return new MySqlCommand(sql, connection, transaction) { CommandTimeout = commandTimeout }; }
 
-        public async Task ValidateSchemaAsync(CancellationToken token)
+        public Task ValidateSchemaAsync(CancellationToken token) => ValidateSchemaAsync(false, token);
+
+        private async Task ValidateSchemaAsync(bool allowUnpublishedUpgrade, CancellationToken token)
         {
             var connection = new MySqlConnection(connectionString);
             await using (connection.ConfigureAwait(false))
             {
                 await connection.OpenAsync(token).ConfigureAwait(false);
-                await RequireMySql8Async(connection, token).ConfigureAwait(false);
+                await RequireSupportedMySqlAsync(connection, token).ConfigureAwait(false);
                 using (var command = Command(connection, "SELECT version FROM schema_version WHERE id=1"))
                 {
                     object version = await command.ExecuteScalarAsync(token).ConfigureAwait(false);
-                    if (version == null || Convert.ToInt32(version) != SchemaVersion)
+                    if (version == null || (Convert.ToInt32(version) != SchemaVersion
+                        && !(allowUnpublishedUpgrade && Convert.ToInt32(version) == 1)))
                         throw new InvalidOperationException("Unsupported database schema.");
                 }
                 const string shape = "SELECT a.account_id,a.normalized_username,a.disabled,a.password_algorithm,a.parameter_version,a.iterations,a.salt,a.password_hash,a.credential_version,c.character_id,c.display_name,c.spawn_config_version FROM accounts a LEFT JOIN characters c ON c.account_id=a.account_id WHERE 1=0";
@@ -100,6 +107,14 @@ namespace RPG4.Server
                 using (var command = Command(connection, checks))
                     if (Convert.ToInt32(await command.ExecuteScalarAsync(token).ConfigureAwait(false)) != 7)
                         throw new ServerOperationException("schema_checks_missing");
+                try
+                {
+                    await Inventory.InventorySchema.ValidateAsync(connection, commandTimeout, token).ConfigureAwait(false);
+                }
+                catch (Inventory.InventorySchemaException ex)
+                {
+                    throw new ServerOperationException(ex.Code);
+                }
             }
         }
 
@@ -115,14 +130,34 @@ namespace RPG4.Server
             }
         }
 
-        private async Task RequireMySql8Async(MySqlConnection connection, CancellationToken token)
+        private async Task RequireSupportedMySqlAsync(MySqlConnection connection, CancellationToken token)
         {
-            using (var command = Command(connection, "SELECT VERSION()"))
+            using (var command = Command(connection, "SELECT VERSION(), @@version_comment"))
             {
-                string version = Convert.ToString(await command.ExecuteScalarAsync(token).ConfigureAwait(false));
-                if (!version.StartsWith("8.", StringComparison.Ordinal) || version.IndexOf("MariaDB", StringComparison.OrdinalIgnoreCase) >= 0)
-                    throw new ServerOperationException("mysql8_required");
+                var reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
+                await using (reader.ConfigureAwait(false))
+                {
+                    if (!await reader.ReadAsync(token).ConfigureAwait(false) || reader.IsDBNull(0) || reader.IsDBNull(1)
+                        || !IsSupportedMySqlServer(reader.GetString(0), reader.GetString(1)))
+                        throw new ServerOperationException("mysql_server_unsupported");
+                }
             }
+        }
+
+        private static bool IsSupportedMySqlServer(string version, string edition)
+        {
+            // Accept Oracle builds only; compatible forks need their own schema/driver qualification.
+            if (edition != "MySQL Community Server - GPL" && edition != "MySQL Enterprise Server - Commercial") return false;
+            if (string.IsNullOrEmpty(version) || version.Length > 128) return false;
+            // Parse all three numeric components, with only known Oracle build/runtime suffixes.
+            var match = Regex.Match(version,
+                @"\A(?<number>(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))(?:-commercial)?(?:-debug)?(?:-log)?\z",
+                RegexOptions.CultureInvariant);
+            if (!match.Success || !Version.TryParse(match.Groups["number"].Value, out Version parsed)) return false;
+            // Retain 8.x support; calendar-version MySQL is explicitly qualified per release.
+            // 26.7.0 is the installed target. Other 9.x/26.x/future releases remain rejected.
+            // Version admission does not replace the strict schema checks in ValidateSchemaAsync.
+            return parsed.Major == 8 || (parsed.Major == 26 && parsed.Minor == 7 && parsed.Build == 0);
         }
 
         private async Task ValidateColumnsAsync(MySqlConnection connection, CancellationToken token)
@@ -282,11 +317,12 @@ namespace RPG4.Server
         public async Task MigrateAsync(string sql, CancellationToken token)
         {
             if (string.IsNullOrWhiteSpace(sql) || sql.Length > 131072) throw new ArgumentException("Invalid migration file.");
-            var connection = new MySqlConnection(connectionString);
+            var migrationConnectionString = new MySqlConnectionStringBuilder(connectionString) { AllowUserVariables = true }.ConnectionString;
+            var connection = new MySqlConnection(migrationConnectionString);
             await using (connection.ConfigureAwait(false))
             {
                 await connection.OpenAsync(token).ConfigureAwait(false);
-                await RequireMySql8Async(connection, token).ConfigureAwait(false);
+                await RequireSupportedMySqlAsync(connection, token).ConfigureAwait(false);
                 const string lockName = "SHA2(CONCAT(DATABASE(), ':rpg4-schema'),256)";
                 using (var command = Command(connection, "SELECT GET_LOCK(" + lockName + ",0)"))
                     if (Convert.ToInt32(await command.ExecuteScalarAsync(token).ConfigureAwait(false)) != 1)
@@ -300,11 +336,14 @@ namespace RPG4.Server
                         using (var command = Command(connection, "SELECT version FROM schema_version WHERE id=1"))
                         {
                             object current = await command.ExecuteScalarAsync(token).ConfigureAwait(false);
-                            if (current != null && Convert.ToInt32(current) != SchemaVersion)
+                            if (current != null && Convert.ToInt32(current) != 1 && Convert.ToInt32(current) != SchemaVersion)
                                 throw new ServerOperationException("schema_version_mismatch");
                         }
-                    // Explicit reviewed v1 batch. MySQL DDL commits implicitly; interrupted creation may be retried.
+                    // Reviewed upgrade DDL is retryable. Publish schema 2 only after the complete shape is validated.
                     using (var command = Command(connection, sql))
+                        await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+                    await ValidateSchemaAsync(true, token).ConfigureAwait(false);
+                    using (var command = Command(connection, "UPDATE schema_version SET version=2 WHERE id=1 AND version IN (1,2)"))
                         await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
                 }
                 finally

@@ -19,18 +19,11 @@ namespace RPG4.PlayerMovement
             blackboard.PhysicallyCrouched = physicallyCrouched;
             blackboard.CanStand = canStand;
             bool canMove = blackboard.CanMove && blackboard.InputAllowed;
-            bool crouched = !canMove ? physicallyCrouched : blackboard.CrouchHeld
-                || (physicallyCrouched && !canStand);
             UpperBodyDemand demand = blackboard.WeaponDemand;
-            float speed = demand.MoveSpeed;
-            if (crouched) speed = Mathf.Min(speed, context.Data.Crouch.MoveSpeed);
-            Vector2 move = canMove ? Vector2.ClampMagnitude(blackboard.Move, 1f) : Vector2.zero;
-            float threshold = demand.Strafe ? context.Data.Aim.MoveInputThreshold
-                : context.Data.Exploration.MoveInputThreshold;
-            if (move.sqrMagnitude <= threshold * threshold) move = Vector2.zero;
-            float yaw = blackboard.ViewYaw;
-            blackboard.Plan = new LocomotionPlan(canMove, crouched, demand.Strafe, move, yaw,
-                Mathf.Max(0f, speed), demand.AnimationSpeed);
+            blackboard.Plan = PlayerMovementRules.ResolvePlan(canMove, physicallyCrouched, canStand,
+                blackboard.CrouchHeld, blackboard.Move, blackboard.ViewYaw, demand,
+                context.Data.Crouch.MoveSpeed, context.Data.Exploration.MoveInputThreshold,
+                context.Data.Aim.MoveInputThreshold);
         }
 
         internal void RefreshAvailability()

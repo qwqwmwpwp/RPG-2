@@ -13,12 +13,15 @@ namespace RPG4.PlayerMovement
     internal sealed class PlayerPresenter
     {
         private readonly PlayerBlackboard blackboard;
+        private readonly Player owner;
+        private readonly PlayerRenderPose renderPose;
         private readonly PlayerInput localInput;
         private readonly PlayerStateData data;
         private readonly PlayerWeaponRig weaponRig;
         private readonly PlayerLocomotionPresentation locomotion;
         private readonly PlayerWeaponPresentation weapon;
         private readonly PlayerLifePresentation life;
+        private readonly PlayerConsumablePresentation consumable;
         private readonly List<CharacterHealthView> healthViews = new List<CharacterHealthView>();
         private readonly List<CharacterStatusHUD> statusViews = new List<CharacterStatusHUD>();
         private CrosshairUI crosshair;
@@ -28,31 +31,32 @@ namespace RPG4.PlayerMovement
         private PlayerPoseTarget poseTarget;
         private PlayerCameraTarget cameraTarget;
         private PlayerCameraController camera;
-        private WeaponView weaponView;
-        private RuntimeItem equipmentItem;
-        private bool equipmentAttempted;
-        private bool equipmentRigAvailable;
-        private int equipmentRevision = -1;
+        private readonly CharacterEquipmentPresentation equipment;
+        private WeaponView weaponView => equipment.View;
         private ulong lastEventSequence;
         private int advancedFrame = -1;
         private float explorationDistance;
         private bool cameraInitialized, enabled = true, wasActive, wasAlive = true, wasReloading, shotAiming;
         private bool reloadCrouched;
+        private Vector2 renderView;
         internal bool WeaponIKEnabled => enabled && poseTarget.SupportHandWeight > 0f;
 
         internal PlayerPresenter(Transform ownerRoot, PlayerBlackboard blackboard, PlayerStateData data, PlayerWeaponRig rig,
             RPG4.CharacterAttributes.CharacterAttributes attributes)
         {
             this.blackboard = blackboard;
+            owner = ownerRoot.GetComponent<Player>();
+            renderPose = new PlayerRenderPose(ownerRoot, data.Content.PresentationRoot, data.OwnerCorrection);
             localInput = ownerRoot.GetComponent<PlayerInput>();
             this.data = data;
             weaponRig = rig;
+            equipment = new CharacterEquipmentPresentation(rig);
             locomotion = new PlayerLocomotionPresentation(data);
             weapon = new PlayerWeaponPresentation(data);
             life = new PlayerLifePresentation(data);
+            consumable = new PlayerConsumablePresentation(data);
             data.Content.ViewController?.Initialize(ownerRoot, this);
             data.Content.AimPose?.Initialize(ownerRoot);
-            weaponRig?.PrepareEquipment();
             RefreshHealthBindings(attributes);
         }
         internal void RefreshHealthBindings(RPG4.CharacterAttributes.CharacterAttributes attributes)
@@ -84,7 +88,6 @@ namespace RPG4.PlayerMovement
         {
             PlayerPublishedFrame published = blackboard.Published;
             if (published == null) return;
-            bool changed = frame == null || frame.Version != published.Version;
             frame = published;
             if (!enabled)
             {
@@ -98,29 +101,42 @@ namespace RPG4.PlayerMovement
             {
                 explorationDistance = Mathf.Clamp(explorationDistance - localZoom * camera.ZoomSpeed,
                     camera.MinimumDistance, camera.MaximumDistance);
-                changed = true;
             }
-            if (changed) BuildTargets();
+            // 同一模拟版本也可能有尚未被固定步消费的新鼠标输入。
+            renderView = owner != null ? owner.GetLocalRenderViewAngles() : new Vector2(frame.ViewYaw, frame.ViewPitch);
+            BuildTargets();
             float step = advancedFrame == Time.frameCount ? 0f : Mathf.Max(0f, deltaTime);
             if (deltaTime > 0f) advancedFrame = Time.frameCount;
             bool active = frame.Active && frame.Alive;
+            if (!wasAlive && frame.Alive || !active && wasActive) ResetOwnerPresentation();
+            renderPose.Advance(step);
             if (active)
             {
                 if (!wasActive) locomotion.Reset(frame.PhysicallyCrouched);
                 locomotion.Apply(motionTarget, step);
                 data.Content.AimPose?.ApplyPresentation(poseTarget, step, Time.frameCount);
-                weapon.Apply(weaponTarget);
-                if (frame.Reloading && (!wasActive || !wasReloading || reloadCrouched != frame.Plan.Crouched))
-                    weaponRig?.RestoreReloadPose(data.Reload.Clip(frame.Plan.Crouched), frame.ReloadPhase);
+                if (frame.Consumable.Active)
+                {
+                    if (!consumable.Active) weapon.Reset();
+                    consumable.Apply(frame);
+                }
+                else
+                {
+                    consumable.Reset();
+                    weapon.Apply(weaponTarget);
+                }
+                if (weaponTarget.Reloading && (!wasActive || !wasReloading || reloadCrouched != frame.Plan.Crouched))
+                    weaponRig?.RestoreReloadPose(data.Reload.Clip(frame.Plan.Crouched), weaponTarget.ReloadPhase);
             }
             else if (wasActive || !wasAlive && frame.Alive)
             {
                 if (frame.Alive) locomotion.Reset(frame.PhysicallyCrouched);
+                consumable.Reset();
                 weapon.Reset();
                 data.Content.AimPose?.ResetPose();
                 RestoreSocket();
             }
-            if (wasReloading && !frame.Reloading || !wasAlive && frame.Alive) RestoreSocket();
+            if (wasReloading && !weaponTarget.Reloading || !wasAlive && frame.Alive) RestoreSocket();
             life.Apply(frame.Active, frame.Alive, frame.Time, frame.HurtUntil);
             foreach (CharacterHealthView view in healthViews)
                 if (view != null) view.ApplyHealth(frame.CurrentHealth, frame.MaxHealth, frame.Alive);
@@ -130,37 +146,69 @@ namespace RPG4.PlayerMovement
             if (crosshair != null) crosshair.SetState(frame.Active && frame.InteractionVisible,
                 frame.HasInteractionTarget, frame.InteractionPrompt);
             ApplyViewPose();
+            ConsumeAnticipatedShots();
             ConsumeEvents();
             if (reevaluate) data.Content.AimPose?.Reevaluate();
             wasActive = active;
             wasAlive = frame.Alive;
-            wasReloading = frame.Reloading;
+            wasReloading = weaponTarget.Reloading;
             reloadCrouched = frame.Plan.Crouched;
         }
 
         private void BuildTargets()
         {
-            bool allowed = frame.Active && frame.Alive && frame.CanUseWeapon;
-            UpperBodyDemand demand = frame.WeaponDemand;
+            bool allowed = frame.Active && frame.Alive && frame.CanUseWeapon && !frame.Consumable.Active;
+            PlayerLocalWeaponPresentation local = owner != null ? owner.GetLocalWeaponPresentation() : default;
+            bool anticipated = allowed && local.Active;
+            UpperBodyDemand demand = anticipated ? local.Demand : frame.WeaponDemand;
+            WeaponActionSnapshot action = anticipated ? local.Action : frame.WeaponAction;
+            bool isAiming = anticipated ? local.IsAiming : frame.IsAiming;
+            bool reloading = anticipated ? local.Reloading : frame.Reloading;
+            ulong presentationSequence = 0;
+            bool mappedShot = owner != null && owner.TryGetAnticipatedPresentationSequence(
+                frame.WeaponId, frame.ShotSequence, out presentationSequence);
+            bool suppressShot = anticipated
+                ? weapon.ShouldSuppressAnticipation(local.WeaponId, local.ShotSequence)
+                : (owner != null && owner.ShouldDeferConfirmedShotPresentation(frame.WeaponId, frame.ShotSequence))
+                    || (mappedShot && weapon.ShouldSuppressAnticipation(frame.WeaponId, presentationSequence));
+            if (suppressShot)
+            {
+                action = default;
+                demand = new UpperBodyDemand(demand.AimCamera || reloading, demand.AimCamera,
+                    false, reloading, demand.MoveSpeed, demand.AnimationSpeed);
+            }
             bool posing = allowed && (demand.AimCamera || demand.ShotPose);
             float layerWeight = allowed && (demand.ShotPose || demand.Reloading) ? 1f : 0f;
-            if (!demand.ShotPose || frame.WeaponAction.ShotActive) shotAiming = frame.IsAiming;
-            bool aiming = demand.ShotPose ? shotAiming : frame.IsAiming;
-            bool automatic = demand.ShotPose && frame.WeaponAction.IsAutomatic && data.Attack.AutoShotClip != null;
+            if (!demand.ShotPose || action.ShotActive) shotAiming = isAiming;
+            bool aiming = demand.ShotPose ? shotAiming : isAiming;
+            bool automatic = demand.ShotPose && action.IsAutomatic && data.Attack.AutoShotClip != null;
             ShootingPresentationData settings = data.Attack.Presentation;
             ShotPresentationData shot = settings.Get(aiming, automatic);
             poseTarget = new PlayerPoseTarget(posing, allowed && demand.Strafe && frame.CanLook,
-                frame.Reloading, frame.ViewYaw, frame.ViewPitch, settings.YawOffset + shot.YawOffset,
-                settings.WaistPitchOffset + shot.WaistPitchOffset, posing ? 1f : 0f, layerWeight);
+                reloading, renderView.x, renderView.y, settings.YawOffset + shot.YawOffset,
+                settings.WaistPitchOffset + shot.WaistPitchOffset, posing ? 1f : 0f, layerWeight,
+                localInput != null && localInput.UsesLocalInput);
             motionTarget = new PlayerMotionTarget(frame.Plan, frame.CanMove, frame.IsAiming,
                 frame.PlanarVelocity, frame.BodyYaw);
-            weaponTarget = new PlayerWeaponTarget(frame, layerWeight);
+            weaponTarget = anticipated ? new PlayerWeaponTarget(frame, layerWeight, local, suppressShot)
+                : new PlayerWeaponTarget(frame, layerWeight, mappedShot, presentationSequence, suppressShot);
             if (camera != null)
             {
                 bool attack = allowed && (demand.AimCamera || demand.AttackCamera);
                 cameraTarget = new PlayerCameraTarget(attack,
                     attack ? camera.AttackDistance : explorationDistance,
                     attack ? camera.AttackFieldOfView : camera.ExplorationFieldOfView, explorationDistance);
+            }
+        }
+
+        private void ConsumeAnticipatedShots()
+        {
+            if (owner == null) return;
+            while (owner.TryDequeueAnticipatedShot(out PlayerAnticipatedShot shot))
+            {
+                if (!frame.Active || !frame.Alive || shot.WeaponId != frame.WeaponId) continue;
+                if (weaponView != null && weaponView.PlayAnticipatedShot(new ItemId(shot.WeaponId), shot.RequestId, shot.Ordinal))
+                    owner.MarkAnticipatedShotPresented(shot);
             }
         }
 
@@ -177,7 +225,8 @@ namespace RPG4.PlayerMovement
                 if (entry.Kind == PlayerEventKind.Shot && frame.Active && frame.Alive
                     && entry.WeaponId == frame.WeaponId && frame.Time - entry.Time <= 0.25d)
                 {
-                    weaponView?.PlayShot(new ItemId(entry.WeaponId), entry.ShotSequence);
+                    if (owner == null || owner.ShouldPresentConfirmedShot(entry.WeaponId, entry.ShotSequence))
+                        weaponView?.PlayShot(new ItemId(entry.WeaponId), entry.ShotSequence);
                     if (crosshair != null) crosshair.ShowShotFeedback(entry.Success, entry.Obstructed);
                 }
                 else if (entry.Kind == PlayerEventKind.WeaponCancelled && !frame.Reloading)
@@ -203,7 +252,18 @@ namespace RPG4.PlayerMovement
 
         internal void ApplyViewPose()
         {
-            if (enabled && frame != null) data.Content.ViewController?.Apply(frame.ViewYaw, frame.ViewPitch);
+            if (enabled && frame != null) data.Content.ViewController?.Apply(renderView.x, renderView.y);
+        }
+        internal void BeforeOwnerReconcile() => renderPose.BeforeReconcile();
+        internal void AfterOwnerReconcile(bool discontinuity)
+        {
+            if (renderPose.AfterReconcile(discontinuity)) camera?.ResetRenderHistory();
+        }
+        internal void ResetOwnerPresentation()
+        {
+            renderPose.Reset();
+            weaponView?.ResetAnticipatedShots();
+            camera?.ResetRenderHistory();
         }
         internal void RegisterCamera(PlayerCameraController value)
         {
@@ -224,19 +284,20 @@ namespace RPG4.PlayerMovement
         {
             if (enabled == value) return;
             enabled = value;
-            if (value && weaponView == null) equipmentAttempted = false;
+            ResetOwnerPresentation();
+            equipment.SetVisible(value);
             PlayerPublishedFrame published = blackboard.Published;
             lastEventSequence = published != null ? published.LastEventSequence : 0;
             if (frame != null && frame.Alive) locomotion.Reset(frame.PhysicallyCrouched);
             weapon.Reset();
             life.Reset();
+            consumable.Reset();
             data.Content.AimPose?.ResetPose();
             if (crosshair != null) crosshair.SetState(false, false);
             foreach (CharacterHealthView view in healthViews)
                 if (view != null) view.SetPresentationActive(value);
             foreach (CharacterStatusHUD status in statusViews)
                 if (status != null) status.SetPresentationActive(value);
-            weaponRig?.SetVisible(value);
             wasActive = wasReloading = false;
             frame = null;
             advancedFrame = -1;
@@ -255,61 +316,7 @@ namespace RPG4.PlayerMovement
         }
         private void RestoreSocket() => weaponRig?.SwitchSocketByString("To_Hand_R_Socket,IK_ON_Left_Handle");
 
-        private void BindEquipment(GameObject model, RuntimeItem item)
-        {
-            weaponRig.BindEquipment(model);
-            weaponView = model.GetComponentInChildren<WeaponView>(true);
-            weaponView?.Bind(item);
-            weaponRig.SetVisible(enabled);
-        }
-        internal void RefreshEquipment(RuntimeItem item)
-        {
-            if (!ReferenceEquals(equipmentItem, item))
-            {
-                ReleaseEquipment();
-                equipmentItem = item;
-            }
-            if (!enabled || item == null) return;
-            bool rigAvailable = weaponRig != null && weaponRig.isActiveAndEnabled;
-            if (rigAvailable != equipmentRigAvailable)
-            {
-                equipmentRigAvailable = rigAvailable;
-                if (rigAvailable) equipmentAttempted = false;
-            }
-            if (!rigAvailable) return;
-            if (weaponView != null)
-            {
-                if (equipmentRevision != item.Revision) weaponView.ApplyItemState(item);
-                equipmentRevision = item.Revision;
-                return;
-            }
-            // 缺少资源/挂点时仅放弃本轮投影；不阻塞装备，也不逐帧反复创建失败的模型。
-            if (equipmentAttempted && equipmentRevision == item.Revision) return;
-            equipmentAttempted = true;
-            equipmentRevision = item.Revision;
-            GameObject model = null;
-            try
-            {
-                GameObject prefab = item.GetFragment<EquipmentFragment>()?.EquipPrefab;
-                if (!weaponRig.TryPrepareEquipment(prefab, out model, out _)) return;
-                BindEquipment(model, item);
-            }
-            catch (System.Exception exception)
-            {
-                Debug.LogException(exception);
-                if (model != null) Object.Destroy(model);
-                weaponView = null;
-                weaponRig?.UnbindEquipment();
-            }
-        }
-        internal void ReleaseEquipment()
-        {
-            weaponView?.Unbind();
-            weaponView = null;
-            weaponRig?.UnbindEquipment();
-            equipmentItem = null;
-            equipmentAttempted = false;
-            equipmentRevision = -1;
-        }
+        internal void RefreshEquipment(RuntimeItem item) => equipment.Refresh(item);
+        internal void ReleaseEquipment() => equipment.Release();
     }
 }

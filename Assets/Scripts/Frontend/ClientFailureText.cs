@@ -31,6 +31,7 @@ namespace RPG4.Frontend
             {
                 case ClientSessionState.Connecting: return "连接服务器超时，请检查地址与网络。";
                 case ClientSessionState.Authenticating: return "账号验证超时，请重新登录。";
+                case ClientSessionState.LoadingLobby: return "大厅或仓库读取超时，请重新登录。";
                 case ClientSessionState.LoadingGameplay: return "场景加载超时，请重新登录。";
                 default: return "角色同步超时，请重新登录。";
             }

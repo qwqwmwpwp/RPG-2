@@ -33,7 +33,7 @@ namespace RPG4.Backpack.Inventory
 
         public bool TryExchangeWeaponMagazine(InventoryContainer weaponContainer, RuntimeItem weapon, RuntimeItem incoming,
             ItemManifestCatalog catalog, out string error)
-            => TryExchangeWeaponChild(weaponContainer, weapon, incoming, true, default, catalog, null, out error);
+            => TryExchangeWeaponChild(weaponContainer, weapon, incoming, true, default, catalog, CommitParticipant, out error);
 
         public bool CanExchangeWeaponAttachment(InventoryContainer weaponContainer, RuntimeItem weapon, WeaponAttachmentSlot slot,
             RuntimeItem incoming, ItemManifestCatalog catalog, out string error)
@@ -41,13 +41,14 @@ namespace RPG4.Backpack.Inventory
 
         public bool TryExchangeWeaponAttachment(InventoryContainer weaponContainer, RuntimeItem weapon, WeaponAttachmentSlot slot,
             RuntimeItem incoming, ItemManifestCatalog catalog, out string error)
-            => TryExchangeWeaponChild(weaponContainer, weapon, incoming, false, slot, catalog, null, out error);
+            => TryExchangeWeaponChild(weaponContainer, weapon, incoming, false, slot, catalog, CommitParticipant, out error);
 
         private bool TryPlanWeaponExchange(InventoryContainer weaponContainer, RuntimeItem weapon, RuntimeItem incoming,
             bool magazine, WeaponAttachmentSlot slot, ItemManifestCatalog catalog,
             out RuntimeItem outgoing, out int returnIndex, out string error)
         {
             outgoing = null; returnIndex = NoIndex; error = null;
+            if (!CanMutate(incoming, out error) || (weaponContainer != null && !weaponContainer.CanMutate(weapon, out error))) return false;
             if (weaponContainer == null || weapon == null || !weaponContainer.Contains(weapon) || weapon.WeaponState == null
                 || !ReferenceEquals(weapon.RootOwner, weaponContainer))
             { error = "武器必须属于指定的根容器。"; return false; }
@@ -87,36 +88,39 @@ namespace RPG4.Backpack.Inventory
         }
 
         internal bool TryExchangeWeaponChild(InventoryContainer weaponContainer, RuntimeItem weapon, RuntimeItem incoming,
-            bool magazine, WeaponAttachmentSlot slot, ItemManifestCatalog catalog, CommitConfirmHandler confirm, out string error)
+            bool magazine, WeaponAttachmentSlot slot, ItemManifestCatalog catalog, IInventoryCommitParticipant confirm, out string error)
         {
-            if (!TryPlanWeaponExchange(weaponContainer, weapon, incoming, magazine, slot, catalog, out RuntimeItem outgoing, out int index, out error)) return false;
-            InventoryPlacement previous = incoming != null ? placements[incoming] : InventoryPlacement.Invalid;
-            if (incoming != null) { ClearCells(previous); RemovePlacement(incoming); }
-            if (magazine) weapon.WeaponState.SetMagazine(incoming); else weapon.WeaponState.SetAttachment(slot, incoming);
-            weaponContainer.TouchItem(weapon, true);
-            if (outgoing != null) CommitPlacement(outgoing, index, ResolveItemDimensions(outgoing));
-            itemIndicesDirty = true;
-            if (confirm != null && !confirm(outgoing?.ItemId ?? ItemId.None, out error))
+            if (weaponContainer == null) { error = "目标武器容器为空。"; return false; }
+            return InventoryTransactions.Execute(this, weaponContainer, (InventoryTransactions tx, out string failure) =>
             {
-                if (outgoing != null) { ClearCells(placements[outgoing]); RemovePlacement(outgoing); }
-                if (magazine) weapon.WeaponState.SetMagazine(outgoing); else weapon.WeaponState.SetAttachment(slot, outgoing);
+                if (!TryPlanWeaponExchange(weaponContainer, weapon, incoming, magazine, slot, catalog,
+                    out RuntimeItem outgoing, out int index, out failure)) return false;
+                tx.Track(weapon); tx.Track(incoming); tx.Track(outgoing);
+                tx.OnRollback(() =>
+                {
+                    if (magazine) weapon.WeaponState.SetMagazine(outgoing); else weapon.WeaponState.SetAttachment(slot, outgoing);
+                });
+                if (incoming != null) { ClearCells(placements[incoming]); RemovePlacement(incoming); }
+                if (magazine) weapon.WeaponState.SetMagazine(incoming); else weapon.WeaponState.SetAttachment(slot, incoming);
                 weaponContainer.TouchItem(weapon, true);
-                if (incoming != null) CommitPlacement(incoming, previous.UpperLeftIndex, previous.Dimensions);
-                itemIndicesDirty = true;
-                confirm(ItemId.None, out _);
-                return false;
-            }
-            if (!ReferenceEquals(weaponContainer, this)) AdvanceRevision();
-            weapon.PublishStateChanged(); // 静默修改已推进版本；现在所有归属与占格已提交。
-            if (!ReferenceEquals(weaponContainer, this)) NotifyChanged();
-            if (incoming != null) NotifyItemRemoved(incoming);
-            if (outgoing != null) NotifyItemAdded(outgoing);
-            error = null; return true;
+                if (outgoing != null) CommitPlacement(outgoing, index, ResolveItemDimensions(outgoing));
+                if (!tx.Prepare(confirm, outgoing?.ItemId ?? ItemId.None, out failure)
+                    || !tx.Prepare(weaponContainer.CommitParticipant, weapon.ItemId, out failure)) return false;
+                bool same = ReferenceEquals(this, weaponContainer);
+                return tx.Commit(() =>
+                {
+                    InventoryTransactions.RunPostCommit(() => weaponContainer.PublishCommittedItemState(weapon), "武器已提交，状态通知失败");
+                    NotifyChanged(); if (!same) weaponContainer.NotifyChanged();
+                    if (incoming != null) NotifyItemRemoved(incoming);
+                    if (outgoing != null) NotifyItemAdded(outgoing);
+                }, out failure);
+            }, out error);
         }
 
         public bool CanLoadMagazine(RuntimeItem magazine, RuntimeItem ammo, int count, ItemManifestCatalog catalog, out string error)
         {
             error = null;
+            if (!CanMutate(magazine, out error) || !CanMutate(ammo, out error)) return false;
             if (magazine?.MagazineState == null || ammo == null || !Contains(magazine) || !Contains(ammo)
                 || ReferenceEquals(magazine, ammo) || count <= 0 || count > ammo.StackCount
                 || ammo.WeaponState != null || ammo.MagazineState != null || ammo.GetFragment<AttachmentDefinitionFragment>() != null
@@ -127,34 +131,30 @@ namespace RPG4.Backpack.Inventory
         }
 
         public bool TryLoadMagazine(RuntimeItem magazine, RuntimeItem ammo, int count, ItemManifestCatalog catalog, out string error)
-            => TryLoadMagazine(magazine, ammo, count, catalog, null, out error);
+            => TryLoadMagazine(magazine, ammo, count, catalog, CommitParticipant, out error);
 
         internal bool TryLoadMagazine(RuntimeItem magazine, RuntimeItem ammo, int count, ItemManifestCatalog catalog,
-            CommitConfirmHandler confirm, out string error)
-        {
-            if (!CanLoadMagazine(magazine, ammo, count, catalog, out error)) return false;
-            int previousCount = ammo.StackCount;
-            InventoryPlacement previousPlacement = placements[ammo];
-            var previousRounds = new List<BackpackTag>(magazine.MagazineState.Rounds);
-            bool consumed = count == ammo.StackCount;
-            if (consumed) { ClearCells(placements[ammo]); RemovePlacement(ammo); }
-            else SetItemStack(ammo, ammo.StackCount - count);
-            magazine.MagazineState.AddRounds(ammo.ItemType, count);
-            TouchItem(magazine, true);
-            itemIndicesDirty = true;
-            if (confirm != null && !confirm(magazine.ItemId, out error))
+            IInventoryCommitParticipant confirm, out string error)
+            => InventoryTransactions.Execute(this, null, (InventoryTransactions tx, out string failure) =>
             {
-                magazine.MagazineState.TryRestore(previousRounds, catalog, out _);
-                TouchItem(magazine, true);
-                if (consumed) CommitPlacement(ammo, previousPlacement.UpperLeftIndex, previousPlacement.Dimensions);
-                else SetItemStack(ammo, previousCount);
-                itemIndicesDirty = true;
-                confirm(ItemId.None, out _);
-                return false;
-            }
-            magazine.PublishStateChanged();
-            if (consumed) NotifyItemRemoved(ammo); else NotifyStackChanged(ammo);
-            return true;
-        }
+                if (!CanLoadMagazine(magazine, ammo, count, catalog, out failure)) return false;
+                tx.Track(magazine); tx.Track(ammo);
+                var previousRounds = new List<BackpackTag>(magazine.MagazineState.Rounds);
+                tx.OnRollback(() =>
+                {
+                    if (!magazine.MagazineState.TryRestore(previousRounds, catalog, out string restoreError))
+                        throw new System.InvalidOperationException(restoreError);
+                });
+                bool consumed = count == ammo.StackCount;
+                if (consumed) { ClearCells(placements[ammo]); RemovePlacement(ammo); }
+                else SetItemStack(ammo, ammo.StackCount - count);
+                magazine.MagazineState.AddRounds(ammo.ItemType, count); TouchItem(magazine, true);
+                if (!tx.Prepare(confirm, magazine.ItemId, out failure)) return false;
+                return tx.Commit(() =>
+                {
+                    InventoryTransactions.RunPostCommit(() => PublishCommittedItemState(magazine), "弹匣已提交，状态通知失败");
+                    NotifyChanged(); if (consumed) NotifyItemRemoved(ammo); else NotifyStackChanged(ammo);
+                }, out failure);
+            }, out error);
     }
 }

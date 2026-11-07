@@ -50,9 +50,10 @@ namespace RPG4.Backpack.Network
         private readonly HashSet<ulong> pendingOperations = new HashSet<ulong>();
         private readonly Dictionary<ulong, Action> completedOperations = new Dictionary<ulong, Action>();
         private readonly Queue<ulong> completedOrder = new Queue<ulong>();
-        private readonly Dictionary<(bool weapon, int id), ulong> requestTickets = new Dictionary<(bool, int), ulong>();
-        private readonly Queue<(bool weapon, int id)> requestOrder = new Queue<(bool, int)>();
-        private uint inventoryRequestHighWater, weaponRequestHighWater;
+        private enum RequestCategory : byte { Inventory, Weapon, Consumable, Pickup }
+        private readonly Dictionary<(RequestCategory category, int id), ulong> requestTickets = new Dictionary<(RequestCategory, int), ulong>();
+        private readonly Queue<(RequestCategory category, int id)> requestOrder = new Queue<(RequestCategory, int)>();
+        private readonly uint[] requestHighWater = new uint[4];
         private NetworkConnectionToClient operationOwner;
 
         // Host 上的 UI 使用获授权镜像；服务器事务始终使用独立的权威视图，不能受本地主机 UI 会话影响。
@@ -83,8 +84,10 @@ namespace RPG4.Backpack.Network
             internal Func<ItemIdGenerator> Generator;
             internal Action<InventoryOperation> Forward, Dispatch;
             internal Action<WeaponOperation> ForwardWeapon, DispatchWeapon;
+            internal Action<ConsumableUseOperation> ForwardConsumable, DispatchConsumable;
+            internal Func<ConsumableUseViewState> ConsumableState;
             internal Func<IBackpackView, bool> CanForward;
-            internal CommitConfirmHandler Confirm;
+            internal IInventoryCommitParticipant Confirm;
             internal bool SingleCell;
         }
         private CoreBindings previousBindings;
@@ -96,7 +99,9 @@ namespace RPG4.Backpack.Network
                 Authority = authority.IsAuthority, Generator = authority.IdGeneratorProvider,
                 Forward = authority.ForwardOperation, Dispatch = authority.AuthorityOperationDispatcher,
                 ForwardWeapon = authority.ForwardWeaponOperation, DispatchWeapon = authority.AuthorityWeaponOperationDispatcher,
-                CanForward = authority.ForwardCanSubmit, Confirm = authority.CommitConfirm,
+                ForwardConsumable = authority.ForwardConsumableOperation, DispatchConsumable = authority.AuthorityConsumableOperationDispatcher,
+                ConsumableState = authority.ConsumableStateProvider,
+                CanForward = authority.ForwardCanSubmit, Confirm = authority.CommitParticipant,
                 SingleCell = authority.SupportsSingleCellTransfers
             };
         }
@@ -107,7 +112,10 @@ namespace RPG4.Backpack.Network
             core.IsAuthority = previousBindings.Authority; core.IdGeneratorProvider = previousBindings.Generator;
             core.ForwardOperation = previousBindings.Forward; core.AuthorityOperationDispatcher = previousBindings.Dispatch;
             core.ForwardWeaponOperation = previousBindings.ForwardWeapon; core.AuthorityWeaponOperationDispatcher = previousBindings.DispatchWeapon;
-            core.ForwardCanSubmit = previousBindings.CanForward; core.CommitConfirm = previousBindings.Confirm;
+            core.ForwardConsumableOperation = previousBindings.ForwardConsumable;
+            core.AuthorityConsumableOperationDispatcher = previousBindings.DispatchConsumable;
+            core.ConsumableStateProvider = previousBindings.ConsumableState;
+            core.ForwardCanSubmit = previousBindings.CanForward; core.CommitParticipant = previousBindings.Confirm;
             core.SupportsSingleCellTransfers = previousBindings.SingleCell;
             previousBindings = null;
         }
@@ -253,11 +261,11 @@ namespace RPG4.Backpack.Network
         internal void SubmitEquipmentOperation(BackpackNetworkEquipment source, InventoryOperation operation)
         {
             if (isClient) { SubmitClientOperation(source, operation); return; }
-            ScheduleOperation(() =>
+            ScheduleResultOperation(() =>
             {
                 ServerBeforeEquipmentOrWeaponOperation?.Invoke();
-                source.PublishResult(source.AuthorityCore.ExecuteOperation(operation));
-            }, reason => source.PublishResult(new InventoryOperationResult(operation.RequestId, false, ItemId.None, 0, reason)));
+                return source.AuthorityCore.ExecuteOperation(operation);
+            }, source.PublishResult, reason => new InventoryOperationResult(operation.RequestId, false, ItemId.None, 0, reason));
         }
 
         /// <summary>仅发送容器身份；服务器从此拥有的玩家身份验证，不接收客户端位置或物品快照。</summary>
@@ -353,17 +361,17 @@ namespace RPG4.Backpack.Network
                     result.MovedCount, result.Error, result.SourceStackCount, result.ResultStackCount));
             };
             InventoryOperationResult Failure(string reason) => new InventoryOperationResult(requestId, false, ItemId.None, 0, reason);
-            if (!BeginTicket(ticket, requestId, false, () => TargetRoutedInventoryCompleted(conn, sourceNetId, sourceEquipment, requestId, false, 0, 0, "请求已过期或队列已满。", -1, -1))) return;
-            ScheduleOperation(() =>
+            if (!BeginTicket(ticket, requestId, RequestCategory.Inventory, () => TargetRoutedInventoryCompleted(conn, sourceNetId, sourceEquipment, requestId, false, 0, 0, "请求已过期或队列已满。", -1, -1))) return;
+            ScheduleResultOperation(() =>
             {
                 if (!IsAuthenticatedIngress(conn)
                     || !TryResolveServerEndpoint(sourceNetId, sourceEquipment, sourceSession, conn, out IBackpackView source, out InventoryHostCore sourceCore)
                     || !TryResolveServerEndpoint(destinationNetId, destinationEquipment, destinationSession, conn, out IBackpackView destination, out _))
-                { complete(Failure("库存访问授权已失效。")); return; }
+                    return Failure("库存访问授权已失效。");
                 if (sourceEquipment || destinationEquipment) ServerBeforeEquipmentOrWeaponOperation?.Invoke();
-                complete(sourceCore.ExecuteOperation(new InventoryOperation(requestId, (InventoryOperationKind)kind,
-                    new ItemId(sourceId), new ItemId(targetId), count, destination, upperLeftIndex)));
-            }, reason => complete(Failure(reason)));
+                return sourceCore.ExecuteOperation(new InventoryOperation(requestId, (InventoryOperationKind)kind,
+                    new ItemId(sourceId), new ItemId(targetId), count, destination, upperLeftIndex));
+            }, complete, Failure);
         }
 
         private bool TryResolveServerEndpoint(uint id, bool equipment, uint session, NetworkConnectionToClient conn,
@@ -383,32 +391,32 @@ namespace RPG4.Backpack.Network
             view = inventory.authorityView; authority = inventory.core; return true;
         }
 
-        private bool BeginTicket(ulong ticket, int requestId, bool weapon, Action reject)
+        private bool BeginTicket(ulong ticket, int requestId, RequestCategory category, Action reject)
         {
             if (operationOwner != connectionToClient)
             {
                 pendingOperations.Clear(); completedOperations.Clear(); completedOrder.Clear();
                 requestTickets.Clear(); requestOrder.Clear(); serverTicketHighWater = 0;
-                inventoryRequestHighWater = weaponRequestHighWater = 0;
+                Array.Clear(requestHighWater, 0, requestHighWater.Length);
                 operationOwner = connectionToClient;
             }
-            if (completedOperations.TryGetValue(ticket, out Action resend)) { resend(); return false; }
+            if (completedOperations.TryGetValue(ticket, out Action resend)) { PublishCompletion(resend); return false; }
             if (pendingOperations.Contains(ticket)) return false;
             // 非零业务 requestId 在当前玩家会话内幂等；内部 requestId=0 的独立调用仍由网络 ticket 区分。
-            var key = (weapon, requestId);
+            var key = (category, requestId);
             if (requestId != 0 && requestTickets.TryGetValue(key, out ulong original))
             {
-                if (completedOperations.TryGetValue(original, out Action previous)) previous();
+                if (completedOperations.TryGetValue(original, out Action previous)) PublishCompletion(previous);
                 else if (!pendingOperations.Contains(original)) reject();
                 return false;
             }
-            uint highWater = weapon ? weaponRequestHighWater : inventoryRequestHighWater;
+            uint highWater = requestHighWater[(int)category];
             if (ticket == 0 || ticket <= serverTicketHighWater || requestId != 0 && (uint)requestId <= highWater)
             { reject(); return false; }
             serverTicketHighWater = ticket;
             if (requestId != 0)
             {
-                if (weapon) weaponRequestHighWater = (uint)requestId; else inventoryRequestHighWater = (uint)requestId;
+                requestHighWater[(int)category] = (uint)requestId;
                 requestTickets[key] = ticket; requestOrder.Enqueue(key);
                 while (requestOrder.Count > ResultHistoryLimit + MaxPendingOperations) requestTickets.Remove(requestOrder.Dequeue());
             }
@@ -424,25 +432,46 @@ namespace RPG4.Backpack.Network
             completedOperations[ticket] = send;
             completedOrder.Enqueue(ticket);
             while (completedOrder.Count > ResultHistoryLimit) completedOperations.Remove(completedOrder.Dequeue());
-            if (connectionToClient != null && connectionToClient.isReady) send();
+            if (connectionToClient != null && connectionToClient.isReady) PublishCompletion(send);
         }
 
-        /// <summary>所有涉及角色物品/负重/弹匣的网络意图经过同一 tick 边界；没有调度器时拒绝。</summary>
+        /// <summary>所有角色库存意图使用同一 tick 边界。执行与结果发布分开处理异常。</summary>
         public void ScheduleOperation(Action execute, Action<string> reject)
+            => ScheduleOperationCore(() => { execute(); return null; }, reject);
+
+        private void ScheduleResultOperation<T>(Func<T> execute, Action<T> publish, Func<string, T> failure)
+            => ScheduleOperationCore(() =>
+            {
+                T result = execute(); // 结果在提交后的通知与回执之前固定。
+                return () => publish(result);
+            }, reason => PublishCompletion(() => publish(failure(reason))));
+
+        private void PublishCompletion(Action publish)
+        {
+            try { publish?.Invoke(); }
+            catch (Exception exception) { Debug.LogException(exception, this); }
+        }
+
+        private void ScheduleOperationCore(Func<Action> execute, Action<string> reject)
         {
             bool settled = false;
             Action run = () =>
             {
                 if (settled) return;
                 settled = true;
-                try { execute(); }
+                Action publish;
+                try { publish = execute(); }
                 catch (Exception exception)
                 {
                     Debug.LogException(exception, this);
-                    reject("库存事务执行失败。");
+                    PublishCompletion(() => reject("库存事务执行失败。"));
+                    return;
                 }
+                // 已确定结果。发布异常不能转成失败回执或请求重新执行。
+                PublishCompletion(publish);
             };
-            Action<string> fail = reason => { if (settled) return; settled = true; reject(reason); };
+            Action<string> fail = reason =>
+            { if (settled) return; settled = true; PublishCompletion(() => reject(reason)); };
             try
             {
                 if (ServerOperationScheduler == null || !ServerOperationScheduler(run, fail)) fail("角色事务调度器未就绪或队列已满。");
@@ -457,15 +486,15 @@ namespace RPG4.Backpack.Network
         private void DispatchAuthorityOperation(InventoryOperation operation)
         {
             if (isClient) { RequestInventoryOperation(operation); return; }
-            ScheduleOperation(() => core?.PublishOperationResult(core.ExecuteOperation(operation)),
-                reason => core?.PublishOperationResult(new InventoryOperationResult(operation.RequestId, false, ItemId.None, 0, reason)));
+            ScheduleResultOperation(() => core.ExecuteOperation(operation), core.PublishOperationResult,
+                reason => new InventoryOperationResult(operation.RequestId, false, ItemId.None, 0, reason));
         }
 
         private void DispatchAuthorityWeaponOperation(WeaponOperation operation)
         {
             if (isClient) { RequestWeaponOperation(operation); return; }
-            ScheduleOperation(() => core?.PublishWeaponOperationResult(core.ExecuteWeaponOperation(operation)),
-                reason => core?.PublishWeaponOperationResult(new WeaponOperationResult(operation.RequestId, operation.TargetItemId, false, reason)));
+            ScheduleResultOperation(() => core.ExecuteWeaponOperation(operation), core.PublishWeaponOperationResult,
+                reason => new WeaponOperationResult(operation.RequestId, operation.TargetItemId, false, reason));
         }
 
         [TargetRpc]
@@ -574,7 +603,7 @@ namespace RPG4.Backpack.Network
             RevokeAccessSubscriptions("库存连接已结束。");
             openedShared.Clear(); pendingOperations.Clear(); completedOperations.Clear(); completedOrder.Clear();
             serverTicketHighWater = 0; operationOwner = null;
-            requestTickets.Clear(); requestOrder.Clear(); inventoryRequestHighWater = weaponRequestHighWater = 0;
+            requestTickets.Clear(); requestOrder.Clear(); Array.Clear(requestHighWater, 0, requestHighWater.Length);
             ClearSharedJournal();
             sharedVersion = 0;
             sharedServerStream.Entries.Reset();

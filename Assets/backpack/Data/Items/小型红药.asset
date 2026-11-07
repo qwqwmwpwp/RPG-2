@@ -19,9 +19,17 @@ MonoBehaviour:
   - rid: 2973595732163166214
   - rid: 2973595732163166215
   - rid: 2973595732163166113
+  - rid: 2973595732163166217
   references:
     version: 2
     RefIds:
+    - rid: 2973595732163166217
+      type: {class: ConsumableUseDefinitionFragment, ns: RPG4.Backpack.Items, asm: RPG4.Backpack.Items}
+      data:
+        fragmentTag:
+          name: FragmentTags.Consumable.UseDefinition
+        actionKey: Heal
+        useDuration: 2
     - rid: 2973595732163166113
       type: {class: ImageFragment, ns: RPG4.Backpack.Items, asm: RPG4.Backpack.Items}
       data:

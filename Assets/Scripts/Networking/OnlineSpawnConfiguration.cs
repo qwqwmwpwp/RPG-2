@@ -1,14 +1,18 @@
+using RPG4.Raid.Domain;
 using System;
 using Mirror;
 using RPG4.Backpack.Items;
 using RPG4.Backpack.Network;
 using RPG4.Backpack.Runtime;
+using RPG4.Backpack.Core;
+using RPG4.Backpack.Inventory;
+using RPG4.Networking.Contracts;
 using RPG4.PlayerMovement;
 using UnityEngine;
 
 namespace RPG4.Networking
 {
-    /// <summary>Shared authored v1 loadout. Runs synchronously after Awake and before Mirror publishes the player.</summary>
+    /// <summary>Initial account grant plus restoration of the durably reserved loadout before publication.</summary>
     [DisallowMultipleComponent]
     [RequireComponent(typeof(GameplaySceneBindings))]
     public sealed class OnlineSpawnConfiguration : MonoBehaviour, IServerGameplaySpawnConfiguration, IServerPlayerSpawnInitializer
@@ -23,6 +27,16 @@ namespace RPG4.Networking
         [SerializeField] private ItemManifestCatalog catalog;
         [SerializeField] private ItemManifest initialWeapon;
         [SerializeField] private InventorySeed[] inventoryItems = Array.Empty<InventorySeed>();
+
+        public PersistentContainerData CreateInitialStash(ItemIdGenerator ids)
+        {
+            if (ids == null || !ValidateServerConfiguration(out _)) throw new InvalidOperationException("Initial stash configuration is invalid.");
+            var core = new InventoryHostCore(30, 10, LogModule.Network, "Initial account stash") { Catalog = catalog, IdGeneratorProvider = () => ids };
+            if (!core.TryAddItem(initialWeapon, 1, out _, out string error)) throw new InvalidOperationException(error);
+            foreach (InventorySeed seed in inventoryItems)
+                if (!core.TryAddItem(seed.Manifest, seed.Count, out _, out error)) throw new InvalidOperationException(error);
+            return RaidInventorySnapshots.Capture(core.Container, PersonalContainerKind.Stash);
+        }
 
         public bool ValidateServerConfiguration(out string reason)
         {
@@ -88,11 +102,18 @@ namespace RPG4.Networking
                 equipment.AuthorityCore.Catalog = catalog;
                 player.Equipment.ConfigureAuthority(true, true);
                 if (!identity.InitializeBeforeSpawn(context.Identity, context.ServerWorldGeneration)) return false;
-                if (!inventory.TryAddItem(initialWeapon, 1, out RuntimeItem weapon, out _)) return false;
-                foreach (InventorySeed seed in inventoryItems)
-                    if (!inventory.TryAddItem(seed.Manifest, seed.Count, out _, out _)) return false;
-                if (!player.Equipment.TryEquip(weapon.ItemId, out _)
-                    || equipment.EquippedItem != weapon || player.Equipment.CurrentItemId != weapon.ItemId) return false;
+                RaidReservation reservation = context.Reservation;
+                if (reservation == null || reservation.AccountId != context.Identity.AccountId || reservation.CharacterId != context.Identity.CharacterId) return false;
+                RaidInventorySnapshots.Restore(reservation.Backpack, inventory.Container, catalog);
+                RaidInventorySnapshots.Restore(reservation.Equipment, equipment.Container, catalog);
+                if (equipment.EquippedItem != null && equipment.CommitParticipant != null)
+                {
+                    if (!equipment.CommitParticipant.TryPrepare(equipment.EquippedItem.ItemId, out IInventoryPreparedCommit prepared, out _))
+                    { prepared?.Discard(); return false; }
+                    // The restored inventory is already committed. Publication failure must not request a replay.
+                    try { prepared?.Publish(); }
+                    catch (Exception exception) { Debug.LogException(exception, this); }
+                }
                 // Start never supplies the initial loadout. OnStartServer will bind network projections to these
                 // same populated cores before the first spawn serialization.
                 reason = null;

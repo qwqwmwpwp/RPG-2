@@ -1,11 +1,13 @@
 using RPG4.PlayerIntent;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace RPG4.PlayerMovement
 {
     /// <summary>Unity 世界执行端；不驱动 Animator，状态机只提交移动/姿态计划。</summary>
-    internal sealed class PlayerWorldAdapter
+    internal sealed class PlayerWorldAdapter : IPlayerMovementWorld
     {
+        private const float NetworkContactSkin = 0.002f;
         private readonly PlayerContentData content;
         private readonly PlayerStateData data;
         private readonly float standingHeight;
@@ -15,8 +17,26 @@ namespace RPG4.PlayerMovement
         private readonly RaycastHit[] moveHits = new RaycastHit[32];
         private float verticalVelocity;
         private bool networkMotor;
+        private bool hasNetworkPlan, lastNetworkStrafe, lastNetworkCrouched;
+        private long networkQueryTick;
+        private readonly Dictionary<Collider, SupportObservation> supportObservations = new Dictionary<Collider, SupportObservation>();
+        private struct SupportObservation
+        {
+            internal Vector3 Position, Scale;
+            internal Quaternion Rotation;
+            internal long Tick;
+            internal bool Stable;
+        }
         private bool originalKinematic, originalGravity;
+        private RigidbodyInterpolation originalInterpolation;
         internal bool NetworkMotor => networkMotor;
+        internal MovementKinematicsSettings KinematicsSettings => new MovementKinematicsSettings
+        {
+            DirectionSmoothTime = data.Movement.DirectionSmoothTime,
+            SpeedSmoothTime = data.Movement.SpeedSmoothTime,
+            FreeTurnSmoothTime = data.Exploration.TurnSmoothTime,
+            StrafeTurnSmoothTime = data.Aim.TurnSmoothTime, Gravity = Physics.gravity.y
+        };
         private Rigidbody strafeBody;
         private float originalMaxAngularVelocity;
         private Vector2 movement;
@@ -81,8 +101,7 @@ namespace RPG4.PlayerMovement
             for (int i = 0; i < count; i++)
             {
                 Collider hit = standHits[i];
-                if (hit == capsule || hit.attachedRigidbody == content.Body
-                    || hit.transform.IsChildOf(transform)) continue;
+                if (!Blocks(hit)) continue;
                 return false;
             }
             return true;
@@ -156,13 +175,21 @@ namespace RPG4.PlayerMovement
             {
                 originalKinematic = body.isKinematic;
                 originalGravity = body.useGravity;
+                originalInterpolation = body.interpolation;
                 Stop();
+                body.interpolation = RigidbodyInterpolation.None;
                 body.isKinematic = true;
                 body.useGravity = false;
                 verticalVelocity = 0f;
             }
-            else { body.isKinematic = originalKinematic; body.useGravity = originalGravity; }
+            else
+            {
+                body.isKinematic = originalKinematic;
+                body.useGravity = originalGravity;
+                body.interpolation = originalInterpolation;
+            }
             networkMotor = enabled;
+            hasNetworkPlan = false;
         }
         internal PlayerMotorState CaptureMotor() => new PlayerMotorState
         {
@@ -171,6 +198,7 @@ namespace RPG4.PlayerMovement
         };
         internal void RestoreMotor(PlayerMotorState state)
         {
+            hasNetworkPlan = false;
             movement = new Vector2(state.Velocity.x, state.Velocity.z);
             verticalVelocity = state.VerticalVelocity;
             turnVelocity = state.TurnVelocity;
@@ -180,6 +208,20 @@ namespace RPG4.PlayerMovement
             content.Capsule.center = standingCenter + Vector3.up * ((height - standingHeight) * 0.5f);
             PhysicallyCrouched = state.Crouched;
             SetPose(state.Position, state.Yaw);
+        }
+        internal bool NeedsTurnReset(LocomotionPlan plan) => !hasNetworkPlan
+            || lastNetworkStrafe != plan.Strafe || lastNetworkCrouched != plan.Crouched;
+        internal void BeginNetworkQueryTick(long tick) => networkQueryTick = tick;
+        private void RecordNetworkPlan(LocomotionPlan plan)
+        {
+            hasNetworkPlan = true;
+            lastNetworkStrafe = plan.Strafe;
+            lastNetworkCrouched = plan.Crouched;
+        }
+        internal void CommitMotor(PlayerMotorState state, LocomotionPlan plan)
+        {
+            RestoreMotor(state);
+            RecordNetworkPlan(plan);
         }
         private void SetPose(Vector3 position, float yaw)
         {
@@ -193,6 +235,136 @@ namespace RPG4.PlayerMovement
                 && !other.transform.IsChildOf(content.Body.transform)
                 && !Physics.GetIgnoreLayerCollision(content.Capsule.gameObject.layer, other.gameObject.layer)
                 && !Physics.GetIgnoreCollision(content.Capsule, other);
+
+        /// <summary>Virtual target-posture queries. No collider, rigidbody or transform is changed here.</summary>
+        public MovementPathResult CheckPath(in PlayerMotorState from, in PlayerMotorState proposed)
+        {
+            MovementPathResult uncertain = new MovementPathResult(MovementPathKind.RequiresAuthority, from.Position.y, false);
+            CapsuleCollider capsule = content.Capsule;
+            Vector3 delta = proposed.Position - from.Position;
+            // Bound queries even if this interface is called outside the numeric validator.
+            if (!Finite(from.Position) || !Finite(proposed.Position) || !Finite(from.Yaw) || !Finite(proposed.Yaw)
+                || !Finite(from.VerticalVelocity) || !Finite(proposed.VerticalVelocity)
+                || delta.sqrMagnitude > 1f || Mathf.Abs(delta.y) > 0.1f
+                || from.VerticalVelocity > 0.005f || proposed.VerticalVelocity > 0.005f
+                || capsule.direction != 1 || capsule.transform != content.Body.transform
+                || Mathf.Abs(standingCenter.x) > 0.00001f || Mathf.Abs(standingCenter.z) > 0.00001f
+                || Vector3.Dot(capsule.transform.up, Vector3.up) < 0.99999f) return uncertain;
+            Vector3 scale = capsule.transform.lossyScale;
+            if (scale.x <= 0f || scale.y <= 0f || scale.z <= 0f) return uncertain;
+            VirtualCapsule(from.Position, from.Yaw, proposed.Crouched, out Vector3 bottom,
+                out Vector3 top, out float radius);
+            if (!ClearVolume(from.Position, from.Yaw, proposed.Crouched))
+                return new MovementPathResult(MovementPathKind.Blocked, from.Position.y, false);
+            if (!FlatSupport(from.Position, from.Yaw, proposed.Crouched, out Collider support, out float startY)
+                || Mathf.Abs(startY - from.Position.y) > 0.002f) return uncertain;
+            Vector3 end = proposed.Position;
+            // Query at the proved plane rather than trusting the reported vertical coordinate.
+            end.y = startY;
+            if (!FlatSupport(end, proposed.Yaw, proposed.Crouched, out Collider endSupport, out float endY)
+                || support != endSupport || Mathf.Abs(endY - startY) > 0.002f) return uncertain;
+            Vector3 middle = Vector3.Lerp(from.Position, end, 0.5f);
+            if (!FlatSupport(middle, proposed.Yaw, proposed.Crouched, out Collider middleSupport, out float middleY)
+                || support != middleSupport || Mathf.Abs(middleY - startY) > 0.002f) return uncertain;
+            Vector3 travel = end - from.Position;
+            float distance = travel.magnitude;
+            if (distance > 0.000001f)
+            {
+                const float skin = NetworkContactSkin;
+                float inset = Mathf.Min(skin, radius * 0.5f);
+                int count = Physics.CapsuleCastNonAlloc(bottom, top, radius - inset,
+                    travel / distance, moveHits, distance + skin, Physics.AllLayers, QueryTriggerInteraction.Ignore);
+                if (count == moveHits.Length) return uncertain;
+                for (int i = 0; i < count; i++)
+                    if (Blocks(moveHits[i].collider))
+                        return new MovementPathResult(MovementPathKind.Blocked, startY, false);
+            }
+            // Yaw can rotate an offset capsule: independently check the projected target volume.
+            if (!ClearVolume(end, proposed.Yaw, proposed.Crouched)) return uncertain;
+            bool canStand = ClearVolume(from.Position, from.Yaw, false) && ClearVolume(end, proposed.Yaw, false);
+            if (!proposed.Crouched && !canStand) return uncertain;
+            return new MovementPathResult(MovementPathKind.ClearFlatGround, endY, canStand);
+        }
+
+        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
+        private static bool Finite(Vector3 value) => Finite(value.x) && Finite(value.y) && Finite(value.z);
+        private void VirtualCapsule(Vector3 position, float yaw, bool crouched,
+            out Vector3 bottom, out Vector3 top, out float radius)
+        {
+            CapsuleCollider capsule = content.Capsule;
+            Vector3 scale = capsule.transform.lossyScale;
+            float localHeight = crouched ? Mathf.Clamp(data.Crouch.Height, capsule.radius * 2f, standingHeight) : standingHeight;
+            Vector3 localCenter = standingCenter + Vector3.up * ((localHeight - standingHeight) * 0.5f);
+            radius = capsule.radius * Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.z));
+            float height = Mathf.Max(radius * 2f, localHeight * Mathf.Abs(scale.y));
+            Vector3 center = position + Quaternion.Euler(0f, yaw, 0f) * Vector3.Scale(localCenter, scale);
+            bottom = center - Vector3.up * (height * 0.5f - radius);
+            top = center + Vector3.up * (height * 0.5f - radius);
+        }
+        private bool ClearVolume(Vector3 position, float yaw, bool crouched)
+        {
+            VirtualCapsule(position, yaw, crouched, out Vector3 bottom, out Vector3 top, out float radius);
+            int count = Physics.OverlapCapsuleNonAlloc(bottom, top, radius,
+                standHits, Physics.AllLayers, QueryTriggerInteraction.Ignore);
+            if (count == standHits.Length) return false;
+            for (int i = 0; i < count; i++) if (Blocks(standHits[i])) return false;
+            return true;
+        }
+        private bool FlatSupport(Vector3 position, float yaw, bool crouched, out Collider support, out float rootY)
+        {
+            VirtualCapsule(position, yaw, crouched, out Vector3 bottom, out _, out float radius);
+            support = null;
+            rootY = position.y;
+            float bottomOffset = bottom.y - radius - position.y;
+            float plane = 0f;
+            // The footprint must remain on one static plane, including its leading/trailing edges.
+            for (int sample = 0; sample < 5; sample++)
+            {
+                Vector3 offset = sample == 0 ? Vector3.zero : sample == 1 ? Vector3.right : sample == 2
+                    ? Vector3.left : sample == 3 ? Vector3.forward : Vector3.back;
+                Vector3 origin = new Vector3(bottom.x, bottom.y - radius + 0.05f, bottom.z) + offset * (radius * 0.8f);
+                int count = Physics.RaycastNonAlloc(origin, Vector3.down, moveHits, 0.1f,
+                    Physics.AllLayers, QueryTriggerInteraction.Ignore);
+                if (count == moveHits.Length) return false;
+                float nearest = float.PositiveInfinity;
+                RaycastHit selected = default;
+                for (int i = 0; i < count; i++)
+                    if (Blocks(moveHits[i].collider) && moveHits[i].distance < nearest)
+                    { selected = moveHits[i]; nearest = selected.distance; }
+                if (float.IsPositiveInfinity(nearest) || selected.collider.attachedRigidbody != null
+                    || selected.normal.y < 0.999f) return false;
+                if (sample == 0)
+                {
+                    support = selected.collider;
+                    plane = selected.point.y;
+                    if (!StationarySupport(support)) return false;
+                }
+                else if (selected.collider != support || Mathf.Abs(selected.point.y - plane) > 0.002f) return false;
+            }
+            // Match the existing authority motor's contact clearance; it is part of its resting pose.
+            rootY = plane - bottomOffset + NetworkContactSkin;
+            return true;
+        }
+        private bool StationarySupport(Collider support)
+        {
+            // PhysX static colliders have no Rigidbody. Rendering/batching Static flags are unrelated.
+            // Require a second fixed-step observation; repeated queries in one tick cannot establish stability.
+            Transform pose = support.transform;
+            var current = new SupportObservation
+            {
+                Position = pose.position, Rotation = pose.rotation, Scale = pose.lossyScale, Tick = networkQueryTick
+            };
+            if (supportObservations.TryGetValue(support, out SupportObservation previous))
+            {
+                bool unchanged = previous.Position.Equals(current.Position) && previous.Rotation.Equals(current.Rotation)
+                    && previous.Scale.Equals(current.Scale);
+                current.Stable = unchanged && (previous.Tick == networkQueryTick ? previous.Stable
+                    : previous.Tick < networkQueryTick && networkQueryTick - previous.Tick <= 1);
+            }
+            else if (supportObservations.Count >= 32) supportObservations.Clear();
+            supportObservations[support] = current;
+            return current.Stable;
+        }
         private void CapsuleAt(Vector3 position, out Vector3 bottom, out Vector3 top, out float radius)
         {
             CapsuleCollider capsule = content.Capsule;
@@ -207,20 +379,13 @@ namespace RPG4.PlayerMovement
         {
             if (deltaTime <= 0f) return;
             Physics.SyncTransforms();
-            Vector3 direction = Quaternion.Euler(0f, plan.ViewYaw, 0f) * new Vector3(plan.Move.x, 0f, plan.Move.y);
-            Vector2 target = plan.CanMove ? new Vector2(direction.x, direction.z) * plan.MoveSpeed : Vector2.zero;
-            movement = plan.CanMove ? Vector2.ClampMagnitude(PlayerMotionMath.SmoothMove(movement, target,
-                data.Movement.DirectionSmoothTime, data.Movement.SpeedSmoothTime, deltaTime), plan.MoveSpeed) : Vector2.zero;
-            float yaw = BodyYaw;
-            if (strafe || movement.sqrMagnitude > 0.000001f)
-            {
-                float targetYaw = strafe ? plan.ViewYaw : Mathf.Atan2(movement.x, movement.y) * Mathf.Rad2Deg;
-                float smooth = strafe ? data.Aim.TurnSmoothTime : data.Exploration.TurnSmoothTime;
-                yaw = smooth <= 0f ? targetYaw : Mathf.SmoothDampAngle(yaw, targetYaw, ref turnVelocity,
-                    smooth, Mathf.Infinity, deltaTime);
-            }
-            else turnVelocity = 0f;
-            verticalVelocity += Physics.gravity.y * deltaTime;
+            PlayerMotorState candidate = PlayerMotorKinematics.Step(CaptureMotor(), plan,
+                KinematicsSettings, NeedsTurnReset(plan), deltaTime);
+            RecordNetworkPlan(plan);
+            movement = new Vector2(candidate.Velocity.x, candidate.Velocity.z);
+            turnVelocity = candidate.TurnVelocity;
+            verticalVelocity = candidate.VerticalVelocity;
+            float yaw = candidate.Yaw;
             Vector3 position = content.Body.position;
             // Limited depenetration also recovers a server correction inside a moving obstacle.
             for (int iteration = 0; iteration < 4; iteration++)
@@ -240,21 +405,28 @@ namespace RPG4.PlayerMovement
                 if (!moved) break;
             }
             Vector3 remaining = new Vector3(movement.x, verticalVelocity, movement.y) * deltaTime;
-            const float skin = 0.002f;
+            const float skin = NetworkContactSkin;
             for (int iteration = 0; iteration < 4 && remaining.sqrMagnitude > 0.0000001f; iteration++)
             {
                 CapsuleAt(position, out Vector3 bottom, out Vector3 top, out float radius);
                 float distance = remaining.magnitude;
                 Vector3 directionStep = remaining / distance;
-                int count = Physics.CapsuleCastNonAlloc(bottom, top, radius, directionStep, moveHits,
+                // A full-size capsule touching the floor can start a cast overlapped. PhysX then
+                // reports -direction as its normal, which would erase horizontal movement too.
+                float inset = Mathf.Min(skin, radius * 0.5f);
+                float queryRadius = radius - inset;
+                int count = Physics.CapsuleCastNonAlloc(bottom, top, queryRadius, directionStep, moveHits,
                     distance + skin, Physics.AllLayers, QueryTriggerInteraction.Ignore);
                 float nearest = float.PositiveInfinity;
                 Vector3 normal = Vector3.zero;
                 for (int i = 0; i < count; i++)
                 {
                     RaycastHit hit = moveHits[i];
-                    if (!Blocks(hit.collider) || Vector3.Dot(directionStep, hit.normal) >= -0.0001f) continue;
-                    if (hit.distance < nearest) { nearest = hit.distance; normal = hit.normal; }
+                    float approach = -Vector3.Dot(directionStep, hit.normal);
+                    if (!Blocks(hit.collider) || approach <= 0.0001f) continue;
+                    // Restore the full capsule's contact distance, including at oblique walls.
+                    float contactDistance = Mathf.Max(0f, hit.distance - inset / approach);
+                    if (contactDistance < nearest) { nearest = contactDistance; normal = hit.normal; }
                 }
                 // A saturated query is conservative: do not tunnel through an omitted collider.
                 if (count == moveHits.Length) break;

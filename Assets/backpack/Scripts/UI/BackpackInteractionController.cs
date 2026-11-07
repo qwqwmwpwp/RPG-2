@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine;
 using RPG4.Backpack.Core;
 using RPG4.Backpack.Inventory;
@@ -180,6 +180,7 @@ namespace RPG4.Backpack.UI
         public bool HasMultipleContainers => views.Length > 1;
         public RuntimeItem DisplayedItem => carry != null ? carry.Item
             : hoveredView != null && hoveredView.TryGetItem(hoveredItemId, out RuntimeItem item) ? item : null;
+        public IBackpackView SelectedInventory => selectedInventory;
         private IBackpackView selectedInventory;
         private ItemId selectedItemId;
         public RuntimeItem SelectedItem

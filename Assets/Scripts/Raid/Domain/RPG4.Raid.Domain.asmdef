@@ -1,0 +1,6 @@
+{
+  "name": "RPG4.Raid.Domain",
+  "rootNamespace": "RPG4.Raid.Domain",
+  "references": [],
+  "noEngineReferences": true
+}
