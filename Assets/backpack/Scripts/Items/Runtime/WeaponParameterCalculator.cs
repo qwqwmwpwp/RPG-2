@@ -1,3 +1,4 @@
+using System;
 using RPG4.Backpack.Core;
 
 namespace RPG4.Backpack.Items
@@ -19,18 +20,25 @@ namespace RPG4.Backpack.Items
         public static bool TryCalculate(RuntimeItem item, ItemManifestCatalog catalog, BackpackTag ammoItemType,
             out WeaponCombatParameters parameters, RuntimeItem muzzleOverride = null, bool overrideMuzzle = false)
         {
+            return TryCalculateAssembly(item, catalog, ammoItemType, out parameters,
+                item?.ItemId ?? ItemId.None, overrideMuzzle ? ItemAssemblySlots.Muzzle : null, muzzleOverride);
+        }
+
+        public static bool TryCalculateAssembly(RuntimeItem root, ItemManifestCatalog catalog, BackpackTag ammoItemType,
+            out WeaponCombatParameters parameters, ItemId parentItemId = default, string slotId = null, RuntimeItem replacement = null)
+        {
             parameters = default;
-            WeaponDefinitionFragment definition = item?.WeaponState?.Definition;
+            WeaponDefinitionFragment definition = root?.WeaponState?.Definition;
             if (definition == null || catalog == null || !catalog.TryGet(ammoItemType, out ItemManifest manifest)) return false;
             AmmoDefinitionFragment ammo = manifest.GetFragment<AmmoDefinitionFragment>();
             if (ammo == null) return false;
             float damage = definition.BaseDamage, spread = definition.SpreadAngle, recoil = 1f, interval = definition.ShotInterval;
-            foreach (var pair in item.WeaponState.Attachments)
+            try
             {
-                if (overrideMuzzle && pair.Key == WeaponAttachmentSlot.Muzzle) continue;
-                Apply(pair.Value, ref damage, ref spread, ref recoil, ref interval);
+                foreach (RuntimeItem item in ItemAssemblyTraversal.EnumerateReplacement(root, parentItemId, slotId, replacement))
+                    Apply(item, ref damage, ref spread, ref recoil, ref interval);
             }
-            if (overrideMuzzle) Apply(muzzleOverride, ref damage, ref spread, ref recoil, ref interval);
+            catch (InvalidOperationException) { return false; }
             damage *= ammo.DamageMultiplier; spread *= ammo.SpreadMultiplier;
             if (!Finite(damage) || damage < 0f || !Finite(spread) || spread < 0f || spread > 90f
                 || !Finite(recoil) || recoil < 0f || !Finite(interval) || interval <= 0f

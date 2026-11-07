@@ -12,10 +12,17 @@ namespace RPG4.Server
         public int port = 7777;
         public string keyPath = "identity/server-key.json";
         public string databaseConnectionEnvironmentVariable = "RPG4_MYSQL_CONNECTION";
-        public int maxPlayers = 32;
-        public int maxConnections = 64;
-        public int maxRawConnections = 96;
+        public int maxPlayers = 20;
+        public int maxConnections = 40;
+        public int maxRawConnections = 60;
         public int maxRawConnectionsPerIp = 8;
+        public int minimumPlayers = 1;
+        public int matchCountdownSeconds = 30;
+        public int matchPreparationSeconds = 90;
+        public int matchDurationSeconds = 1200;
+        public int reconnectGraceSeconds = 600;
+        public int maxActiveAi = 30;
+        public int aiDecisionIntervalMilliseconds = 100;
         public int databaseTimeoutSeconds = 5;
         public int startupTimeoutSeconds = 90;
         public int shutdownTimeoutSeconds = 15;
@@ -35,7 +42,13 @@ namespace RPG4.Server
         {
             if (!EntryProtocol.IsAscii(serverId, 64) || port < 1 || port > 65535
                 || string.IsNullOrWhiteSpace(keyPath) || string.IsNullOrWhiteSpace(databaseConnectionEnvironmentVariable)
-                || maxPlayers < 1 || maxPlayers > 1000 || maxConnections < maxPlayers || maxConnections > 4096
+                || maxPlayers < 1 || maxPlayers > 20 || minimumPlayers < 1 || minimumPlayers > maxPlayers
+                || matchCountdownSeconds < 1 || matchCountdownSeconds > 600
+                || matchPreparationSeconds < matchCountdownSeconds || matchPreparationSeconds > 1800
+                || matchDurationSeconds < matchPreparationSeconds || matchDurationSeconds > 86400
+                || reconnectGraceSeconds < 1 || reconnectGraceSeconds > 3600 || reconnectGraceSeconds > matchDurationSeconds
+                || maxActiveAi < 1 || maxActiveAi > 30 || aiDecisionIntervalMilliseconds < 10 || aiDecisionIntervalMilliseconds > 5000
+                || maxConnections < maxPlayers || maxConnections > 4096
                 || maxRawConnections < maxConnections || maxRawConnections > 8192
                 || maxRawConnectionsPerIp < 1 || maxRawConnectionsPerIp > maxRawConnections
                 || databaseTimeoutSeconds < 1 || databaseTimeoutSeconds > 10
@@ -49,6 +62,18 @@ namespace RPG4.Server
                 throw new ServerOperationException("configuration_invalid");
         }
 
+        // JsonUtility leaves newly added integer fields at zero when loading an older JSON file.
+        private void ApplyDefaultsForMissingMatchSettings()
+        {
+            if (minimumPlayers == 0) minimumPlayers = 1;
+            if (matchCountdownSeconds == 0) matchCountdownSeconds = 30;
+            if (matchPreparationSeconds == 0) matchPreparationSeconds = 90;
+            if (matchDurationSeconds == 0) matchDurationSeconds = 1200;
+            if (reconnectGraceSeconds == 0) reconnectGraceSeconds = 600;
+            if (maxActiveAi == 0) maxActiveAi = 30;
+            if (aiDecisionIntervalMilliseconds == 0) aiDecisionIntervalMilliseconds = 100;
+        }
+
         /// <summary>Only paths and non-secret options are stored in JSON. Call from the main thread.</summary>
         public static LoadedServerConfiguration Load(string path, string assetsPath)
         {
@@ -60,6 +85,7 @@ namespace RPG4.Server
                 if (!file.Exists || file.Length > 65536) throw new ServerOperationException("configuration_missing");
                 ServerConfiguration settings = JsonUtility.FromJson<ServerConfiguration>(File.ReadAllText(fullPath));
                 if (settings == null) throw new ServerOperationException("configuration_invalid");
+                settings.ApplyDefaultsForMissingMatchSettings();
                 settings.Validate();
                 string key = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(fullPath), settings.keyPath));
                 RequireOutsideAssets(key, assetsPath);

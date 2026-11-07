@@ -17,6 +17,7 @@ namespace RPG4.Networking
             private sealed class Entry
             {
                 internal GameObject UnpublishedPlayer;
+                internal GameObject ActivePlayer;
                 internal GameplaySceneBindings Bindings;
                 internal long Generation;
             }
@@ -31,7 +32,8 @@ namespace RPG4.Networking
             {
                 ServerRaidConnections.Entry connection = connections.Find(key);
                 if (connection?.Connection?.identity != null) return connection.Connection.identity.gameObject;
-                return entries.TryGetValue(key, out Entry entry) ? entry.UnpublishedPlayer : null;
+                if (!entries.TryGetValue(key, out Entry entry)) return null;
+                return entry.UnpublishedPlayer ?? entry.ActivePlayer;
             }
             public bool CanPrepare(string key) => owner.ValidateServerGameplayWorld(out _) && owner.raidLootBagPrefab != null;
             public bool HasActor(string key) => Actor(key) != null;
@@ -90,7 +92,17 @@ namespace RPG4.Networking
                 if (!connections.IsCurrent(key) || !owner.IsCurrentPlayerEntry(connection.Connection, connection.Identity, entry.Bindings, entry.Generation)
                     || !NetworkServer.AddPlayerForConnection(connection.Connection, entry.UnpublishedPlayer))
                     throw new InvalidOperationException("Player publication failed.");
+                entry.ActivePlayer = entry.UnpublishedPlayer;
                 entry.UnpublishedPlayer = null;
+            }
+            public bool TryRebindPlayer(string key)
+            {
+                ServerRaidConnections.Entry connection = connections.Find(key);
+                if (connection == null || connection.Connection == null || connection.Connection.identity != null
+                    || !entries.TryGetValue(key, out Entry entry) || entry.ActivePlayer == null
+                    || !connections.IsCurrent(key)) return false;
+                NetworkServer.SetClientReady(connection.Connection);
+                return NetworkServer.AddPlayerForConnection(connection.Connection, entry.ActivePlayer);
             }
             public FrozenRaidInventory FreezePlayer(string key)
             {
@@ -141,6 +153,12 @@ namespace RPG4.Networking
             {
                 if (!entries.TryGetValue(key, out Entry entry)) return;
                 if (entry.UnpublishedPlayer != null) Destroy(entry.UnpublishedPlayer);
+                if (entry.ActivePlayer != null)
+                {
+                    if (entry.ActivePlayer.TryGetComponent(out NetworkIdentity identity) && identity.netId != 0)
+                        NetworkServer.Destroy(entry.ActivePlayer);
+                    else Destroy(entry.ActivePlayer);
+                }
                 entries.Remove(key);
             }
             internal void Clear()

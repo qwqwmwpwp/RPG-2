@@ -517,9 +517,7 @@ namespace RPG4.Backpack.Network
         internal static void CollectTreeIds(RuntimeItem item, HashSet<ulong> ids)
         {
             if (item.ItemId.IsValid) ids.Add(item.ItemId.Value);
-            if (item.WeaponState == null) return;
-            if (item.WeaponState.Magazine != null) CollectTreeIds(item.WeaponState.Magazine, ids);
-            foreach (RuntimeItem child in item.WeaponState.Attachments.Values) CollectTreeIds(child, ids);
+            foreach (RuntimeItem child in item.Assembly.InstalledChildren.Values) CollectTreeIds(child, ids);
         }
     }
 }

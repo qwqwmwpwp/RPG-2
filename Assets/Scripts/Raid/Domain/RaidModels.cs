@@ -18,7 +18,7 @@ namespace RPG4.Raid.Domain
     }
 
     public enum RaidStage { Prepared, Initializing, Activating, Active, Settling }
-    public enum LobbyCommandKind : byte { Load, InventoryOperation, StartRaid, AbandonRaid, CancelEntry }
+    public enum LobbyCommandKind : byte { Load, InventoryOperation, StartRaid, AbandonRaid, CancelEntry, AssemblyQuery, AssemblyOperation }
     public enum LobbyInventoryOperationKind : byte { MergeStack, SwapStackCounts, SplitStack, TransferItem, MoveItem, SwapItems }
     public enum RaidPhase : byte { Lobby, Loading, Active, Settling, Returned, Rejected }
 
@@ -30,10 +30,16 @@ namespace RPG4.Raid.Domain
         public long Revision;
         public int RequestId, Count, UpperLeftIndex;
         public ulong SourceItemId, TargetItemId;
+        public ulong RootItemId, ParentItemId, CandidateItemId;
+        public string SlotId;
+        public int AssemblySessionId, StructureRevision = -1, CandidateOffset, CandidateLimit = 64;
         public bool SamePayload(LobbyCommand other) => other != null && Kind == other.Kind
             && Source == other.Source && Destination == other.Destination && OperationKind == other.OperationKind
             && Revision == other.Revision && SourceItemId == other.SourceItemId && TargetItemId == other.TargetItemId
-            && Count == other.Count && UpperLeftIndex == other.UpperLeftIndex && RequestId == other.RequestId;
+            && Count == other.Count && UpperLeftIndex == other.UpperLeftIndex && RequestId == other.RequestId
+            && RootItemId == other.RootItemId && ParentItemId == other.ParentItemId && CandidateItemId == other.CandidateItemId
+            && SlotId == other.SlotId && AssemblySessionId == other.AssemblySessionId && StructureRevision == other.StructureRevision
+            && CandidateOffset == other.CandidateOffset && CandidateLimit == other.CandidateLimit && RaidId == other.RaidId;
     }
 
     public sealed class LobbyInventoryResult
@@ -43,6 +49,8 @@ namespace RPG4.Raid.Domain
         public ulong ResultItemId;
         public int MovedCount;
         public string Error;
+        public byte AssemblyKind; // 1 inspection, 2 operation result; bounded by transport codec.
+        public byte[] AssemblyPayload;
         public static LobbyInventoryResult Accepted(int id) => new LobbyInventoryResult { RequestId = id, Success = true };
         public static LobbyInventoryResult Rejected(int id, string error) => new LobbyInventoryResult { RequestId = id, Error = error };
     }
@@ -144,7 +152,7 @@ namespace RPG4.Raid.Domain
     public sealed class RaidPlayerSession
     {
         public string Key { get; }
-        public RaidIdentity Identity { get; }
+        public RaidIdentity Identity { get; private set; }
         public bool Connected = true;
         public bool Busy;
         public PersistentInventoryState Inventory;
@@ -153,5 +161,12 @@ namespace RPG4.Raid.Domain
         public readonly Dictionary<string, LobbyReply> Replies = new Dictionary<string, LobbyReply>();
         public readonly Queue<string> ReplyOrder = new Queue<string>();
         public RaidPlayerSession(string key, RaidIdentity identity) { Key = key; Identity = identity; }
+        public void Rebind(RaidIdentity identity)
+        {
+            if (identity == null || identity.AccountId != Identity.AccountId || identity.CharacterId != Identity.CharacterId)
+                throw new ArgumentException("A raid session can only be rebound to the same character.");
+            Identity = identity;
+            Connected = true;
+        }
     }
 }

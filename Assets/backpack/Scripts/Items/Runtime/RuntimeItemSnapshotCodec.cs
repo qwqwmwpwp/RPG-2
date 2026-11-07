@@ -174,7 +174,7 @@ namespace RPG4.Backpack.Items
             byte version = payload[0];
             if (version != 1)
             {
-                error = $"快照版本 {version} 不受支持（期望 {RuntimeItemSnapshot.CurrentVersion}）。";
+                error = $"快照版本 {version} 不受支持（期望 1）。";
                 return false;
             }
 

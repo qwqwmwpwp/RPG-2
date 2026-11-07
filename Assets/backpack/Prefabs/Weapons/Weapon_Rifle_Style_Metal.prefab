@@ -157,6 +157,7 @@ GameObject:
   - component: {fileID: 6093372014242540394}
   - component: {fileID: 4080546092979771241}
   - component: {fileID: 8465781629410709850}
+  - component: {fileID: 8561088930534516754}
   m_Layer: 0
   m_Name: Weapon_Rifle_Style_Metal
   m_TagString: Untagged
@@ -183,6 +184,7 @@ Transform:
   - {fileID: 3125459470511139915}
   - {fileID: 5632400809960579851}
   - {fileID: 7871644044703157478}
+  - {fileID: 7356477722046077956}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1773428102 &6093372014242540394
@@ -230,8 +232,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1e117ffd4c1242b5b20e52a55a33f71a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   muzzle: {fileID: 8546812247760480444}
   supportHandGrip: {fileID: 7675421235036811142}
   shellEjectionPoint: {fileID: 3125459470511139915}
@@ -240,7 +242,7 @@ MonoBehaviour:
   shellEjectionEffect: {fileID: 0}
   shotAudioSource: {fileID: 8465781629410709850}
   shotAudioClip: {fileID: 0}
-  magazineModelPrefab: {fileID: 0}
+  assemblyModelView: {fileID: 8561088930534516754}
 --- !u!82 &8465781629410709850
 AudioSource:
   m_ObjectHideFlags: 0
@@ -479,3 +481,56 @@ Transform:
     type: 3}
   m_PrefabInstance: {fileID: 312793463238571209}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &2215282706523793790
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7356477722046077956}
+  m_Layer: 0
+  m_Name: RailMount
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7356477722046077956
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2215282706523793790}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.18, y: 0.075, z: 0.04}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 5988301984000406701}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &8561088930534516754
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6363982380300774935}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 89d5a17c7e314510a716402a0fd9c813, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  slotMounts:
+  - slotId: magazine
+    mount: {fileID: 5632400809960579851}
+    fallbackModel: {fileID: 7898225008901231189, guid: 39f2b2801cd556248935b51ed3d26a01, type: 3}
+  - slotId: muzzle
+    mount: {fileID: 8546812247760480444}
+    fallbackModel: {fileID: 0}
+  - slotId: rail
+    mount: {fileID: 7356477722046077956}
+    fallbackModel: {fileID: 0}

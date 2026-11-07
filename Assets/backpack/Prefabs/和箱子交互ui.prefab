@@ -1,4 +1,4 @@
-﻿%YAML 1.1
+%YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!1 &5789338210249082221
 GameObject:
@@ -20,6 +20,7 @@ GameObject:
   - component: {fileID: 8600000000000010901}
   - component: {fileID: 8600000000000010902}
   - component: {fileID: 8800000000000070300}
+  - component: {fileID: 9900000000000000013}
   m_Layer: 5
   m_Name: "\u548C\u7BB1\u5B50\u4EA4\u4E92ui"
   m_TagString: Untagged
@@ -9991,35 +9992,35 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 920000002, guid: 214bd7e1228343aab181b15e28945d45, type: 3}
       propertyPath: m_Pivot.x
-      value: 0
+      value: 0.5
       objectReference: {fileID: 0}
     - target: {fileID: 920000002, guid: 214bd7e1228343aab181b15e28945d45, type: 3}
       propertyPath: m_Pivot.y
-      value: 1
+      value: 0.5
       objectReference: {fileID: 0}
     - target: {fileID: 920000002, guid: 214bd7e1228343aab181b15e28945d45, type: 3}
       propertyPath: m_AnchorMax.x
-      value: 0
+      value: 0.5
       objectReference: {fileID: 0}
     - target: {fileID: 920000002, guid: 214bd7e1228343aab181b15e28945d45, type: 3}
       propertyPath: m_AnchorMax.y
-      value: 1
+      value: 0.5
       objectReference: {fileID: 0}
     - target: {fileID: 920000002, guid: 214bd7e1228343aab181b15e28945d45, type: 3}
       propertyPath: m_AnchorMin.x
-      value: 0
+      value: 0.5
       objectReference: {fileID: 0}
     - target: {fileID: 920000002, guid: 214bd7e1228343aab181b15e28945d45, type: 3}
       propertyPath: m_AnchorMin.y
-      value: 1
+      value: 0.5
       objectReference: {fileID: 0}
     - target: {fileID: 920000002, guid: 214bd7e1228343aab181b15e28945d45, type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 1456
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 920000002, guid: 214bd7e1228343aab181b15e28945d45, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -180
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 920000084, guid: 214bd7e1228343aab181b15e28945d45, type: 3}
       propertyPath: m_AnchorMax.y
@@ -11478,3 +11479,21 @@ MonoBehaviour:
   useButton: {fileID: 8800000000000070004}
   quickButton: {fileID: 8800000000000070104}
   selectionLabel: {fileID: 8800000000000070203}
+
+--- !u!114 &9900000000000000013
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5789338210249082221}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3f3e0d7b6c44ff5a7f4b8ecf0e6b8b1, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  wideWidth: 1600
+  mediumWidth: 1180
+  edge: 24
+  gap: 24
+  hideOverviewOnNarrow: 1

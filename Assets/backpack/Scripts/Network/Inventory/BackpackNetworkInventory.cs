@@ -187,6 +187,7 @@ namespace RPG4.Backpack.Network
             core.IdGeneratorProvider = ResolveGenerator;
             core.ForwardOperation = RequestInventoryOperation;
             core.ForwardWeaponOperation = RequestWeaponOperation;
+            ConfigureNetworkAssembly();
             core.ForwardConsumableOperation = RequestConsumableOperation;
             core.ConsumableStateProvider = () => ConsumableStateProvider?.Invoke() ?? default;
             core.CommitParticipant = InventoryCommitParticipants.Combine(core.CommitParticipant, this);
@@ -221,6 +222,7 @@ namespace RPG4.Backpack.Network
             StopServerAccess();
             entries.SuppressAutomaticSerialization = false;
             UnbindNetworkWeaponUi();
+            ClearNetworkAssembly();
             if (core != null) core.UnsubscribeCommands();
             RestoreCoreBindings();
             GetComponent<BackpackInventory>()?.SetNetworkAuthority(true);
@@ -249,6 +251,7 @@ namespace RPG4.Backpack.Network
             core.IsAuthority = () => false;
             core.ForwardOperation = RequestInventoryOperation;
             core.ForwardWeaponOperation = RequestWeaponOperation;
+            ConfigureNetworkAssembly();
             core.ForwardConsumableOperation = RequestConsumableOperation;
             core.ConsumableStateProvider = () => ConsumableStateProvider?.Invoke() ?? default;
             core.ForwardCanSubmit = CanForwardTo;
@@ -265,6 +268,7 @@ namespace RPG4.Backpack.Network
         {
             ClearClientAccess();
             UnbindNetworkWeaponUi();
+            ClearNetworkAssembly();
             // StopHost 先 StopClient 后 StopServer：保留权威 core，等 OnStopServer 恢复本地绑定。
             if (!isServer)
             {

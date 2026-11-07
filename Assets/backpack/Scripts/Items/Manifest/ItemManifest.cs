@@ -127,7 +127,25 @@ namespace RPG4.Backpack.Items
         public bool TryRestoreRuntimeItem(RuntimeItemSnapshot snapshot, ItemManifestCatalog catalog, out RuntimeItem item, out string error)
         {
             int count = 0;
-            return TryRestoreTree(snapshot, catalog, 0, new HashSet<ulong>(), ref count, out item, out error);
+            if (!TryRestoreTree(snapshot, catalog, 0, new HashSet<ulong>(), ref count, out item, out error)) return false;
+            // 必须先恢复完整树，再校验父子结构与槽；失败时不返回部分结果。
+            try
+            {
+                var items = new List<RuntimeItem>(ItemAssemblyTraversal.Enumerate(item));
+                foreach (RuntimeItem node in items)
+                {
+                    foreach (var child in node.Assembly.InstalledChildren)
+                    {
+                        if (!ReferenceEquals(child.Value.ParentItem, node) || child.Value.RootOwner != null
+                            || !node.Assembly.CanAccept(child.Key, child.Value, catalog))
+                        { error = "快照装配结构或槽允许表不合法。"; item = null; return false; }
+                    }
+                }
+                if (!ItemAssemblyRules.TryValidateConflicts(items, out _, out _, out error))
+                { item = null; return false; }
+            }
+            catch (InvalidOperationException exception) { error = exception.Message; item = null; return false; }
+            return true;
         }
 
         internal bool TryRestoreTree(RuntimeItemSnapshot snapshot, ItemManifestCatalog catalog, int depth,
@@ -175,6 +193,8 @@ namespace RPG4.Backpack.Items
             int depth, HashSet<ulong> ids, ref int count, out string error)
         {
             error = null;
+            if (snapshot.Version != 1 && snapshot.Version != 2 && snapshot.Version != RuntimeItemSnapshot.CurrentVersion)
+            { error = "不支持的物品快照版本。"; return false; }
             if (snapshot.Version == 1)
             {
                 // v1首次引入耐久字段时采用默认满耐久；不加载模板初始弹药。v2严格保留记录值。
@@ -183,20 +203,16 @@ namespace RPG4.Backpack.Items
             if ((item.WeaponState != null) != (snapshot.Weapon != null) || (item.MagazineState != null) != (snapshot.Magazine != null))
             { error = "快照状态类型与清单不一致。"; return false; }
             if (item.MagazineState != null && !item.MagazineState.TryRestore(snapshot.Magazine.Rounds, catalog, out error)) return false;
-            if (item.WeaponState == null) return true;
-            WeaponStateSnapshot state = snapshot.Weapon;
-            if (!item.WeaponState.TryRestore(state.Durability, state.ChamberAmmo, state.ShotSequence, catalog, out error)) return false;
-            if (state.Magazine.HasValue)
+            if (item.WeaponState != null)
             {
-                if (!TryRestoreChild(state.Magazine.Value, catalog, depth, ids, ref count, out RuntimeItem magazine, out error)) return false;
-                if (!item.WeaponState.IsCompatibleMagazine(magazine, catalog)) { error = "不兼容弹匣。"; return false; }
-                item.WeaponState.SetMagazine(magazine);
+                WeaponStateSnapshot state = snapshot.Weapon;
+                if (!item.WeaponState.TryRestore(state.Durability, state.ChamberAmmo, state.ShotSequence, catalog, out error)) return false;
             }
-            foreach (AttachmentStateSnapshot attachment in state.Attachments)
+            foreach (InstalledItemSnapshot installed in snapshot.InstalledChildren)
             {
-                if (!TryRestoreChild(attachment.Item, catalog, depth, ids, ref count, out RuntimeItem child, out error)) return false;
-                if (!item.WeaponState.IsCompatibleAttachment(attachment.Slot, child)) { error = "不兼容配件。"; return false; }
-                item.WeaponState.SetAttachment(attachment.Slot, child);
+                if (item.Assembly.GetSlot(installed.SlotId) == null) { error = "快照包含无法映射的装配槽。"; return false; }
+                if (!TryRestoreChild(installed.Item, catalog, depth, ids, ref count, out RuntimeItem child, out error)) return false;
+                item.Assembly.SetChild(installed.SlotId, child);
             }
             return true;
         }
@@ -255,9 +271,15 @@ namespace RPG4.Backpack.Items
                 if (fragment == null) throw new InvalidOperationException($"{path} 为空。");
                 fragment.ValidateConfiguration(path);
             }
-            int stateDefinitions = 0;
+            int stateDefinitions = 0, assemblyDefinitions = 0, sizeDefinitions = 0;
             foreach (ItemFragment fragment in fragments)
+            {
                 if (fragment is WeaponDefinitionFragment || fragment is MagazineDefinitionFragment || fragment is AttachmentDefinitionFragment) stateDefinitions++;
+                if (fragment is ItemAssemblyDefinitionFragment) assemblyDefinitions++;
+                if (fragment is AssemblySizeDefinitionFragment) sizeDefinitions++;
+            }
+            if (assemblyDefinitions > 1 || sizeDefinitions > 1 || assemblyDefinitions > 0 && GetFragment<StackableFragment>() != null)
+                throw new InvalidOperationException("装配片段不可重复，提供装配定义的物品不能堆叠。");
             if (stateDefinitions > 1 || (stateDefinitions > 0 && (GetFragment<StackableFragment>() != null || GetFragment<AmmoDefinitionFragment>() != null)))
                 throw new InvalidOperationException("武器、弹匣、配件定义不能共存，也不能配置为堆叠物品。");
         }

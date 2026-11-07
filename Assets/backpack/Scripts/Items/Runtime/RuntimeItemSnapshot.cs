@@ -75,10 +75,24 @@ namespace RPG4.Backpack.Items
         }
     }
 
+    public readonly struct InstalledItemSnapshot : IEquatable<InstalledItemSnapshot>
+    {
+        public string SlotId { get; }
+        public RuntimeItemSnapshot Item { get; }
+        public InstalledItemSnapshot(string slotId, RuntimeItemSnapshot item)
+        {
+            if (!ItemAssemblySlots.IsValid(slotId)) throw new ArgumentException("装配槽标识无效。", nameof(slotId));
+            SlotId = slotId; Item = item;
+        }
+        public bool Equals(InstalledItemSnapshot other) => string.Equals(SlotId, other.SlotId, StringComparison.Ordinal) && Item.Equals(other.Item);
+        public override bool Equals(object obj) => obj is InstalledItemSnapshot other && Equals(other);
+        public override int GetHashCode() => (SlotId == null ? 0 : StringComparer.Ordinal.GetHashCode(SlotId)) * 397 ^ Item.GetHashCode();
+    }
+
     /// <summary>运行时物品的完整运行时快照：身份 + 类型 + 堆叠数 + 全部可随机化数值节点的当前值；不含 Unity Object 引用与网格位置（位置由本地表现层负责），与网络框架解耦、编码由 RuntimeItemSnapshotCodec 显式完成。</summary>
     public readonly struct RuntimeItemSnapshot : IEquatable<RuntimeItemSnapshot>
     {
-        public const byte CurrentVersion = 2;
+        public const byte CurrentVersion = 3;
         public const int MaxDepth = 4;
         public const int MaxTreeItems = 32;
 
@@ -86,14 +100,23 @@ namespace RPG4.Backpack.Items
 
         public const int MaxItemTypeLength = 128; // 物品类型标签串的最大长度。
 
+        private readonly IReadOnlyList<InstalledItemSnapshot> installedChildren;
         private readonly FragmentNumberState[] numbers; // 数值状态数组。
 
         /// <summary>构造快照；数值节点数组为空、数量超限或堆叠数小于 1 时抛出异常。</summary>
         public RuntimeItemSnapshot(ItemId itemId, BackpackTag itemType, int stackCount, FragmentNumberState[] numbers)
-            : this(itemId, itemType, stackCount, numbers, null, null) { Version = 1; }
+            : this(itemId, itemType, stackCount, numbers, null, null) { }
 
         public RuntimeItemSnapshot(ItemId itemId, BackpackTag itemType, int stackCount, FragmentNumberState[] numbers,
             WeaponStateSnapshot weapon, MagazineStateSnapshot magazine)
+            : this(itemId, itemType, stackCount, numbers, weapon, magazine, LegacyChildren(weapon)) { }
+
+        public RuntimeItemSnapshot(ItemId itemId, BackpackTag itemType, int stackCount, FragmentNumberState[] numbers,
+            WeaponStateSnapshot weapon, MagazineStateSnapshot magazine, IEnumerable<InstalledItemSnapshot> installedChildren)
+            : this(itemId, itemType, stackCount, numbers, weapon, magazine, installedChildren, CurrentVersion) { }
+
+        internal RuntimeItemSnapshot(ItemId itemId, BackpackTag itemType, int stackCount, FragmentNumberState[] numbers,
+            WeaponStateSnapshot weapon, MagazineStateSnapshot magazine, IEnumerable<InstalledItemSnapshot> installedChildren, byte version)
         {
             if (numbers == null) throw new ArgumentNullException(nameof(numbers));
             if (numbers.Length > MaxNumberStateCount)
@@ -110,9 +133,32 @@ namespace RPG4.Backpack.Items
             ItemId = itemId;
             ItemType = itemType;
             StackCount = stackCount;
-            Weapon = weapon;
+            // v3只在通用子树中持有子节点，旧构造函数的数据也显式迁移。
+            Weapon = weapon == null ? null : new WeaponStateSnapshot(weapon.Durability, weapon.ChamberAmmo, weapon.ShotSequence);
             Magazine = magazine;
-            Version = CurrentVersion;
+            var children = new List<InstalledItemSnapshot>();
+            var slots = new HashSet<string>(StringComparer.Ordinal);
+            if (installedChildren == null) throw new ArgumentNullException(nameof(installedChildren));
+            foreach (InstalledItemSnapshot child in installedChildren)
+            {
+                if (!ItemAssemblySlots.IsValid(child.SlotId) || !slots.Add(child.SlotId) || children.Count >= MaxTreeItems - 1)
+                    throw new ArgumentException("装配槽标识无效、重复或子节点超限。", nameof(installedChildren));
+                children.Add(child);
+            }
+            foreach (InstalledItemSnapshot legacy in LegacyChildren(weapon))
+            {
+                bool found = false;
+                foreach (InstalledItemSnapshot child in children)
+                    if (string.Equals(child.SlotId, legacy.SlotId, StringComparison.Ordinal))
+                    {
+                        if (!child.Equals(legacy)) throw new ArgumentException("旧装配子树与通用子树不一致。", nameof(installedChildren));
+                        found = true; break;
+                    }
+                if (!found) throw new ArgumentException("旧装配子树未迁移到通用子树。", nameof(installedChildren));
+            }
+            children.Sort((left, right) => StringComparer.Ordinal.Compare(left.SlotId, right.SlotId));
+            this.installedChildren = children.AsReadOnly();
+            Version = version;
         }
 
         public ItemId ItemId { get; } // 运行时实例标识（可能为 ItemId.None，由网络层负责拒绝）。
@@ -123,6 +169,18 @@ namespace RPG4.Backpack.Items
         public WeaponStateSnapshot Weapon { get; }
         public MagazineStateSnapshot Magazine { get; }
         public byte Version { get; }
+        public IReadOnlyList<InstalledItemSnapshot> InstalledChildren => installedChildren ?? Array.Empty<InstalledItemSnapshot>();
+
+        internal static IEnumerable<InstalledItemSnapshot> LegacyChildren(WeaponStateSnapshot weapon)
+        {
+            if (weapon == null) yield break;
+            if (weapon.Magazine.HasValue) yield return new InstalledItemSnapshot(ItemAssemblySlots.Magazine, weapon.Magazine.Value);
+            foreach (AttachmentStateSnapshot child in weapon.Attachments)
+            {
+                if (child.Slot != WeaponAttachmentSlot.Muzzle) throw new ArgumentException("无法映射旧配件槽。");
+                yield return new InstalledItemSnapshot(ItemAssemblySlots.Muzzle, child.Item);
+            }
+        }
 
         public IReadOnlyList<FragmentNumberState> Numbers => numbers ?? Array.Empty<FragmentNumberState>(); // 按节点坐标升序排列的数值状态，顺序与模板遍历顺序一致，供确定性比较与载荷编码使用。
 
@@ -133,6 +191,8 @@ namespace RPG4.Backpack.Items
             if (!string.Equals(ItemType.ToString(), other.ItemType.ToString(), StringComparison.Ordinal)) return false;
             if (!Equals(Weapon, other.Weapon) || !Equals(Magazine, other.Magazine)) return false;
 
+            if (InstalledChildren.Count != other.InstalledChildren.Count) return false;
+            for (int i = 0; i < InstalledChildren.Count; i++) if (!InstalledChildren[i].Equals(other.InstalledChildren[i])) return false;
             IReadOnlyList<FragmentNumberState> left = Numbers;
             IReadOnlyList<FragmentNumberState> right = other.Numbers;
             if (left.Count != right.Count) return false;
@@ -161,6 +221,7 @@ namespace RPG4.Backpack.Items
                 hash = (hash * 397) ^ ItemType.GetHashCode();
                 hash = (hash * 397) ^ (Weapon?.GetHashCode() ?? 0);
                 hash = (hash * 397) ^ (Magazine?.GetHashCode() ?? 0);
+                foreach (InstalledItemSnapshot child in InstalledChildren) hash = hash * 397 ^ child.GetHashCode();
                 IReadOnlyList<FragmentNumberState> list = Numbers;
                 for (int i = 0; i < list.Count; i++)
                 {

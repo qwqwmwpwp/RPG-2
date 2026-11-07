@@ -42,7 +42,7 @@ namespace RPG4.Backpack.Items
             try
             {
                 var nodes = new Dictionary<ulong, RuntimeItem>();
-                CollectRuntimeNodes(root, nodes, new HashSet<RuntimeItem>(), 0);
+                CollectRuntimeNodes(root, nodes);
                 using (var stream = new MemoryStream())
                 using (var writer = new BinaryWriter(stream, Encoding.UTF8, true))
                 {
@@ -87,7 +87,7 @@ namespace RPG4.Backpack.Items
             try
             {
                 var nodes = new Dictionary<ulong, RuntimeItem>();
-                CollectRuntimeNodes(root, nodes, new HashSet<RuntimeItem>(), 0);
+                CollectRuntimeNodes(root, nodes);
                 var prepared = new RuntimeItemStateUpdate();
                 using (var stream = new MemoryStream(payload, false))
                 using (var reader = new BinaryReader(stream, Encoding.UTF8, true))
@@ -130,16 +130,14 @@ namespace RPG4.Backpack.Items
             { error = exception.Message; return false; }
         }
 
-        private static void CollectRuntimeNodes(RuntimeItem item, Dictionary<ulong, RuntimeItem> nodes,
-            HashSet<RuntimeItem> seen, int depth)
+        private static void CollectRuntimeNodes(RuntimeItem root, Dictionary<ulong, RuntimeItem> nodes)
         {
-            if (item == null || !item.ItemId.IsValid || depth > RuntimeItemSnapshot.MaxDepth
-                || !seen.Add(item) || seen.Count > RuntimeItemSnapshot.MaxTreeItems)
-                throw new InvalidDataException("运行物品图为空、含环、无效标识或超限。");
-            if (item.WeaponState != null || item.MagazineState != null) nodes.Add(item.ItemId.Value, item);
-            if (item.WeaponState == null) return;
-            if (item.WeaponState.Magazine != null) CollectRuntimeNodes(item.WeaponState.Magazine, nodes, seen, depth + 1);
-            foreach (RuntimeItem child in item.WeaponState.Attachments.Values) CollectRuntimeNodes(child, nodes, seen, depth + 1);
+            if (root == null) throw new InvalidDataException("运行物品图为空。");
+            foreach (RuntimeItem item in ItemAssemblyTraversal.Enumerate(root))
+            {
+                if (!item.ItemId.IsValid) throw new InvalidDataException("运行物品图包含无效标识。");
+                if (item.WeaponState != null || item.MagazineState != null) nodes.Add(item.ItemId.Value, item);
+            }
         }
     }
 }

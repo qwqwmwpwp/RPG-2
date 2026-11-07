@@ -169,6 +169,7 @@ namespace RPG4.Backpack.UI
                     interaction.SetQuickTransferPair(containerUI, equipmentView, "快速装备", "快速卸装", replaceSecondSingleSlot: true);
                 }
                 else interaction.BeginSession(containerUI);
+                interaction.SetInspectableContainers(containerUI, equipmentView);
             }
         }
 

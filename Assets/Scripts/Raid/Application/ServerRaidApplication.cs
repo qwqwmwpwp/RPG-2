@@ -33,7 +33,13 @@ namespace RPG4.Raid.Application
         public void RegisterSession(string key, RaidIdentity identity)
         {
             if (Volatile.Read(ref stopped) != 0) return;
-            if (!sessions.ContainsKey(key)) sessions.Add(key, new RaidPlayerSession(key, identity));
+            if (key == null || identity == null) return;
+            if (sessions.TryGetValue(key, out RaidPlayerSession existing))
+            {
+                existing.Rebind(identity);
+                return;
+            }
+            sessions.Add(key, new RaidPlayerSession(key, identity));
         }
         private bool Current(RaidPlayerSession session) => session.Connected && clients.IsCurrent(session.Key);
         private bool TrySession(string key, out RaidPlayerSession session)
@@ -51,7 +57,7 @@ namespace RPG4.Raid.Application
         public void HandleCommand(string key, LobbyCommand command)
         {
             if (!TrySession(key, out RaidPlayerSession session) || !Current(session) || command == null
-                || !ValidOperationId(command.OperationId) || command.Kind > LobbyCommandKind.CancelEntry) return;
+                || !ValidOperationId(command.OperationId) || command.Kind > LobbyCommandKind.AssemblyOperation) return;
             if (session.Replies.TryGetValue(command.OperationId, out LobbyReply reply))
             {
                 if (!reply.Command.SamePayload(command)) { Reject(session, "操作标识已使用，请刷新库存。"); return; }
@@ -89,7 +95,11 @@ namespace RPG4.Raid.Application
             if (session.Inventory.Revision != command.Revision)
             { ReloadRejected(session, command, "库存已更新，已重新同步，请重试操作。"); return; }
             if (command.Kind == LobbyCommandKind.StartRaid) PrepareEntry(session, command);
-            else if (command.Kind == LobbyCommandKind.InventoryOperation) CommitInventory(session, command);
+            else if (command.Kind == LobbyCommandKind.InventoryOperation || command.Kind == LobbyCommandKind.AssemblyOperation) CommitInventory(session, command);
+            else if (command.Kind == LobbyCommandKind.AssemblyQuery) {
+                try { Remember(session, command, inventory.Execute(session.Inventory, command).Result); }
+                catch (Exception) { Remember(session, command, LobbyInventoryResult.Rejected(command.RequestId, "装配查询未通过校验。")); }
+            }
         }
 
         private static bool ValidOperationId(string id)
@@ -101,7 +111,7 @@ namespace RPG4.Raid.Application
 
         private void CommitInventory(RaidPlayerSession session, LobbyCommand command)
         {
-            if (command.Source > 2 || command.Destination > 2 || command.OperationKind > (byte)LobbyInventoryOperationKind.SwapItems) return;
+            if (command.Source > 2 || command.Destination > 2 || command.Kind == LobbyCommandKind.InventoryOperation && command.OperationKind > (byte)LobbyInventoryOperationKind.SwapItems) return;
             try
             {
                 LobbyInventoryCandidate candidate = inventory.Execute(session.Inventory, command);
@@ -174,8 +184,18 @@ namespace RPG4.Raid.Application
         {
             if (!TrySession(key, out RaidPlayerSession session) || !Current(session)) return;
             RaidRun raid = session.Raid;
-            if (raid == null || raid.Reservation.Status != PersistentRaidStatus.Prepared || raid.Reservation.WorldRunId != store.WorldRunId
-                || !raid.ReadyRequested || session.Busy || raid.IsSpawning || raid.Stage == RaidStage.Settling || world.HasActor(key)) return;
+            if (raid == null || raid.Reservation.WorldRunId != store.WorldRunId
+                || !raid.ReadyRequested || session.Busy || raid.IsSpawning || raid.Stage == RaidStage.Settling) return;
+            if (raid.Reservation.Status == PersistentRaidStatus.Active)
+            {
+                if (world.HasActor(key) && world.TryRebindPlayer(key)) Phase(session, RaidPhase.Active, null);
+                return;
+            }
+            if (raid.Reservation.Status != PersistentRaidStatus.Prepared) return;
+            if (world.HasActor(key))
+            {
+                return;
+            }
             if (!raid.BeginInitialization()) return;
             if (!world.TryInitializePlayer(key, raid.Reservation)) { raid.InitializationFailed(); CancelEntry(session); return; }
             raid.BeginActivation();
@@ -215,11 +235,18 @@ namespace RPG4.Raid.Application
         public void Disconnect(string key)
         {
             if (!TrySession(key, out RaidPlayerSession session)) return;
-            // Must be called before the transport destroys the owned actor.
-            if (session.Raid?.Reservation.Status == PersistentRaidStatus.Active && session.Raid.Stage != RaidStage.Settling)
-                BeginSettlement(session, RaidOutcome.Disconnected);
+            // A transport disconnect is not a gameplay outcome. Keep an active, living
+            // raid reserved so the same character can reconnect and resume control.
+            // Death, extraction, timeout and explicit settlement still enter settlement
+            // through EndRaid/TryExtract and are terminal for this control.
             session.Connected = false;
             if (session.Raid?.Reservation.Status == PersistentRaidStatus.Prepared && !session.Raid.ActivationRequested) CancelEntry(session);
+        }
+        public bool CanReconnect(string key)
+        {
+            return TrySession(key, out RaidPlayerSession session) && !session.Connected
+                && session.Raid?.Reservation.Status == PersistentRaidStatus.Active
+                && session.Raid.Stage == RaidStage.Active;
         }
         public void EndRaid(string key, RaidOutcome outcome)
         { if (TrySession(key, out RaidPlayerSession session)) BeginSettlement(session, outcome); }

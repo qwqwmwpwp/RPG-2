@@ -23,15 +23,18 @@ namespace RPG4.Backpack.Inventory
             { error = "未知武器操作。"; return false; }
             if (operation.Kind == WeaponOperationKind.ExchangeAttachment && operation.Slot != WeaponAttachmentSlot.Muzzle)
             { error = "不支持的武器配件槽。"; return false; }
-            InventoryContainer target = WeaponContainerResolver != null ? WeaponContainerResolver(operation.TargetItemId) : Container;
+            InventoryContainer target = ResolveAssemblyContainer(operation.TargetItemId);
             if (target == null || !target.TryGetItemById(operation.TargetItemId, out RuntimeItem weapon) || weapon.WeaponState == null)
-            { error = "目标武器已不在玩家背包或武器槽中。"; return false; }
-            error = WeaponOperationBlockReason?.Invoke(operation.TargetItemId);
-            if (!string.IsNullOrEmpty(error)) return false;
-            return operation.Kind == WeaponOperationKind.ExchangeMagazine
-                ? CanExchangeWeaponMagazine(target, operation.TargetItemId, operation.CandidateItemId, out error)
-                : CanExchangeWeaponAttachment(target, operation.TargetItemId, operation.Slot, operation.CandidateItemId, out error);
+            { error = "目标武器已不在玩家可操作容器内。"; return false; }
+            AssemblyOperationResult result = EvaluateAssembly(ToAssemblyOperation(operation));
+            error = result.Error;
+            return result.Success;
         }
+
+        private static AssemblyOperation ToAssemblyOperation(WeaponOperation operation)
+            => new AssemblyOperation(operation.RequestId, operation.TargetItemId, operation.TargetItemId,
+                operation.Kind == WeaponOperationKind.ExchangeMagazine ? ItemAssemblySlots.Magazine : ItemAssemblySlots.Muzzle,
+                operation.CandidateItemId);
 
         public WeaponOperationResult ExecuteWeaponOperation(WeaponOperation operation)
         {
@@ -47,10 +50,8 @@ namespace RPG4.Backpack.Inventory
                 success = TryLoadMagazine(operation.TargetItemId, operation.CandidateItemId, operation.Count, out error);
             else
             {
-                InventoryContainer target = WeaponContainerResolver != null ? WeaponContainerResolver(operation.TargetItemId) : Container;
-                success = operation.Kind == WeaponOperationKind.ExchangeMagazine
-                    ? TryExchangeWeaponMagazine(target, operation.TargetItemId, operation.CandidateItemId, out error)
-                    : TryExchangeWeaponAttachment(target, operation.TargetItemId, operation.Slot, operation.CandidateItemId, out error);
+                AssemblyOperationResult result = ExecuteAssembly(ToAssemblyOperation(operation));
+                success = result.Success; error = result.Error;
             }
             return new WeaponOperationResult(operation.RequestId, operation.TargetItemId, success, success ? null : error);
         }
@@ -81,29 +82,23 @@ namespace RPG4.Backpack.Inventory
         public bool TryExchangeWeaponAttachment(InventoryContainer weaponContainer, ItemId weaponId, WeaponAttachmentSlot slot, ItemId attachmentId, out string error)
             => TryExchangeWeaponChild(weaponContainer, weaponId, attachmentId, false, slot, out error);
 
-        private bool ResolveWeaponExchange(InventoryContainer weaponContainer, ItemId weaponId, ItemId childId,
-            out RuntimeItem weapon, out RuntimeItem child, out string error)
-        {
-            weapon = null; child = null; error = null;
-            if (!ResolveAuthority() || !EnsureContainer(out error)) { error = error ?? "仅权威端可修改武器子物品。"; return false; }
-            if (weaponContainer == null || !weaponContainer.TryGetItemById(weaponId, out weapon)) { error = "指定容器内没有目标武器。"; return false; }
-            if (!childId.IsNone && !Container.TryGetItemById(childId, out child)) { error = "背包内没有候选子物品。"; return false; }
-            return true;
-        }
-
         private bool CanExchangeWeaponChild(InventoryContainer weaponContainer, ItemId weaponId, ItemId childId,
             bool magazine, WeaponAttachmentSlot slot, out string error)
         {
-            if (!ResolveWeaponExchange(weaponContainer, weaponId, childId, out RuntimeItem weapon, out RuntimeItem child, out error)) return false;
-            return magazine ? Container.CanExchangeWeaponMagazine(weaponContainer, weapon, child, Catalog, out error)
-                : Container.CanExchangeWeaponAttachment(weaponContainer, weapon, slot, child, Catalog, out error);
+            if (!ReferenceEquals(weaponContainer, ResolveAssemblyContainer(weaponId)))
+            { error = "目标不属于宿主可操作容器。"; return false; }
+            return CanExecuteWeaponOperation(new WeaponOperation(0, magazine ? WeaponOperationKind.ExchangeMagazine
+                : WeaponOperationKind.ExchangeAttachment, weaponId, childId, 0, slot), out error);
         }
 
         private bool TryExchangeWeaponChild(InventoryContainer weaponContainer, ItemId weaponId, ItemId childId,
             bool magazine, WeaponAttachmentSlot slot, out string error)
         {
-            if (!ResolveWeaponExchange(weaponContainer, weaponId, childId, out RuntimeItem weapon, out RuntimeItem child, out error)) return false;
-            return Container.TryExchangeWeaponChild(weaponContainer, weapon, child, magazine, slot, Catalog, CommitParticipant, out error);
+            if (!ReferenceEquals(weaponContainer, ResolveAssemblyContainer(weaponId)))
+            { error = "目标不属于宿主可操作容器。"; return false; }
+            WeaponOperationResult result = ExecuteWeaponOperation(new WeaponOperation(0, magazine ? WeaponOperationKind.ExchangeMagazine
+                : WeaponOperationKind.ExchangeAttachment, weaponId, childId, 0, slot));
+            error = result.Error; return result.Success;
         }
 
         public bool CanLoadMagazine(ItemId magazineId, ItemId ammoId, int roundCount, out string error)

@@ -16,6 +16,7 @@ namespace RPG4.Raid.Application
         bool CanExtract(string sessionKey);
         bool TryInitializePlayer(string sessionKey, RaidReservation reservation);
         void PublishPlayer(string sessionKey);
+        bool TryRebindPlayer(string sessionKey);
         FrozenRaidInventory FreezePlayer(string sessionKey);
         void ClearSource(string sessionKey);
         void PublishDropBag(string sessionKey, PersistentDropBag bag, RaidPosition position);

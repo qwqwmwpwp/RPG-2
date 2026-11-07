@@ -50,10 +50,10 @@ namespace RPG4.Backpack.Network
         private readonly HashSet<ulong> pendingOperations = new HashSet<ulong>();
         private readonly Dictionary<ulong, Action> completedOperations = new Dictionary<ulong, Action>();
         private readonly Queue<ulong> completedOrder = new Queue<ulong>();
-        private enum RequestCategory : byte { Inventory, Weapon, Consumable, Pickup }
+        private enum RequestCategory : byte { Inventory, Weapon, Consumable, Pickup, AssemblyQuery, Assembly }
         private readonly Dictionary<(RequestCategory category, int id), ulong> requestTickets = new Dictionary<(RequestCategory, int), ulong>();
         private readonly Queue<(RequestCategory category, int id)> requestOrder = new Queue<(RequestCategory, int)>();
-        private readonly uint[] requestHighWater = new uint[4];
+        private readonly uint[] requestHighWater = new uint[6];
         private NetworkConnectionToClient operationOwner;
 
         // Host 上的 UI 使用获授权镜像；服务器事务始终使用独立的权威视图，不能受本地主机 UI 会话影响。
@@ -84,6 +84,8 @@ namespace RPG4.Backpack.Network
             internal Func<ItemIdGenerator> Generator;
             internal Action<InventoryOperation> Forward, Dispatch;
             internal Action<WeaponOperation> ForwardWeapon, DispatchWeapon;
+            internal Action<AssemblyQuery> ForwardAssemblyQuery, DispatchAssemblyQuery;
+            internal Action<AssemblyOperation> ForwardAssembly, DispatchAssembly;
             internal Action<ConsumableUseOperation> ForwardConsumable, DispatchConsumable;
             internal Func<ConsumableUseViewState> ConsumableState;
             internal Func<IBackpackView, bool> CanForward;
@@ -99,6 +101,8 @@ namespace RPG4.Backpack.Network
                 Authority = authority.IsAuthority, Generator = authority.IdGeneratorProvider,
                 Forward = authority.ForwardOperation, Dispatch = authority.AuthorityOperationDispatcher,
                 ForwardWeapon = authority.ForwardWeaponOperation, DispatchWeapon = authority.AuthorityWeaponOperationDispatcher,
+                ForwardAssemblyQuery = authority.ForwardAssemblyQuery, DispatchAssemblyQuery = authority.AuthorityAssemblyQueryDispatcher,
+                ForwardAssembly = authority.ForwardAssemblyOperation, DispatchAssembly = authority.AuthorityAssemblyOperationDispatcher,
                 ForwardConsumable = authority.ForwardConsumableOperation, DispatchConsumable = authority.AuthorityConsumableOperationDispatcher,
                 ConsumableState = authority.ConsumableStateProvider,
                 CanForward = authority.ForwardCanSubmit, Confirm = authority.CommitParticipant,
@@ -112,6 +116,8 @@ namespace RPG4.Backpack.Network
             core.IsAuthority = previousBindings.Authority; core.IdGeneratorProvider = previousBindings.Generator;
             core.ForwardOperation = previousBindings.Forward; core.AuthorityOperationDispatcher = previousBindings.Dispatch;
             core.ForwardWeaponOperation = previousBindings.ForwardWeapon; core.AuthorityWeaponOperationDispatcher = previousBindings.DispatchWeapon;
+            core.ForwardAssemblyQuery = previousBindings.ForwardAssemblyQuery; core.AuthorityAssemblyQueryDispatcher = previousBindings.DispatchAssemblyQuery;
+            core.ForwardAssemblyOperation = previousBindings.ForwardAssembly; core.AuthorityAssemblyOperationDispatcher = previousBindings.DispatchAssembly;
             core.ForwardConsumableOperation = previousBindings.ForwardConsumable;
             core.AuthorityConsumableOperationDispatcher = previousBindings.DispatchConsumable;
             core.ConsumableStateProvider = previousBindings.ConsumableState;

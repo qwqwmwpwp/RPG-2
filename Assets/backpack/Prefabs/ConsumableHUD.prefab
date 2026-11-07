@@ -36,7 +36,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 0}
   m_AnchorMax: {x: 1, y: 0}
-  m_AnchoredPosition: {x: -32, y: 32}
+  m_AnchoredPosition: {x: -32, y: 248}
   m_SizeDelta: {x: 344, y: 196}
   m_Pivot: {x: 1, y: 0}
 --- !u!1 &930000003
@@ -1282,6 +1282,7 @@ MonoBehaviour:
   statusLabel: {fileID: 930000038}
   icon: {fileID: 930000018}
   progress: {fileID: 930000047}
+  visualTheme: {fileID: 11400000, guid: 8f5d5a4b1e6f4b4e9d9f2e7c3a6b1d80, type: 2}
 --- !u!1 &930000100
 GameObject:
   m_ObjectHideFlags: 0

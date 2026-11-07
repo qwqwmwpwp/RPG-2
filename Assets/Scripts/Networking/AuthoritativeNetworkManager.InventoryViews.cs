@@ -15,6 +15,8 @@ namespace RPG4.Networking
         internal PersonalContainerKind Kind;
         internal bool Writable;
         internal Action<RaidInventoryView, InventoryOperation> Submit;
+        internal Action<RaidInventoryView, AssemblyQuery> SubmitAssemblyQuery;
+        internal Action<RaidInventoryView, AssemblyOperation> SubmitAssemblyOperation;
         public bool IsReady => Core != null;
         public int Rows => Core?.Container.Rows ?? 0;
         public int Columns => Core?.Container.Columns ?? 0;
@@ -39,6 +41,8 @@ namespace RPG4.Networking
             Core = new InventoryHostCore(data.Rows, data.Columns, LogModule.Network, "Persistent inventory", Kind == PersonalContainerKind.Equipment, CanAcceptItem)
             { Catalog = catalog, IdGeneratorProvider = () => generator, IsAuthority = () => authority,
                 ForwardCanSubmit = destination => CanSubmitTo(destination), ForwardOperation = operation => Submit?.Invoke(this, operation) };
+            Core.ForwardAssemblyQuery = query => SubmitAssemblyQuery?.Invoke(this, query);
+            Core.ForwardAssemblyOperation = operation => SubmitAssemblyOperation?.Invoke(this, operation);
             RaidInventorySnapshots.Restore(data, Core.Container, catalog);
             Core.SubscribeCommands(this);
         }

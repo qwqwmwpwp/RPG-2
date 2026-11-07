@@ -97,6 +97,7 @@ namespace RPG4.Backpack.Runtime
         {
             if (core == null) return;
             core.WeaponContainerResolver = resolver;
+            core.AssemblyContainerResolver = resolver;
             core.WeaponOperationBlockReason = blockReason;
         }
 

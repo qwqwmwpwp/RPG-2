@@ -4176,6 +4176,7 @@ MonoBehaviour:
   actionLabel: {fileID: 10000171}
   icon: {fileID: 10000161}
   reloadProgress: {fileID: 10000176}
+  visualTheme: {fileID: 11400000, guid: 8f5d5a4b1e6f4b4e9d9f2e7c3a6b1d80, type: 2}
 --- !u!1 &10000178
 GameObject:
   m_ObjectHideFlags: 0
@@ -6266,6 +6267,10 @@ MonoBehaviour:
     - Manifest: {fileID: 11400000, guid: 8499b17e8f183f340bd0c6de4117ea0a, type: 2}
       Count: 1
     - Manifest: {fileID: 11400000, guid: 8499b17e8f183f340bd0c6de4117ea0a, type: 2}
+      Count: 1
+    - Manifest: {fileID: 11400000, guid: c020762a70a24448b260d8d00a4a6d62, type: 2}
+      Count: 1
+    - Manifest: {fileID: 11400000, guid: 75a0eee65f2a46178c428f9bcd868e6b, type: 2}
       Count: 1
     - Manifest: {fileID: 11400000, guid: 11d2a937c70edd04ea04bd006c5973f1, type: 2}
       Count: 5

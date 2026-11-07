@@ -8,8 +8,12 @@ namespace RPG4.PlayerMovement
 {
     public sealed partial class PlayerEquipment
     {
+        private System.Action<AssemblyOperation> localAssemblyDispatcher, gearAssemblyDispatcher;
+        private System.Action<AssemblyQuery> gearAssemblyQuery;
         private object weaponUiSource;
         private object weaponUiEquipmentSource;
+        private InventoryHostCore weaponUiInventoryCore, weaponUiEquipmentCore;
+        private ItemManifestCatalog weaponUiCatalog;
         private EventSubscription weaponUiRequest;
         private EventSubscription weaponUiInventoryChanged;
         private EventSubscription weaponUiEquipmentChanged;
@@ -31,7 +35,35 @@ namespace RPG4.PlayerMovement
             weaponUiSource = source;
             weaponUiEquipmentSource = equipmentSource;
             if (source == null) return;
-            inventory.ConfigureWeaponOperations(ResolveOwnedWeaponContainer, WeaponUiBlockReason);
+            weaponUiInventoryCore = InventoryAvailable ? inventory.AuthorityCore : null;
+            weaponUiEquipmentCore = EquipmentAvailable ? equipmentInventory.AuthorityCore : null;
+            weaponUiCatalog = InventoryAvailable ? inventory.Catalog : null;
+            if (weaponUiInventoryCore != null) {
+                inventory.ConfigureWeaponOperations(ResolveOwnedWeaponContainer, WeaponUiBlockReason);
+                weaponUiInventoryCore.AssemblyContainerResolver = ResolveOwnedWeaponContainer;
+            }
+            if (weaponUiInventoryCore != null && weaponUiInventoryCore.AuthorityAssemblyOperationDispatcher == null) {
+                localAssemblyDispatcher = operation => {
+                    PrepareWeaponOperation(new WeaponOperation(operation.RequestId, WeaponOperationKind.ExchangeAttachment,
+                        operation.RootItemId, operation.CandidateItemId));
+                    weaponUiInventoryCore.PublishAssemblyOperationResult(weaponUiInventoryCore.ExecuteAssembly(operation));
+                };
+                weaponUiInventoryCore.AuthorityAssemblyOperationDispatcher = localAssemblyDispatcher;
+            }
+            if (weaponUiEquipmentCore != null && weaponUiEquipmentCore.AuthorityAssemblyQueryDispatcher == null
+                && weaponUiInventoryCore != null) {
+                gearAssemblyQuery = query => weaponUiEquipmentCore.PublishAssemblyInspection(weaponUiInventoryCore.QueryAssembly(query));
+                weaponUiEquipmentCore.AuthorityAssemblyQueryDispatcher = gearAssemblyQuery;
+            }
+            if (weaponUiEquipmentCore != null && weaponUiEquipmentCore.AuthorityAssemblyOperationDispatcher == null
+                && weaponUiInventoryCore != null) {
+                gearAssemblyDispatcher = operation => {
+                    PrepareWeaponOperation(new WeaponOperation(operation.RequestId, WeaponOperationKind.ExchangeAttachment,
+                        operation.RootItemId, operation.CandidateItemId));
+                    weaponUiEquipmentCore.PublishAssemblyOperationResult(weaponUiInventoryCore.ExecuteAssembly(operation));
+                };
+                weaponUiEquipmentCore.AuthorityAssemblyOperationDispatcher = gearAssemblyDispatcher;
+            }
             weaponUiRequest = EventBus.Global.Subscribe<WeaponSnapshotRequest>(CmdChannels.WeaponSnapshot,
                 source, this, OnWeaponSnapshotRequest);
             weaponUiInventoryChanged = EventBus.Global.Subscribe(InvChannels.Changed, source, this, MarkWeaponUiDirty);
@@ -172,10 +204,24 @@ namespace RPG4.PlayerMovement
                     new WeaponHudSnapshot(null, 0, 0, 0, 0f, 0f, WeaponUiActionStage.None, 0d, 0f));
                 foreach (WeaponSnapshotRequest request in new List<WeaponSnapshotRequest>(weaponUiInspections.Values))
                     EventBus.Global.Publish(InvChannels.WeaponInspectionChanged, weaponUiSource,
-                        WeaponUiSnapshots.Inspection(null, weaponUiItems, inventory.Catalog, ItemId.None, request, WeaponUiRejection));
-                inventory.ConfigureWeaponOperations(null, _ => "玩家武器交互已停用。");
+                        WeaponUiSnapshots.Inspection(null, weaponUiItems, weaponUiCatalog, ItemId.None, request, null));
+                if (weaponUiInventoryCore != null) {
+                    if (InventoryAvailable) inventory.ConfigureWeaponOperations(null, _ => "玩家武器交互已停用。");
+                    if (weaponUiInventoryCore.AssemblyContainerResolver == (System.Func<ItemId, InventoryContainer>)ResolveOwnedWeaponContainer)
+                        weaponUiInventoryCore.AssemblyContainerResolver = null;
+                    if (localAssemblyDispatcher != null && weaponUiInventoryCore.AuthorityAssemblyOperationDispatcher == localAssemblyDispatcher)
+                        weaponUiInventoryCore.AuthorityAssemblyOperationDispatcher = null;
+                }
+                if (weaponUiEquipmentCore != null) {
+                    if (gearAssemblyQuery != null && weaponUiEquipmentCore.AuthorityAssemblyQueryDispatcher == gearAssemblyQuery)
+                        weaponUiEquipmentCore.AuthorityAssemblyQueryDispatcher = null;
+                    if (gearAssemblyDispatcher != null && weaponUiEquipmentCore.AuthorityAssemblyOperationDispatcher == gearAssemblyDispatcher)
+                        weaponUiEquipmentCore.AuthorityAssemblyOperationDispatcher = null;
+                }
+                localAssemblyDispatcher = gearAssemblyDispatcher = null; gearAssemblyQuery = null;
             }
             weaponUiSource = weaponUiEquipmentSource = null;
+            weaponUiInventoryCore = weaponUiEquipmentCore = null; weaponUiCatalog = null;
             weaponUiInspections.Clear();
             weaponUiDirty = false;
         }

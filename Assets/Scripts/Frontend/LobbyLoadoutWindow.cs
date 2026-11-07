@@ -28,6 +28,7 @@ namespace RPG4.Frontend
         {
             backpack.SetPresentationVisible(true); equipment.SetPresentationVisible(true); stash.SetPresentationVisible(true);
             interaction.BeginSession(backpack, equipment, stash);
+            interaction.SetInspectableContainers(backpack, equipment, stash);
             interaction.SetQuickTransferPair(backpack, stash, "存入仓库", "放入背包");
         }
         protected override void OnClosed() { interaction.EndSession(); base.OnClosed(); Closed?.Invoke(); }

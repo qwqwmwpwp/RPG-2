@@ -48,6 +48,9 @@ namespace RPG4.Backpack.Items
         public ulong ShotSequence { get; }
         public RuntimeItemSnapshot? Magazine { get; }
         public IReadOnlyList<AttachmentStateSnapshot> Attachments { get; }
+        public WeaponStateSnapshot(float durability, BackpackTag chamberAmmo, ulong shotSequence)
+            : this(durability, chamberAmmo, shotSequence, null, Array.Empty<AttachmentStateSnapshot>()) { }
+        // 仅供v2解码/旧调用方输入；RuntimeItemSnapshot会将子树迁移到InstalledChildren。
         public WeaponStateSnapshot(float durability, BackpackTag chamberAmmo, ulong shotSequence,
             RuntimeItemSnapshot? magazine, IEnumerable<AttachmentStateSnapshot> attachments)
         {

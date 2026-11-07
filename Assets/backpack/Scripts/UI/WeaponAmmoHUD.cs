@@ -4,6 +4,7 @@ using UnityEngine.UI;
 using RPG4.Backpack.Core;
 using RPG4.Backpack.Inventory;
 using RPG4.Backpack.Items;
+using RPG4.UI;
 
 namespace RPG4.Backpack.UI
 {
@@ -21,6 +22,8 @@ namespace RPG4.Backpack.UI
         public TMP_Text actionLabel;
         public Image icon;
         public Slider reloadProgress;
+        [Tooltip("Optional presentation theme. Gameplay state is never read from the theme.")]
+        [SerializeField] private UiVisualTheme visualTheme;
         private object source;
         private EventSubscription hudSubscription;
         private WeaponHudSnapshot snapshot;
@@ -161,11 +164,20 @@ namespace RPG4.Backpack.UI
                 reloadProgress.gameObject.SetActive(active);
                 reloadProgress.interactable = false;
                 reloadProgress.normalizedValue = active && snapshot.ActionDuration > 0f
-                    ? Mathf.Clamp01((float)((Time.timeAsDouble - snapshot.ActionStartTime) / snapshot.ActionDuration)) : 0f;
+                    ? UiMotionPolicy.ReduceMotion ? 1f
+                        : Mathf.Clamp01((float)((Time.timeAsDouble - snapshot.ActionStartTime) / snapshot.ActionDuration)) : 0f;
             }
             if (actionLabel != null) actionLabel.text = !active ? IdleStatus()
                 : snapshot.ActionStage == WeaponUiActionStage.Started ? "换弹中…"
                 : snapshot.ActionStage == WeaponUiActionStage.MagazineCommitted ? "弹匣已装入 · 上膛中…" : "已上膛 · 完成换弹中…";
+            if (visualTheme != null)
+            {
+                if (weaponName != null) weaponName.color = visualTheme.PrimaryTextColor;
+                if (rounds != null) rounds.color = visualTheme.PrimaryTextColor;
+                if (reserve != null) reserve.color = visualTheme.SecondaryTextColor;
+                if (durability != null) durability.color = visualTheme.SecondaryTextColor;
+                if (actionLabel != null) actionLabel.color = visualTheme.SecondaryTextColor;
+            }
         }
 
         private string IdleStatus()

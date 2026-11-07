@@ -192,6 +192,7 @@ namespace RPG4.Backpack.UI
             {
                 if (equipment != null) ui.interaction.BeginSession(ui.playerView, ui.chestView, ui.equipmentView);
                 else ui.interaction.BeginSession(ui.playerView, ui.chestView);
+                ui.interaction.SetInspectableContainers(ui.playerView, ui.equipmentView);
                 // 箱子窗口保留原有背包 ↔ 箱子的快捷转移；装备槽只接受手动拖放。
                 ui.interaction.SetQuickTransferPair(ui.playerView, ui.chestView);
             }

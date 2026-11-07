@@ -3,6 +3,8 @@ using System.IO;
 using Mirror;
 using RPG4.Backpack.Inventory;
 using RPG4.Backpack.Items;
+using RPG4.Backpack.Network;
+using System.Collections.Generic;
 using RPG4.Networking.Contracts;
 using RPG4.Raid.Application.Client;
 using RPG4.Raid.Domain;
@@ -37,6 +39,8 @@ namespace RPG4.Networking
         private string deferredGameplayScene, incomingTransfer;
         private byte[][] incomingChunks;
         private int incomingChunkCount, incomingBytes;
+        private readonly Dictionary<(byte source, int session), (string operation, AssemblyWireBuffer buffer)> incomingAssemblies
+            = new Dictionary<(byte, int), (string, AssemblyWireBuffer)>();
 
         private ItemManifestCatalog ResolveLobbyCatalog() => lobbyCatalog != null ? lobbyCatalog
             : playerPrefab != null ? playerPrefab.GetComponent<RPG4.Backpack.Runtime.BackpackInventory>()?.Catalog : null;
@@ -47,6 +51,7 @@ namespace RPG4.Networking
             clientRaidInventory = new ClientRaidInventoryProjection(ResolveLobbyCatalog);
             clientRaid = new ClientRaidFlow(this, this, this, clientRaidInventory);
             clientRaidInventory.Bind(clientRaid);
+            clientRaidInventory.AssemblyRequestChanged += (source, session) => incomingAssemblies.Remove((source, session));
             clientRaid.InventoryChanged += () => LobbyInventoryChanged?.Invoke();
             clientRaid.Changed += () => ClientRaidChanged?.Invoke();
         }
@@ -56,11 +61,13 @@ namespace RPG4.Networking
             EnsureRaidClient();
             NetworkClient.ReplaceHandler<SceneMessage>(OnControlledSceneMessage, false);
             NetworkClient.RegisterHandler<LobbySnapshotMessage>(OnLobbySnapshot);
+            NetworkClient.RegisterHandler<LobbyAssemblyResponseMessage>(OnLobbyAssemblyResponse);
             NetworkClient.RegisterHandler<RaidSessionMessage>(OnRaidSessionMessage);
         }
 
         private void StopRaidClientMessages()
         {
+            NetworkClient.UnregisterHandler<LobbyAssemblyResponseMessage>(); incomingAssemblies.Clear();
             NetworkClient.UnregisterHandler<LobbySnapshotMessage>(); NetworkClient.UnregisterHandler<RaidSessionMessage>();
             clientRaid?.Reset();
             incomingChunks = null; incomingTransfer = deferredGameplayScene = null;
@@ -84,7 +91,12 @@ namespace RPG4.Networking
         private static bool IsGameplaySceneName(string path) => path == EntryProtocol.GameplayScene || path == "OnlineGame";
         public bool TryStartRaid(out string reason) => ClientRaid.TryStartRaid(out reason);
         public bool TryAbandonRaid(out string reason) => ClientRaid.TryAbandonRaid(out reason);
-        private void TickLobbyClient() => clientRaid?.Tick();
+        private void TickLobbyClient()
+        {
+            clientRaid?.Tick();
+            foreach (var key in new List<(byte source, int session)>(incomingAssemblies.Keys))
+                if (Time.unscaledTimeAsDouble > incomingAssemblies[key].buffer.Deadline) incomingAssemblies.Remove(key);
+        }
 
         private void OnLobbySnapshot(LobbySnapshotMessage message)
         {
@@ -106,9 +118,26 @@ namespace RPG4.Networking
                 incomingChunks = null; incomingTransfer = null;
                 ClientRaid.ReceiveInventory(RaidInventoryWireCodec.Decode(bytes), message.OperationId,
                     (PersonalContainerKind)message.Source, new LobbyInventoryResult { RequestId = message.RequestId,
-                        Success = message.Success, ResultItemId = message.ResultItemId, MovedCount = message.MovedCount, Error = message.Error });
+                        Success = message.Success, ResultItemId = message.ResultItemId, MovedCount = message.MovedCount, Error = message.Error, AssemblyKind = message.AssemblyKind, AssemblyPayload = message.AssemblyPayloadPending ? Array.Empty<byte>() : null });
             }
             catch (Exception) { NetworkClient.Disconnect(); }
+        }
+
+        private void OnLobbyAssemblyResponse(LobbyAssemblyResponseMessage message)
+        {
+            var key = (message.Source, message.SessionId);
+            if (message.OperationId == null || message.OperationId.Length != 32 || message.SlotId != null && message.SlotId.Length > 64
+                || !clientRaidInventory.AcceptsAssembly(message.Source, message.Kind, message.SessionId, message.RequestId,
+                    message.RootItemId, message.ParentItemId, message.SlotId, message.CandidateOffset)) { incomingAssemblies.Remove(key); return; }
+            try {
+                if (!incomingAssemblies.TryGetValue(key, out var receive) || receive.operation != message.OperationId) {
+                    if (!incomingAssemblies.ContainsKey(key) && incomingAssemblies.Count >= 32) return;
+                    receive = (message.OperationId, new AssemblyWireBuffer(message.Count, Time.unscaledTimeAsDouble)); incomingAssemblies[key] = receive;
+                }
+                if (!receive.buffer.Add(message.Index, message.Count, message.Payload, Time.unscaledTimeAsDouble, out byte[] payload)) return;
+                incomingAssemblies.Remove(key); clientRaidInventory.PublishAssembly(message.Source, message.Kind, payload);
+            }
+            catch (Exception) { incomingAssemblies.Remove(key); }
         }
 
         private void OnRaidSessionMessage(RaidSessionMessage message) =>

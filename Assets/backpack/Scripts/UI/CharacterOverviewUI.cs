@@ -104,7 +104,7 @@ namespace RPG4.Backpack.UI
             bool busy = interaction == null || interaction.IsCarrying || interaction.IsChoosingSplitQuantity || interaction.IsWaitingForOperation;
             RuntimeItem hovered = !busy && interaction.HasPointer ? interaction.DisplayedItem : null;
             RuntimeItem preview = !busy ? hovered ?? interaction.SelectedItem : null;
-            SetText(selectionLabel, showingInspection ? "武器装配 · F 检查"
+            SetText(selectionLabel, showingInspection ? "武器装配 / F 检查"
                 : preview == null ? "物品详情 · 悬停预览"
                 : equipped != null && preview.ItemId == equipped.ItemId ? "物品详情 · 已装备"
                 : hovered != null ? "物品详情 · 悬停预览" : "物品详情 · 已选中");
