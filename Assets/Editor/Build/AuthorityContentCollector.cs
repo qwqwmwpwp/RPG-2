@@ -33,7 +33,7 @@ namespace RPG4.Editor.Build
             collector.sceneIds = EntrySceneValidation.ReadAuthoredSceneIds(EntryProtocol.GameplayScene);
             EntrySceneValidation.ReadScene(EntryProtocol.GameplayScene, scene =>
             { foreach (GameObject root in scene.GetRootGameObjects()) collector.CollectRoot(root); });
-            foreach (string path in new[] { "Assets/player/OnlinePlayer.prefab", "Assets/player/OnlineNetworkManager.prefab" })
+            foreach (string path in new[] { "Assets/_Project/Runtime/Player/OnlinePlayer.prefab", "Assets/_Project/Runtime/Player/OnlineNetworkManager.prefab" })
             {
                 GameObject root = AssetDatabase.LoadAssetAtPath<GameObject>(path);
                 if (root == null) throw new BuildFailedException("Authority prefab is unavailable: " + path);
@@ -243,7 +243,7 @@ namespace RPG4.Editor.Build
                         if (!AuthorityContentRules.ExcludeSourcePath(path)) CollectAssemblyInput(path);
                     }
             }
-            foreach (string path in new[] { "Assets/Scripts/Input/PlayerInput.cs" })
+            foreach (string path in new[] { "Assets/_Project/Runtime/Scripts/Input/PlayerInput.cs" })
                 CollectSource(path);
             foreach (string path in AuthorityContentRules.AdditionalAssemblyInputs) CollectAssemblyInput(path);
             foreach (string path in AuthorityContentRules.SharedBinaries)

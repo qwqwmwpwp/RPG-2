@@ -22,9 +22,9 @@ namespace RPG4.Editor.Build
     public static class GameBuild
     {
         private const string RequiredUnity = "2022.3.62f3";
-        private const string ManifestPath = "Assets/Settings/EntryContentManifest.asset";
-        private const string CatalogPath = "Assets/Settings/ClientServerCatalog.asset";
-        private const string ManagerPath = "Assets/player/OnlineNetworkManager.prefab";
+        private const string ManifestPath = "Assets/_Project/Content/Settings/EntryContentManifest.asset";
+        private const string CatalogPath = "Assets/_Project/Content/Settings/ClientServerCatalog.asset";
+        private const string ManagerPath = "Assets/_Project/Runtime/Player/OnlineNetworkManager.prefab";
         private static readonly string[] ClientScenes = { "Assets/Scenes/ClientBootstrap.unity", EntryContentManifest.MainMenuScenePath, EntryContentManifest.LobbyScenePath, EntryProtocol.GameplayScene };
         private static readonly string[] ServerScenes = { "Assets/Scenes/ServerBootstrap.unity", EntryProtocol.GameplayScene };
         private static readonly string[] DatabasePlugins = {
@@ -283,8 +283,8 @@ namespace RPG4.Editor.Build
         private static void ValidateDependencyBoundary()
         {
             ValidatePrivateAssetBoundary();
-            AssemblyBoundary server = ReadBoundary("Assets/Scripts/Server/RPG4.Server.asmdef");
-            string serverGuid = "GUID:" + AssetDatabase.AssetPathToGUID("Assets/Scripts/Server/RPG4.Server.asmdef");
+            AssemblyBoundary server = ReadBoundary("Assets/_Project/Runtime/Scripts/Server/RPG4.Server.asmdef");
+            string serverGuid = "GUID:" + AssetDatabase.AssetPathToGUID("Assets/_Project/Runtime/Scripts/Server/RPG4.Server.asmdef");
             if (!server.overrideReferences || server.defineConstraints == null || server.defineConstraints.Length != 1
                 || server.defineConstraints[0] != "UNITY_EDITOR || UNITY_SERVER")
                 throw new BuildFailedException("Server code must compile only in Editor or Dedicated Server.");
@@ -303,8 +303,8 @@ namespace RPG4.Editor.Build
                     || !explicitlyReferenced)
                     throw new BuildFailedException("Database plugins must be explicit references restricted to Editor or Dedicated Server.");
             }
-            foreach (string path in new[] { "Assets/Scripts/Networking/RPG4.Networking.asmdef",
-                "Assets/Scripts/Networking/Contracts/RPG4.Networking.Contracts.asmdef", "Assets/Scripts/Frontend/RPG4.Frontend.asmdef" })
+            foreach (string path in new[] { "Assets/_Project/Runtime/Scripts/Networking/RPG4.Networking.asmdef",
+                "Assets/_Project/Runtime/Scripts/Networking/Contracts/RPG4.Networking.Contracts.asmdef", "Assets/_Project/Runtime/Scripts/Frontend/RPG4.Frontend.asmdef" })
             {
                 AssemblyBoundary shared = ReadBoundary(path);
                 if ((shared.references ?? Array.Empty<string>()).Any(reference =>

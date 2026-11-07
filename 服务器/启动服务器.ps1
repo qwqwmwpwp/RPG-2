@@ -212,11 +212,11 @@ try {
         if ([string]::IsNullOrWhiteSpace($connection)) { $problems.Add("缺少数据库环境变量：$variableName（已检查 Process、User、Machine）") }
     }
 
-    $protocolSource = Get-Content -LiteralPath (Join-Path $projectRoot 'Assets/Scripts/Networking/Contracts/EntryProtocol.cs') -Raw -Encoding UTF8
-    $ruleSource = Get-Content -LiteralPath (Join-Path $projectRoot 'Assets/Scripts/Networking/EntryContentManifest.cs') -Raw -Encoding UTF8
+    $protocolSource = Get-Content -LiteralPath (Join-Path $projectRoot 'Assets/_Project/Runtime/Scripts/Networking/Contracts/EntryProtocol.cs') -Raw -Encoding UTF8
+    $ruleSource = Get-Content -LiteralPath (Join-Path $projectRoot 'Assets/_Project/Runtime/Scripts/Networking/EntryContentManifest.cs') -Raw -Encoding UTF8
     $versionMatch = [regex]::Match($protocolSource, 'const\s+uint\s+Version\s*=\s*(\d+)\s*;')
     $ruleMatch = [regex]::Match($ruleSource, 'const\s+string\s+GenerationRule\s*=\s*"([^"]+)"\s*;')
-    $manifestPath = Join-Path $assetsRoot 'Settings/EntryContentManifest.asset'
+    $manifestPath = Join-Path $assetsRoot '_Project/Content/Settings/EntryContentManifest.asset'
     if (-not $versionMatch.Success -or -not $ruleMatch.Success -or -not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
         $problems.Add('无法读取协议版本、清单生成规则或 EntryContentManifest.asset。')
     } else {
