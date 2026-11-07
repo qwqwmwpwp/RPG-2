@@ -174,6 +174,12 @@ namespace RPG4.AI
 
         public void SetWeaponAvailable(bool available) => weaponAvailable = available;
 
+        /// <summary>Applies the server match cadence without exposing Unity timing to the match domain.</summary>
+        public void ConfigureDecisionIntervalMilliseconds(int milliseconds)
+        {
+            decisionInterval = Mathf.Clamp(milliseconds / 1000f, 0.02f, 5f);
+        }
+
         /// <summary>For adapters that own health state, this clears a dead AI target.</summary>
         public void ClearTarget()
         {

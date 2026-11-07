@@ -167,7 +167,11 @@ namespace RPG4.Raid.Application
         private void OnApplicationChanged(MatchRunEvent value)
         {
             if (value.Kind == MatchRunEventKind.Completed || value.Kind == MatchRunEventKind.Cancelled)
+            {
                 preparationRequested = false;
+                players.Clear();
+                pendingReady.Clear();
+            }
             if (value.Kind == MatchRunEventKind.PreparingStarted && !preparationRequested)
             {
                 preparationRequested = true;

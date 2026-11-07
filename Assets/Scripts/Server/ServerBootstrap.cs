@@ -105,9 +105,11 @@ namespace RPG4.Server
                 manager.ConfigurePersistentItemIdRange(itemIds.First, itemIds.Last);
                 manager.ConfigureInventoryRaidService(inventoryRaids);
                 manager.ConfigureGameplaySceneBindings(true);
+                manager.ConfigureMatchDuration(settings.matchDurationSeconds);
                 matchRuntime = new ServerMatchRuntime(settings.minimumPlayers, settings.maxPlayers,
                     settings.matchCountdownSeconds, settings.matchPreparationSeconds, settings.matchDurationSeconds,
                     settings.maxActiveAi, settings.aiDecisionIntervalMilliseconds);
+                manager.ConfigureMatchRuntime(matchRuntime);
                 authenticator = manager.authenticator as AccountAuthenticator;
                 var encryption = manager.transport as EncryptionTransport;
                 if (authenticator == null || encryption == null

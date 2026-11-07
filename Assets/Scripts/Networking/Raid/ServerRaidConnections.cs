@@ -93,6 +93,8 @@ namespace RPG4.Networking
             public void SendPhase(string key, RaidPhase phase, string raidId, string worldRunId, string text)
             {
                 if (!IsCurrent(key)) return;
+                if (phase == RaidPhase.Loading) owner.NotifyRaidPlayerLoading(key);
+                else if (phase == RaidPhase.Active) owner.NotifyRaidPlayerActive(key);
                 Find(key).Connection.Send(new RaidSessionMessage { Phase = (byte)phase, RaidId = raidId, WorldRunId = worldRunId, Text = text });
             }
             public void Forget(string key)

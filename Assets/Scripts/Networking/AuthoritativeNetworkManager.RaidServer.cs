@@ -13,6 +13,19 @@ namespace RPG4.Networking
         private ServerRaidApplication raidApplication;
         private ServerRaidConnections raidConnections;
         private UnityRaidWorld raidWorld;
+        private ServerMatchRuntime matchRuntime;
+
+        /// <summary>Attaches the process-owned single-match lifecycle to the Mirror callbacks.</summary>
+        public void ConfigureMatchRuntime(ServerMatchRuntime runtime)
+        {
+            matchRuntime = runtime;
+        }
+
+        public void ConfigureMatchDuration(double seconds)
+        {
+            if (seconds < 30d || seconds > 86400d) throw new ArgumentOutOfRangeException(nameof(seconds));
+            raidDurationSeconds = (float)seconds;
+        }
 
         public void ConfigureInventoryRaidService(IServerInventoryRaidService service)
         { configuredRaidStore = service ?? throw new ArgumentNullException(nameof(service)); }
@@ -31,6 +44,7 @@ namespace RPG4.Networking
         private void StopRaidServerMessages()
         {
             NetworkServer.UnregisterHandler<LobbyRequestMessage>();
+            matchRuntime = null;
             // A stopped application never delivers old async completions to a later server run.
             raidApplication?.Dispose(); raidApplication = null;
             raidWorld?.Clear(); raidWorld = null;
@@ -59,6 +73,16 @@ namespace RPG4.Networking
         {
             string key = FindRaidSession(connection);
             if (key != null) raidApplication.AddPlayer(key);
+        }
+
+        internal void NotifyRaidPlayerLoading(string key)
+        {
+            matchRuntime?.JoinPlayer(key, Time.realtimeSinceStartupAsDouble);
+        }
+
+        internal void NotifyRaidPlayerActive(string key)
+        {
+            matchRuntime?.MarkReady(key, Time.realtimeSinceStartupAsDouble);
         }
         private void TickRaidSessions()
         {
