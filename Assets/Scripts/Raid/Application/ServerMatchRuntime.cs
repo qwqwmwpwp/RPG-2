@@ -31,6 +31,7 @@ namespace RPG4.Raid.Application
         private readonly ServerMatchApplication application;
         private readonly Dictionary<string, ServerMatchPlayer> players =
             new Dictionary<string, ServerMatchPlayer>(StringComparer.Ordinal);
+        private readonly HashSet<string> pendingReady = new HashSet<string>(StringComparer.Ordinal);
         private readonly int maxActiveAi;
         private readonly int aiDecisionIntervalMilliseconds;
         private bool preparationRequested;
@@ -116,6 +117,14 @@ namespace RPG4.Raid.Application
             return application.ConfirmReady(playerKey, time);
         }
 
+        public MatchCommandResult MarkReady(string playerKey, double time)
+        {
+            if (!IsControllable(playerKey)) return MatchCommandResult.Reject(State, "ControlEnded", "玩家已结束对局控制权。");
+            if (State == MatchRunState.Preparing) return ConfirmReady(playerKey, time);
+            pendingReady.Add(playerKey);
+            return MatchCommandResult.Accept(State, "ReadyQueued", "玩家准备状态已记录。");
+        }
+
         public MatchCommandResult Start(double time) { return application.Start(time); }
 
         public MatchCommandResult EndPlayer(string playerKey, double time)
@@ -162,6 +171,9 @@ namespace RPG4.Raid.Application
             if (value.Kind == MatchRunEventKind.PreparingStarted && !preparationRequested)
             {
                 preparationRequested = true;
+                foreach (string playerKey in new List<string>(pendingReady))
+                    if (players.ContainsKey(playerKey)) application.ConfirmReady(playerKey, value.Time);
+                pendingReady.Clear();
                 Action<ReadOnlyCollection<string>> handler = PreparationRequested;
                 if (handler != null) handler(value.Source.Roster);
                 Action<int, int> aiHandler = AiSpawnRequested;
@@ -177,6 +189,7 @@ namespace RPG4.Raid.Application
             disposed = true;
             application.Changed -= OnApplicationChanged;
             players.Clear();
+            pendingReady.Clear();
         }
     }
 }
