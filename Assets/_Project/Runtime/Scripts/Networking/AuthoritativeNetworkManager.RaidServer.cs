@@ -19,6 +19,7 @@ namespace RPG4.Networking
         public void ConfigureMatchRuntime(ServerMatchRuntime runtime)
         {
             matchRuntime = runtime;
+            ServerMatchRuntimeLocator.Set(runtime);
         }
 
         public void ConfigureMatchDuration(double seconds)
@@ -44,6 +45,8 @@ namespace RPG4.Networking
         private void StopRaidServerMessages()
         {
             NetworkServer.UnregisterHandler<LobbyRequestMessage>();
+            if (ReferenceEquals(ServerMatchRuntimeLocator.Current, matchRuntime))
+                ServerMatchRuntimeLocator.Set(null);
             matchRuntime = null;
             // A stopped application never delivers old async completions to a later server run.
             raidApplication?.Dispose(); raidApplication = null;

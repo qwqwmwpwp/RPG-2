@@ -80,6 +80,9 @@ namespace RPG4.Frontend
         private long pendingRememberAttempt;
         private string pendingRememberServer, pendingRememberFingerprint, pendingRememberUsername, pendingRememberPassword;
         private string rememberPasswordNotice;
+        private string pendingGameplayFailure;
+        private double pendingGameplayFailureAt;
+        private const double GameplayFailureWaitSeconds = 3d;
         private static double Now => Time.realtimeSinceStartupAsDouble;
 
         private void Awake()
@@ -98,6 +101,7 @@ namespace RPG4.Frontend
             {
                 if (manager == null) RequestDisconnect("连接已结束，请重新登录。");
                 else if (context.Accepted) ObserveGameplay(manager.CurrentGameplayLifecycle);
+                ObservePendingGameplayFailure();
                 // A synchronous callback can complete a phase before the HSM consumes the fact next tick.
                 // Do not expire the already-completed phase while waiting for its sibling transition.
                 bool phaseCompleted = (State == ClientSessionState.Connecting && context.Secure)
@@ -251,7 +255,12 @@ namespace RPG4.Frontend
                 if (value.Revision < context.Revision || value.Revision != current.Revision
                     || value.ServerWorldGeneration != current.ServerWorldGeneration
                     || value.SceneHandle != current.SceneHandle || !ReferenceEquals(value.LocalPlayer, current.LocalPlayer)) return;
-                RequestDisconnect("场景或角色配置未就绪，请联系管理员。[G01]");
+                // A stale binding validation callback can arrive after the manager has
+                // already published a complete local player. Never tear down a ready
+                // gameplay session because of that older transient failure.
+                if (value.GameplayReady || manager.IsLocalGameplayReady) return;
+                pendingGameplayFailure = value.FailureReason ?? string.Empty;
+                pendingGameplayFailureAt = Now;
             };
             authenticator.SecureConnectionReady += secureHandler;
             authenticator.AuthenticationCompleted += authenticationHandler;
@@ -328,6 +337,7 @@ namespace RPG4.Frontend
         private void RequestDisconnect(string failure)
         {
             ClearPendingRememberedLogin();
+            pendingGameplayFailure = null; pendingGameplayFailureAt = 0;
             if (!string.IsNullOrEmpty(failure) && string.IsNullOrEmpty(context.FirstFailure)) context.FirstFailure = failure;
             CloseLocalInput();
             if (context.DisconnectRequested) return;
@@ -336,6 +346,22 @@ namespace RPG4.Frontend
             // In particular, cancel inside SecureConnectionReady must stop the authenticator before its
             // automatic submission after that event returns. The HSM still owns the subsequent state change.
             if (Instance == this) BeginStop();
+        }
+
+        private void ObservePendingGameplayFailure()
+        {
+            if (string.IsNullOrEmpty(pendingGameplayFailure) || context.DisconnectRequested
+                || manager == null || !context.Accepted) return;
+            if (raid == null || (raid.Phase != RaidPhase.Loading && raid.Phase != RaidPhase.Active))
+            { pendingGameplayFailure = null; pendingGameplayFailureAt = 0; return; }
+            if (manager.IsLocalGameplayReady)
+            { pendingGameplayFailure = null; pendingGameplayFailureAt = 0; return; }
+            if (Now - pendingGameplayFailureAt < GameplayFailureWaitSeconds) return;
+            string detail = pendingGameplayFailure;
+            pendingGameplayFailure = null; pendingGameplayFailureAt = 0;
+            RequestDisconnect(string.IsNullOrEmpty(detail)
+                ? "场景或角色配置未就绪，请联系管理员。[G01]"
+                : "场景或角色配置未就绪：" + detail + " [G01]");
         }
         internal ClientSessionState NextState(ClientSessionState state)
         {

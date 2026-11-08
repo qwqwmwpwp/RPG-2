@@ -132,7 +132,18 @@ namespace RPG4.Raid.Application.Client
         public void Tick()
         {
             double now = clock.Now;
-            if (!transport.Connected || transport.LoadingScene) return;
+            if (!transport.Connected) return;
+
+            // A controlled scene transition can still be finishing when the server's
+            // Loading phase arrives. In that window the Unity adapter legitimately
+            // returns Deferred; keep the phase alive and retry once Mirror has cleared
+            // its scene work instead of leaving the client in a lobby-looking state.
+            if (Phase == RaidPhase.Loading && !entryReadySent
+                && !string.IsNullOrEmpty(RaidId) && !string.IsNullOrEmpty(WorldRunId)
+                && !transport.LoadingScene)
+                LoadScene(ClientRaidScene.Gameplay);
+
+            if (transport.LoadingScene) return;
             if (pending != null && now - requestAt > 10d)
             { requestAt = now; transport.Send(pending); }
             if (pending == null && LobbyVisible && inventory != null

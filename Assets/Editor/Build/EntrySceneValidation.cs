@@ -450,7 +450,7 @@ namespace RPG4.Editor.Build
                     && !(component is BackpackInventory) && !(component is BackpackNetworkInventory)
                     && component.GetType().Name != "Character_Weapon_Controller",
                     "Lobby preview cannot contain player simulation, inventory, networking or demo controllers.");
-            Require(All<UIManager>(scene).Length == 1 && All<Camera>(scene).Length == 1,
+            Require(All<UIManager>(scene).Length == 1 && All<Camera>(scene).Count(camera => camera.transform.parent == null) == 1,
                 "Lobby requires one scene UI manager and one preview camera.");
         }
 

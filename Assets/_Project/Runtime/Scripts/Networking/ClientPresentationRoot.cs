@@ -17,7 +17,15 @@ namespace RPG4.Networking
 #if UNITY_SERVER
             SetPresentation(false);
 #else
-            SetPresentation(NetworkClient.isConnected);
+            SetPresentation(NetworkClient.active);
+#endif
+        }
+        internal void EnsureClientPresentationVisible()
+        {
+#if UNITY_SERVER
+            SetPresentation(false);
+#else
+            SetPresentation(true);
 #endif
         }
         private void SetPresentation(bool visible)

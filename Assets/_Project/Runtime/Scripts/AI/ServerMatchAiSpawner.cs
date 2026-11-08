@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using Mirror;
 using RPG4.Raid.Application;
 using RPG4.Raid.Domain;
-using RPG4.Server;
 using UnityEngine;
 
 namespace RPG4.AI
@@ -34,8 +33,7 @@ namespace RPG4.AI
         private void TryBindRuntime()
         {
             if (runtime != null || !NetworkServer.active) return;
-            ServerBootstrap bootstrap = FindObjectOfType<ServerBootstrap>();
-            ServerMatchRuntime candidate = bootstrap != null ? bootstrap.MatchRuntime : null;
+            ServerMatchRuntime candidate = ServerMatchRuntimeLocator.Current;
             if (candidate == null) return;
             runtime = candidate;
             runtime.AiSpawnRequested += Spawn;

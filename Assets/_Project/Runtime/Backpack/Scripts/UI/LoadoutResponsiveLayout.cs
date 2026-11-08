@@ -83,7 +83,16 @@ namespace RPG4.Backpack.UI
         }
         private void SetPanel(RectTransform r, float x, float y, float w, float h) { SetRect(r, x, y, w, h); }
         private static void SetRect(RectTransform r, float x, float y, float w, float h)
-        { if (r == null) return; r.anchorMin = Vector2.zero; r.anchorMax = Vector2.zero; r.pivot = new Vector2(0f, 1f); r.anchoredPosition = new Vector2(x, y); r.sizeDelta = new Vector2(w, h); }
+        {
+            if (r == null) return;
+            // Layout coordinates are authored from the top-left of the loadout root;
+            // keep the same anchor convention when applying responsive dimensions.
+            r.anchorMin = new Vector2(0f, 1f);
+            r.anchorMax = new Vector2(0f, 1f);
+            r.pivot = new Vector2(0f, 1f);
+            r.anchoredPosition = new Vector2(x, y);
+            r.sizeDelta = new Vector2(w, h);
+        }
         private RectTransform Find(string name) { return root == null ? null : FindRecursive(root, name); }
         private static RectTransform FindRecursive(Transform parent, string name)
         { for (int i = 0; i < parent.childCount; i++) { Transform c = parent.GetChild(i); if (c.name == name) return c as RectTransform; RectTransform f = FindRecursive(c, name); if (f != null) return f; } return null; }

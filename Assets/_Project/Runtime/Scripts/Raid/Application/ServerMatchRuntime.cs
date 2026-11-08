@@ -21,6 +21,17 @@ namespace RPG4.Raid.Application
         }
     }
 
+    /// <summary>Unity-side adapters can find the active process-owned match without referencing server startup code.</summary>
+    public static class ServerMatchRuntimeLocator
+    {
+        public static ServerMatchRuntime Current { get; private set; }
+
+        public static void Set(ServerMatchRuntime runtime)
+        {
+            Current = runtime;
+        }
+    }
+
     /// <summary>
     /// Server facade for the single-process/single-match lifecycle. It intentionally has no
     /// Unity or Mirror dependency; a transport adapter supplies a stable player key and calls

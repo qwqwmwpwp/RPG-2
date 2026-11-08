@@ -39,6 +39,9 @@ namespace RPG4.Networking
         private NetworkPlayerController lastObservedPlayer;
         private int lastObservedSceneHandle;
         private string lastGameplayFailure = string.Empty;
+        private string pendingGameplayFailure = string.Empty;
+        private double pendingGameplayFailureAt;
+        private const double GameplayFailureGraceSeconds = 0.5d;
         private long lastObservedWorldGeneration, lastObservedClientSessionId;
         private bool serverSceneSpawnComplete;
 
@@ -705,6 +708,9 @@ namespace RPG4.Networking
                         NetworkPlayerSimulation.SetAdditionalCombatTargets(next.GetCombatTargets());
                     }
                 }
+                if (gameplaySceneBindings != null && clientLifecycleStarted
+                    && gameplaySceneBindings.TryGetComponent(out ClientPresentationRoot presentationRoot))
+                    presentationRoot.EnsureClientPresentationVisible();
                 NetworkPlayerController local = NetworkClient.localPlayer != null
                     ? NetworkClient.localPlayer.GetComponent<NetworkPlayerController>() : null;
                 if (!IsCurrentLocalController(local)) local = null;
@@ -751,6 +757,21 @@ namespace RPG4.Networking
                     && !string.IsNullOrEmpty(gameplaySceneBindings.ClientBindingFailureReason))
                     reason = gameplaySceneBindings.ClientBindingFailureReason;
             }
+
+            // Scene activation, object registration and the first networked player
+            // callbacks can span several frames. Do not turn that expected settling
+            // window into a disconnect; report a configuration failure only when the
+            // same reason remains after the short grace period.
+            if (!string.Equals(pendingGameplayFailure, reason, System.StringComparison.Ordinal))
+            {
+                pendingGameplayFailure = reason ?? string.Empty;
+                pendingGameplayFailureAt = Time.realtimeSinceStartupAsDouble;
+            }
+            if (!string.IsNullOrEmpty(reason)
+                && Time.realtimeSinceStartupAsDouble - pendingGameplayFailureAt < GameplayFailureGraceSeconds)
+            {
+                reason = string.Empty;
+            }
             if (!gameplayReady && boundLocalController != null && boundLocalController.LocalGameplayInputAllowed)
                 boundLocalController.SetLocalGameplayInputAllowed(false);
             int sceneHandle = SceneManager.GetActiveScene().handle;
@@ -769,13 +790,21 @@ namespace RPG4.Networking
             if (bindingsChanged) PublishClientEvent(GameplaySceneBindingsChanged, state);
             if (worldChanged || bindingsChanged) PublishClientEvent(ServerGameplayWorldReadyChanged, state);
             if (localChanged || bindingsChanged) PublishClientEvent(LocalGameplayReadyChanged, state);
-            if (failureChanged && !string.IsNullOrEmpty(reason)) PublishClientEvent(GameplayFailure, state);
+            if (failureChanged && !string.IsNullOrEmpty(reason))
+            {
+                // Keep the concrete validation reason in the runtime log; the frontend
+                // may later collapse it into its stable G01 status text.
+                Debug.LogError("Gameplay lifecycle failure: " + reason, this);
+                PublishClientEvent(GameplayFailure, state);
+            }
         }
 
         private void ReportGameplayFailure(string reason)
         {
+            lastGameplayFailure = reason ?? string.Empty;
             gameplayRevision++;
-            PublishClientEvent(GameplayFailure, CaptureGameplayLifecycle(IsServerGameplayWorldReady, IsLocalGameplayReady, reason));
+            if (!string.IsNullOrEmpty(reason)) Debug.LogError("Gameplay lifecycle failure: " + reason, this);
+            PublishClientEvent(GameplayFailure, CaptureGameplayLifecycle(IsServerGameplayWorldReady, IsLocalGameplayReady, lastGameplayFailure));
         }
     }
 }

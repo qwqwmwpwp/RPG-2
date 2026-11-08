@@ -12,6 +12,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f2bfa6d6b45749b4b6a59434bfa79ca3, type: 3}
   m_Name: EntryContentManifest
   m_EditorClassIdentifier: 
-  contentHash: b916239e6a2f584bbeacbe7205e130db14b243cecb2d31da27d7f63a30e54577
+  contentHash: 0b37f2ec90a693691862a013d754e8524b9fe764100445e61b9ed6bc77d83758
   generationRule: rpg-entry-content-v3
-  protocolVersion: 4
+  protocolVersion: 5
