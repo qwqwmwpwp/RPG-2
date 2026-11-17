@@ -1,3 +1,4 @@
+using RPG4.CharacterAnimation;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -8,11 +9,10 @@ using Cinemachine;
 using Mirror;
 using Mirror.Transports.Encryption;
 using RPG4.Backpack.Items;
-using RPG4.Backpack.Network;
-using RPG4.Backpack.Runtime;
 using RPG4.Backpack.UI;
 using RPG4.Frontend;
 using RPG4.Input;
+using RPG4.LoadoutTemplate;
 using RPG4.Networking;
 using RPG4.Networking.Contracts;
 using RPG4.Networking.Transports;
@@ -39,11 +39,11 @@ namespace RPG4.Editor.Build
     {
         private const string ClientBootstrapPath = "Assets/Scenes/ClientBootstrap.unity";
         private const string ServerBootstrapPath = "Assets/Scenes/ServerBootstrap.unity";
-        private const string ManagerPath = "Assets/_Project/Runtime/Player/OnlineNetworkManager.prefab";
-        private const string PlayerPath = "Assets/_Project/Runtime/Player/OnlinePlayer.prefab";
-        private const string ManifestPath = "Assets/_Project/Content/Settings/EntryContentManifest.asset";
-        private const string CatalogPath = "Assets/_Project/Content/Settings/ClientServerCatalog.asset";
-        private const string MenuPrefabPath = "Assets/_Project/Runtime/UI/Frontend/ClientMenu.prefab";
+        private const string ManagerPath = "Assets/_Project/Prefabs/OnlineNetworkManager.prefab";
+        private const string PlayerPath = "Assets/_Project/Prefabs/OnlinePlayer.prefab";
+        private const string ManifestPath = "Assets/_Project/Code/Networking/EntryContentManifest.asset";
+        private const string CatalogPath = "Assets/_Project/Code/Frontend/ClientServerCatalog.asset";
+        private const string MenuPrefabPath = "Assets/_Project/Prefabs/ClientMenu.prefab";
 
         public static void Validate()
         {
@@ -214,8 +214,7 @@ namespace RPG4.Editor.Build
         private static void ValidateNoLegacyActors(Scene scene)
         {
             Require(All<NetworkManager>(scene).Length == 0, scene.path + " must not contain a NetworkManager instance.");
-            Require(All<Player>(scene).Length == 0 && All<NetworkPlayerController>(scene).Length == 0
-                && All<CharacterBackpack>(scene).Length == 0, scene.path + " must not contain an offline or preplaced player.");
+            Require(All<Player>(scene).Length == 0 && All<NetworkPlayerController>(scene).Length == 0, scene.path + " must not contain an offline or preplaced player.");
             foreach (GameObject root in scene.GetRootGameObjects())
                 foreach (Transform node in root.GetComponentsInChildren<Transform>(true))
                 {
@@ -261,15 +260,12 @@ namespace RPG4.Editor.Build
             var loot = Reference<RaidLootBag>(manager, "raidLootBagPrefab");
             Require(manager.spawnPrefabs.Contains(loot.gameObject) && loot.GetComponent<NetworkIdentity>() != null
                 && loot.GetComponent<NetworkIdentity>().sceneId == 0 && !loot.GetComponent<NetworkIdentity>().serverOnly
-                && loot.GetComponent<BackpackNetworkInventory>() != null && loot.GetComponent<BackpackInventory>() != null
-                && loot.GetComponent<ChestInventory>() != null && loot.GetComponent<BoxCollider>() != null,
-                "Raid loot must be an authored, registered shared chest spawn prefab.");
-            var lootNetwork = loot.GetComponent<BackpackNetworkInventory>();
-            Require(Property(lootNetwork, "sharedContainer").boolValue && !Property(loot.GetComponent<ChestInventory>(), "fillCatalogOnStart").boolValue
-                && Reference<ItemManifestCatalog>(lootNetwork, "catalog") == Reference<ItemManifestCatalog>(manager, "lobbyCatalog")
-                && Reference<ItemManifestCatalog>(loot.GetComponent<BackpackInventory>(), "catalog") == Reference<ItemManifestCatalog>(manager, "lobbyCatalog")
-                && Property(manager, "raidDurationSeconds").floatValue > 0,
-                "Loot bags require shared access, the lobby catalog, disabled filling and a positive raid timeout.");
+                && loot.GetComponent<NetworkLootSource>() != null && loot.GetComponent<BoxCollider>() != null
+                && loot.GetComponents<Component>().Any(component => component != null
+                    && component.GetType().FullName == "RPG4.Interaction.CharacterLootInteractable"),
+                "Raid loot must be an authored, registered role loot source with character-loot interaction.");
+            Require(Property(manager, "raidDurationSeconds").floatValue > 0,
+                "The raid timeout must be positive.");
             var ids = new HashSet<uint> { AuthoredAssetId(player.GetComponent<NetworkIdentity>()) };
             foreach (GameObject spawnable in manager.spawnPrefabs)
                 Require(spawnable != null && spawnable.GetComponent<NetworkIdentity>() != null
@@ -280,51 +276,129 @@ namespace RPG4.Editor.Build
 
         private static void ValidatePlayer(GameObject player)
         {
-            Require(player.activeSelf && player.GetComponent<NetworkIdentity>() != null
-                && AuthoredAssetId(player.GetComponent<NetworkIdentity>()) != 0
-                && player.GetComponentsInChildren<NetworkIdentity>(true).Length == 1
-                && player.GetComponent<NetworkIdentity>().sceneId == 0
+            var identity = player.GetComponent<NetworkIdentity>();
+            var network = player.GetComponent<NetworkRoleLoadout>();
+            Require(player.activeSelf && identity != null && AuthoredAssetId(identity) != 0 && identity.sceneId == 0
+                && !identity.serverOnly && player.GetComponentsInChildren<NetworkIdentity>(true).Length == 1
                 && player.GetComponent<OnlinePlayerIdentity>() != null && player.GetComponent<NetworkPlayerController>() != null
-                && player.GetComponent<Player>() != null && player.GetComponent<PlayerEquipment>() != null
-                && player.GetComponent<BackpackInventory>() != null && player.GetComponent<EquipmentInventory>() != null
-                && player.GetComponent<BackpackNetworkInventory>() != null && player.GetComponent<BackpackNetworkEquipment>() != null
-                && player.GetComponent<CharacterBackpack>() != null && player.GetComponent<Rigidbody>() != null
-                && player.GetComponent<CapsuleCollider>() != null, "OnlinePlayer is missing authoritative player/identity/inventory/physics components.");
-            var backpack = player.GetComponent<CharacterBackpack>();
-            Require(!Property(backpack, "fillCatalogOnStart").boolValue && !Property(backpack, "isLocalPlayer").boolValue,
-                "OnlinePlayer must disable debug fill and offline local ownership.");
-            foreach (Behaviour component in new Behaviour[] { player.GetComponent<NetworkIdentity>(),
-                player.GetComponent<OnlinePlayerIdentity>(), player.GetComponent<NetworkPlayerController>(), player.GetComponent<Player>(),
-                player.GetComponent<PlayerEquipment>(), player.GetComponent<BackpackInventory>(), player.GetComponent<EquipmentInventory>(),
-                player.GetComponent<BackpackNetworkInventory>(), player.GetComponent<BackpackNetworkEquipment>(), backpack })
-                Require(component.enabled, "OnlinePlayer's required identity, simulation and inventory components must be enabled.");
-            var inventory = player.GetComponent<BackpackInventory>();
-            var networkInventory = player.GetComponent<BackpackNetworkInventory>();
-            int rows = Property(inventory, "rows").intValue, columns = Property(inventory, "columns").intValue;
-            Require(rows > 0 && columns > 0 && Property(networkInventory, "rows").intValue == rows
-                && Property(networkInventory, "columns").intValue == columns
-                && !Property(networkInventory, "sharedContainer").boolValue,
-                "OnlinePlayer requires matching positive inventory dimensions and a private, non-shared network inventory.");
-            var equipment = player.GetComponent<PlayerEquipment>();
-            var rig = Reference<PlayerWeaponRig>(equipment, "weaponRig");
-            var playerComponent = player.GetComponent<Player>();
-            var animator = Reference<Animator>(playerComponent, "stateData.content.animator");
-            var aimPose = Reference<PlayerAimPose>(playerComponent, "stateData.content.aimPose");
-            var presentationRoot = Reference<Transform>(playerComponent, "stateData.content.presentationRoot");
-            Require(Reference<BackpackInventory>(equipment, "inventory") == inventory
-                && Reference<EquipmentInventory>(equipment, "equipmentInventory") == player.GetComponent<EquipmentInventory>()
-                && presentationRoot != player.transform && presentationRoot.parent == player.transform
-                && rig.transform == presentationRoot && rig.transform.IsChildOf(player.transform)
-                && animator.transform == presentationRoot && aimPose.transform == presentationRoot
-                && rig.enabled && animator.enabled && aimPose.enabled,
-                "OnlinePlayer equipment must use its own inventory, equipment core and enabled weapon rig.");
-            Require(Reference<Transform>(rig, "equipmentCarrier").IsChildOf(player.transform),
-                "OnlinePlayer equipment carrier must belong to its authored player hierarchy.");
-            var supportHand = Reference<Component>(rig, "supportHand");
-            Require(supportHand.transform.IsChildOf(player.transform), "OnlinePlayer support-hand rig must belong to this player.");
-            var gripTarget = Property(supportHand, "m_Data.m_Target").objectReferenceValue as Transform;
-            Require(gripTarget != null && gripTarget.IsChildOf(player.transform),
-                "OnlinePlayer support-hand rig requires an authored target in this player hierarchy.");
+                && player.GetComponent<Player>() != null && player.GetComponent<Rigidbody>() != null
+                && player.GetComponent<CapsuleCollider>() != null && network != null
+                && player.GetComponentsInChildren<NetworkRoleLoadout>(true).Length == 1,
+                "OnlinePlayer requires one root identity, movement, physics and NetworkRoleLoadout authority.");
+            Require(player.GetComponent<PlayerEquipment>() != null && player.GetComponent<PlayerEquipment>().enabled,
+                "OnlinePlayer requires the role-backed player equipment bridge.");
+            foreach (Behaviour component in new Behaviour[] { identity, network, player.GetComponent<OnlinePlayerIdentity>(),
+                player.GetComponent<NetworkPlayerController>(), player.GetComponent<Player>(), player.GetComponent<RPG4.Input.PlayerInput>() })
+                Require(component != null && component.enabled, "OnlinePlayer's identity, movement, input and role authority must be enabled.");
+            var simulation = player.GetComponent<Player>();
+            var animation = Reference<CharacterPresentationSystem>(simulation, "stateData.content.animationSystem");
+            Require(animation.ValidateBindings() == null, "OnlinePlayer requires valid independent character animation bindings.");
+            var animator = Reference<Animator>(animation, "animator");
+            var view = Reference<PlayerViewController>(simulation, "stateData.content.viewController");
+            var modelRoot = Reference<Transform>(simulation, "stateData.content.presentationRoot");
+            Require(modelRoot.parent == player.transform && animator.transform == modelRoot && animator.enabled
+                && view.transform.IsChildOf(player.transform) && view.enabled,
+                "OnlinePlayer must retain its own enabled movement animator and camera view controller.");
+            ValidateRoleLoadout(player, network);
+        }
+
+        private static void ValidateRoleLoadout(GameObject player, NetworkRoleLoadout network)
+        {
+            var role = Reference<RoleLoadoutController>(network, "role");
+            var presentation = Reference<RoleLoadoutPresentation>(network, "presentation");
+            var root = Reference<GameObject>(presentation, "presentationRoot");
+            var window = Reference<LoadoutWindowUI>(presentation, "window");
+            var bindings = Reference<LoadoutTemplateUI>(presentation, "bindings");
+            var drag = Reference<LoadoutDragController>(presentation, "drag");
+            Require(presentation.gameObject == player && presentation.enabled
+                && player.GetComponentsInChildren<RoleLoadoutPresentation>(true).Length == 1,
+                "The root network inventory requires one enabled owner presentation adapter.");
+            Require(network.gameObject == player && role.enabled && role.gameObject.activeSelf
+                && role.transform.IsChildOf(player.transform) && root.transform.IsChildOf(player.transform)
+                && root != player && !root.activeSelf && !role.transform.IsChildOf(root.transform)
+                && player.GetComponentsInChildren<RoleLoadoutController>(true).Length == 1
+                && player.GetComponentsInChildren<EventSystem>(true).Length == 0,
+                "Role data must stay outside the initially hidden owned UI, under the root network identity, without a per-player EventSystem.");
+            var slots = Property(role, "slots");
+            Require(slots.isArray && slots.arraySize == 10, "Role configuration requires four container bodies and six equipment slots.");
+            var slotIds = new HashSet<int>();
+            var controllers = new HashSet<BackpackContainerController>();
+            for (int i = 0; i < slots.arraySize; ++i)
+            {
+                var slot = slots.GetArrayElementAtIndex(i);
+                int id = slot.FindPropertyRelative("slotId").intValue;
+                var controller = slot.FindPropertyRelative("containerController").objectReferenceValue as BackpackContainerController;
+                Require(id >= 0 && id < 10 && slotIds.Add(id)
+                    && slot.FindPropertyRelative("rule").objectReferenceValue is LoadoutSlotRule
+                    && slot.FindPropertyRelative("initialItem").objectReferenceValue == null
+                    && string.IsNullOrEmpty(slot.FindPropertyRelative("initialItemId").stringValue),
+                    "Each role slot requires a unique valid ID, an authored rule and empty initial equipment.");
+                if (id >= 4) { Require(controller == null, "Equipment slots cannot own container controllers."); continue; }
+                Require(controller != null && controllers.Add(controller) && controller.enabled && controller.gameObject.activeSelf
+                    && controller.transform.IsChildOf(role.transform) && Property(controller, "containerType").intValue == id + 1
+                    && Property(controller, "contents").isArray
+                    && !Property(controller, "seedTestItems").boolValue && Property(controller, "testItems").arraySize == 0
+                    && Reference<LoadoutItemDefinition>(controller, "containerItemDefinition").ContainerType == (ContainerKind)(id + 1)
+                    && Reference<LoadoutSlotRule>(controller, "containerSlotRule") == slot.FindPropertyRelative("rule").objectReferenceValue,
+                    "Four distinct enabled storage controllers require matching body definitions/rules and no seeded contents.");
+                Vector2Int size = Property(controller, "gridSize").vector2IntValue;
+                int mode = Property(controller, "layoutMode").intValue;
+                Require(size.x > 0 && size.y > 0 && (mode == 1 || mode == 2)
+                    && (mode != 2 || Property(controller, "validCells").arraySize > 0),
+                    "Role storage requires a positive authored shape and valid layout mode.");
+                var contents = Property(controller, "contents");
+                for (int entryIndex = 0; entryIndex < contents.arraySize; ++entryIndex)
+                {
+                    var entry = contents.GetArrayElementAtIndex(entryIndex);
+                    var definition = entry.FindPropertyRelative("definition").objectReferenceValue as LoadoutItemDefinition;
+                    Require(definition != null && !string.IsNullOrWhiteSpace(definition.DefinitionId)
+                        && !string.IsNullOrEmpty(AssetDatabase.GetAssetPath(definition))
+                        && entry.FindPropertyRelative("count").intValue > 0,
+                        "Explicit role contents require authored item definitions with stable IDs and positive counts.");
+                    Vector2Int itemSize = Property(definition, "size").vector2IntValue;
+                    Require(itemSize.x > 0 && itemSize.y > 0, "Configured role item dimensions must be positive.");
+                }
+            }
+            Require(controllers.Count == 4 && role.GetComponentsInChildren<BackpackContainerController>(true).Length == 4,
+                "Role hierarchy must contain exactly its four configured storage controllers.");
+            var windowRoot = Reference<GameObject>(window, "windowRoot");
+            var lootRoot = Reference<GameObject>(window, "lootRoot");
+            Require(window.enabled && bindings.enabled && drag.enabled
+                && new Component[] { window, bindings, drag }.All(component => component.transform.IsChildOf(root.transform))
+                && Reference<LoadoutTemplateUI>(window, "bindings") == bindings
+                && windowRoot.transform.IsChildOf(root.transform) && !windowRoot.activeSelf
+                && !window.transform.IsChildOf(windowRoot.transform) && !drag.transform.IsChildOf(windowRoot.transform)
+                && !Property(window, "initiallyOpen").boolValue && !lootRoot.activeSelf
+                && lootRoot.transform.IsChildOf(windowRoot.transform)
+                && Reference<RectTransform>(drag, "dragLayer").IsChildOf(windowRoot.transform),
+                "Owned UI requires connected persistent window/drag managers outside its initially closed canvas and loot panel.");
+            var containers = ReferenceArray<ContainerUI>(bindings, "containers");
+            Require(containers.Length == 4 && containers.Distinct().Count() == 4
+                && containers.Select(container => (int)container.ContainerType).OrderBy(value => value).SequenceEqual(new[] { 1, 2, 3, 4 }),
+                "Owned UI requires one panel for each of the four role storage kinds.");
+            foreach (var container in containers)
+            {
+                Require(container.transform.IsChildOf(windowRoot.transform) && container.enabled,
+                    "Role container panels must belong to the authored backpack canvas.");
+                foreach (string field in new[] { "gridRoot", "itemLayer", "bodyRoot", "containerSlot" })
+                    Require(Reference<Component>(container, field).transform.IsChildOf(container.transform),
+                        "Role container UI is missing an internal authored layer or body slot: " + field);
+                foreach (string field in new[] { "cellPrefab", "itemPrefab" })
+                    Require(!string.IsNullOrEmpty(AssetDatabase.GetAssetPath(Reference<Component>(container, field))),
+                        "Role container UI requires reusable authored templates: " + field);
+            }
+            var equipment = Property(bindings, "slots");
+            Require(equipment.isArray && equipment.arraySize == 6, "Owned UI requires six equipment bindings.");
+            var ids = new HashSet<int>(); var views = new HashSet<LoadoutSlotUI>();
+            for (int i = 0; i < equipment.arraySize; ++i)
+            {
+                var binding = equipment.GetArrayElementAtIndex(i);
+                int id = binding.FindPropertyRelative("slotId").intValue;
+                var view = binding.FindPropertyRelative("view").objectReferenceValue as LoadoutSlotUI;
+                Require(id >= 4 && id < 10 && ids.Add(id) && view != null && views.Add(view)
+                    && view.enabled && view.transform.IsChildOf(windowRoot.transform),
+                    "Each equipment binding requires a distinct authored view and the matching valid slot ID.");
+            }
         }
 
         private static void ValidateClientBootstrap(Scene scene, AuthoritativeNetworkManager prefab, ClientServerCatalog catalog)
@@ -412,34 +486,25 @@ namespace RPG4.Editor.Build
                 && All<InputManager>(scene).Length == 0 && All<EventSystem>(scene).Length == 0,
                 "Lobby must consume the persistent session and input without spawning a battlefield player.");
             var presenter = Single<LobbyPresenter>(scene);
-            var main = Single<LobbyView>(scene); var loadout = Single<LobbyLoadoutWindow>(scene);
+            var main = Single<LobbyView>(scene);
             var settings = Single<SettingsView>(scene); var preview = Single<LobbyCharacterPreview>(scene);
-            Require(PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(presenter.gameObject) == "Assets/_Project/Runtime/UI/Frontend/Lobby.prefab",
+            Require(PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(presenter.gameObject) == "Assets/_Project/Prefabs/Lobby.prefab",
                 "Lobby must instance its authored canvas prefab.");
-            Require(Reference<LobbyView>(presenter, "main") == main && Reference<LobbyLoadoutWindow>(presenter, "loadout") == loadout
+            Require(Reference<LobbyView>(presenter, "main") == main
                 && Reference<SettingsView>(presenter, "settings") == settings && Reference<LobbyCharacterPreview>(presenter, "preview") == preview,
-                "Lobby presenter must reference its own main view, loadout, settings and preview.");
-            RequireReferencesInScene(main, scene, "startButton", "stashButton", "settingsButton", "quitButton", "statusLabel", "resultLabel", "inputGroup");
-            foreach (FrontendWindow window in new FrontendWindow[] { main, loadout, settings }) ValidateFocus(window);
+                "Lobby presenter must reference its own main view, settings and preview.");
+            RequireReferencesInScene(main, scene, "startButton", "settingsButton", "quitButton", "statusLabel", "resultLabel", "inputGroup");
+            foreach (FrontendWindow window in new FrontendWindow[] { main, settings }) ValidateFocus(window);
             ValidateSettings(settings);
-            var views = new[] { Reference<BackpackContainerUI>(loadout, "backpack"), Reference<BackpackContainerUI>(loadout, "equipment"), Reference<BackpackContainerUI>(loadout, "stash") };
-            Require(views.Distinct().Count() == 3 && views.All(view => view.transform.IsChildOf(loadout.transform)),
-                "Lobby loadout requires three distinct authored inventory views.");
-            foreach (var view in views)
-                foreach (string field in new[] { "slotPrefab", "itemPrefab", "slotLayer", "itemLayer" })
-                    Require(Property(view, field).objectReferenceValue != null, "Lobby container is missing its authored " + field);
-            Require(Property(views[2], "initialColumns").intValue == 10 && Property(views[2], "initialRows").intValue == 30,
-                "Lobby stash defaults must be ten columns and thirty rows.");
-            Require(Reference<BackpackInteractionController>(loadout, "interaction").transform.IsChildOf(loadout.transform),
-                "Lobby inventory interaction must belong to its authored loadout window.");
             RequireReferencesInScene(preview, scene, "presentation", "equippedLabel");
             var presentation = Reference<CharacterPresentation>(preview, "presentation");
-            Reference<ItemManifestCatalog>(preview, "catalog");
-            RequireReferencesInScene(presentation, scene, "animator", "aimPose", "weaponRig");
+            RequireReferencesInScene(presentation, scene, "animationSystem", "equipmentCarrier");
+            var animation = Reference<CharacterPresentationSystem>(presentation, "animationSystem");
+            Require(animation.ValidateBindings() == null, "Lobby preview requires valid independent animation bindings.");
             var animator = Single<Animator>(scene);
-            Require(Reference<Animator>(presentation, "animator") == animator,
+            Require(Reference<Animator>(animation, "animator") == animator,
                 "Lobby preview must reference the scene's display animator.");
-            foreach (Component component in new Component[] { animator, Reference<PlayerAimPose>(presentation, "aimPose"), Reference<PlayerWeaponRig>(presentation, "weaponRig") })
+            foreach (Component component in new Component[] { animation, animator, Reference<PlayerAimPose>(animation, "aimPose"), Reference<PlayerWeaponRig>(animation, "weaponRig") })
                 Require(component.transform.IsChildOf(presentation.transform),
                     "Lobby preview dependencies must belong to its character presentation hierarchy.");
             Require(animator.runtimeAnimatorController != null && !animator.applyRootMotion,
@@ -447,7 +512,6 @@ namespace RPG4.Editor.Build
             foreach (Component component in animator.GetComponentsInChildren<Component>(true))
                 Require(component != null && !(component is NetworkIdentity) && !(component is Player)
                     && !(component is PlayerEquipment) && !(component is RPG4.Input.PlayerInput)
-                    && !(component is BackpackInventory) && !(component is BackpackNetworkInventory)
                     && component.GetType().Name != "Character_Weapon_Controller",
                     "Lobby preview cannot contain player simulation, inventory, networking or demo controllers.");
             Require(All<UIManager>(scene).Length == 1 && All<Camera>(scene).Count(camera => camera.transform.parent == null) == 1,
@@ -496,20 +560,6 @@ namespace RPG4.Editor.Build
             Require(All<NetworkIdentity>(scene).Length == authoredIdentityCount,
                 "Preview network identities differ from the persisted scene identity projection; inspect prefab identity serialization.");
             ValidateLoadout(loadout);
-            NetworkWorldPickup[] pickups = All<NetworkWorldPickup>(scene);
-            Require(pickups.Length >= 3, "OnlineGame requires authored consumable, ammunition and weapon world pickups.");
-            var pickupCatalog = Reference<ItemManifestCatalog>(loadout, "catalog");
-            foreach (NetworkWorldPickup pickup in pickups)
-            {
-                NetworkIdentity identity = pickup.GetComponent<NetworkIdentity>();
-                Collider collider = pickup.GetComponent<Collider>();
-                Require(pickup.enabled && pickup.gameObject.activeInHierarchy && pickup.gameObject.scene == scene
-                    && identity != null && identity.enabled && identity.sceneId != 0 && !identity.serverOnly
-                    && collider != null && collider.enabled && !collider.isTrigger
-                    && pickup.Manifest != null && pickupCatalog.TryGet(pickup.Manifest.ItemType, out ItemManifest registered)
-                    && registered == pickup.Manifest && pickup.ValidateServerConfiguration(out _),
-                    "OnlineGame world pickups require a valid shared catalog item, collider and scene network identity.");
-            }
             var camera = Reference<PlayerCameraController>(bindings, "localCamera");
             var virtualCamera = Reference<CinemachineVirtualCamera>(camera, "virtualCamera");
             Require(virtualCamera.gameObject == camera.gameObject && virtualCamera.enabled
@@ -531,97 +581,42 @@ namespace RPG4.Editor.Build
                 && required.All(component => component.enabled && component is IClientGameplayBinding
                 && component.gameObject.scene == scene), "Required client adapters must implement the shared binding contract in OnlineGame.");
             var ui = Reference<UIManager>(adapter, "uiManager");
-            var hud = Reference<WeaponAmmoHUD>(adapter, "weaponHud");
-            var router = Reference<InventoryUIInputRouter>(adapter, "inventoryInput");
-            var coordinator = Reference<InventoryUICoordinator>(adapter, "inventoryCoordinator");
-            Require(ui == Single<UIManager>(scene) && router.gameObject == ui.gameObject && coordinator.gameObject == ui.gameObject
-                && ui.enabled && hud.enabled && !router.enabled && !coordinator.enabled && Property(hud, "explicitSessionSource").boolValue,
-                "Online inventory input must start gated; its weapon HUD must require an explicit session source.");
+            var weaponHud = Reference<WeaponAmmoHUD>(adapter, "weaponHud");
+            Require(ui == Single<UIManager>(scene) && ui.enabled && weaponHud.enabled
+                && weaponHud.gameObject.activeSelf && weaponHud.gameObject.scene == scene
+                && Property(weaponHud, "explicitSessionSource").boolValue && InsidePresentation(weaponHud, roots),
+                "Online gameplay UI must bind its owned combat HUD inside the client presentation hierarchy.");
             var windowRoot = Reference<RectTransform>(ui, "windowRoot");
             Require(windowRoot.gameObject.scene == scene && InsidePresentation(windowRoot, roots),
-                "Online UIManager must instantiate windows under its own client presentation hierarchy.");
+                "Online UIManager must instantiate settings under its own client presentation hierarchy.");
             foreach (Component client in All<Canvas>(scene).Cast<Component>().Concat(All<Camera>(scene))
                 .Concat(All<AudioListener>(scene)).Concat(All<AudioSource>(scene)).Concat(All<UIManager>(scene)).Concat(All<CharacterHealthView>(scene))
-                .Concat(new Component[] { camera, ui, hud, router, coordinator }))
+                .Concat(new Component[] { camera, ui }))
                 Require(client.gameObject.scene == scene && InsidePresentation(client, roots), "Client camera/UI/audio must be inside authored inactive presentation roots.");
-            RequireReferencesInScene(hud, scene, "contentRoot", "weaponName", "rounds", "reserve", "durability", "actionLabel", "icon", "reloadProgress");
             var windows = ReferenceArray<UIBase>(ui, "windowPrefabs");
-            foreach (UIBase window in windows)
-                foreach (MonoBehaviour component in window.GetComponentsInChildren<MonoBehaviour>(true))
-                    Require(component != null, "An online window prefab contains a missing script.");
-            Require(windows.OfType<BackpackGridUI>().Count() == 1 && windows.OfType<ChestBackpackUI>().Count() == 1
-                && windows.OfType<SettingsView>().Count() == 1, "Online UIManager requires one backpack, chest and settings window prefab.");
-            var backpack = windows.OfType<BackpackGridUI>().Single();
-            Require(backpack.ContainerUI != null && backpack.EquipmentView != null && backpack.ContainerUI != backpack.EquipmentView
-                && backpack.Interaction != null, "Backpack prefab requires separate inventory/equipment views and its interaction controller.");
-            Require(backpack.Interaction.transform.IsChildOf(backpack.transform),
-                "Backpack interaction controller must belong to its window prefab.");
-            ValidateContainerView(backpack, backpack.ContainerUI);
-            ValidateContainerView(backpack, backpack.EquipmentView);
-            ValidateSettings(windows.OfType<SettingsView>().Single(), true);
-            Require(Property(windows.OfType<SettingsView>().Single(), "blocksOtherWindows").boolValue,
-                "Online settings must block inventory/chest windows while the settings modal is open.");
+            Require(windows.Length == 1 && windows[0] is SettingsView,
+                "Online UIManager must retain only its authored settings window; role UI belongs to the player prefab.");
+            foreach (MonoBehaviour component in windows[0].GetComponentsInChildren<MonoBehaviour>(true))
+                Require(component != null, "The online settings prefab contains a missing script.");
+            ValidateSettings((SettingsView)windows[0], true);
+            Require(Property(windows[0], "blocksOtherWindows").boolValue,
+                "Online settings must block gameplay windows while its modal is open.");
+            var death = Single<PlayerDeathUI>(scene);
+            Require(InsidePresentation(death, roots) && views.Contains(Reference<CharacterHealthView>(death, "healthView")),
+                "Death presentation must remain connected to the owned health view inside client presentation.");
+            RequireReferencesInScene(death, scene, "restartButton", "statusLabel", "actionLabel");
             var extraction = All<ExtractionZone>(scene);
             Require(extraction.Length > 0 && extraction.All(zone => zone.enabled && zone.gameObject.activeInHierarchy
                 && zone.GetComponent<BoxCollider>() != null && zone.GetComponent<BoxCollider>().isTrigger
                 && Property(zone, "extractionSeconds").floatValue > 0 && !InsidePresentation(zone, roots)),
                 "OnlineGame requires an enabled authored extraction trigger outside client presentation.");
-            var chests = All<ChestInventory>(scene);
-            Require(chests.Length > 0, "OnlineGame requires an authored shared network chest.");
-            foreach (var chest in chests)
-            {
-                var network = chest.GetComponent<BackpackNetworkInventory>();
-                var identity = chest.GetComponent<NetworkIdentity>();
-                var inventory = chest.GetComponent<BackpackInventory>();
-                Require(chest.enabled && chest.gameObject.activeInHierarchy && identity != null && identity.enabled && !identity.serverOnly
-                    && inventory != null && inventory.enabled && network != null && network.enabled
-                    && Property(network, "sharedContainer").boolValue
-                    && Property(network, "rows").intValue > 0 && Property(network, "columns").intValue > 0
-                    && Property(network, "rows").intValue == Property(inventory, "rows").intValue
-                    && Property(network, "columns").intValue == Property(inventory, "columns").intValue
-                    && Reference<ItemManifestCatalog>(network, "catalog") == Reference<ItemManifestCatalog>(loadout, "catalog")
-                    && Reference<ItemManifestCatalog>(inventory, "catalog") == Reference<ItemManifestCatalog>(loadout, "catalog")
-                    && !Property(chest, "fillCatalogOnStart").boolValue && !InsidePresentation(chest, roots),
-                    "Online chests require a shared network inventory, scene identity and no debug startup filling.");
-            }
         }
 
         private static void ValidateLoadout(OnlineSpawnConfiguration loadout)
         {
-            var catalog = Reference<ItemManifestCatalog>(loadout, "catalog");
-            var player = Load<GameObject>(PlayerPath);
-            Require(Reference<ItemManifestCatalog>(player.GetComponent<BackpackInventory>(), "catalog") == catalog
-                && Reference<ItemManifestCatalog>(player.GetComponent<BackpackNetworkInventory>(), "catalog") == catalog,
-                "OnlinePlayer's authored inventory catalogs must match the trusted scene loadout for client restoration.");
-            var weapon = Reference<ItemManifest>(loadout, "initialWeapon");
-            ValidateSeed(catalog, weapon, 1);
-            Require(weapon.GetFragment<WeaponDefinitionFragment>() != null && weapon.GetFragment<EquipmentFragment>() != null,
-                "Trusted initial weapon requires weapon/equipment fragments.");
-            var equipment = weapon.GetFragment<EquipmentFragment>();
-            Require(equipment.EquipPrefab != null && !string.IsNullOrEmpty(AssetDatabase.GetAssetPath(equipment.EquipPrefab)),
-                "Trusted initial weapon requires an authored equipment model asset.");
-            Require(string.IsNullOrEmpty(equipment.SocketAttachPoint)
-                || player.GetComponentsInChildren<Transform>(true).Any(node => node.name == equipment.SocketAttachPoint),
-                "Trusted initial weapon socket must exist in the OnlinePlayer hierarchy.");
-            var seeds = Property(loadout, "inventoryItems");
-            Require(seeds.isArray, "Trusted loadout inventory seeds must be serialized.");
-            for (int i = 0; i < seeds.arraySize; ++i)
-            {
-                var seed = seeds.GetArrayElementAtIndex(i);
-                var manifest = seed.FindPropertyRelative("Manifest")?.objectReferenceValue as ItemManifest;
-                var count = seed.FindPropertyRelative("Count");
-                Require(manifest != null && count != null, "A trusted inventory seed is incomplete.");
-                ValidateSeed(catalog, manifest, count.intValue);
-            }
-        }
-
-        private static void ValidateSeed(ItemManifestCatalog catalog, ItemManifest item, int count)
-        {
-            Require(item != null && catalog.TryGet(item.ItemType, out var registered) && registered == item
-                && count > 0 && count <= (item.GetFragment<StackableFragment>()?.MaxStackSize ?? 1),
-                "Trusted inventory seed is invalid or absent from its exact catalog.");
-            try { item.ValidateConfiguration(); }
-            catch (Exception) { throw new BuildFailedException("Trusted item configuration is invalid: " + AssetDatabase.GetAssetPath(item)); }
+            Require(loadout.enabled && loadout.gameObject.activeInHierarchy,
+                "The trusted identity/role spawn initializer must remain enabled in the world.");
+            ValidateRoleLoadout(Load<GameObject>(PlayerPath), Load<GameObject>(PlayerPath).GetComponent<NetworkRoleLoadout>());
         }
 
         private static void ValidateSettings(SettingsView view, bool requireRaidActions = false)
@@ -640,22 +635,6 @@ namespace RPG4.Editor.Build
                     "Raid abandonment confirmation must be authored and initially hidden.");
             }
             ValidateFocus(view);
-        }
-
-        private static void ValidateContainerView(BackpackGridUI window, BackpackContainerUI view)
-        {
-            Require(view.enabled && view.transform.IsChildOf(window.transform)
-                && Property(view, "initialColumns").intValue > 0 && Property(view, "initialRows").intValue > 0,
-                "Backpack inventory/equipment views must be enabled children with positive authored grid dimensions.");
-            foreach (string field in new[] { "slotPrefab", "itemPrefab" })
-            {
-                var template = Reference<GameObject>(view, field);
-                Require(!string.IsNullOrEmpty(AssetDatabase.GetAssetPath(template)),
-                    "Backpack view requires an authored reusable prefab asset: " + field);
-            }
-            foreach (string field in new[] { "slotLayer", "itemLayer" })
-                Require(Reference<RectTransform>(view, field).IsChildOf(view.transform),
-                    "Backpack view layers must belong to their container: " + field);
         }
 
         private static void ValidateFocus(FrontendWindow view)

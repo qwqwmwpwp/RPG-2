@@ -1,0 +1,24 @@
+{
+  "name": "RPG4.Frontend",
+  "rootNamespace": "RPG4.Frontend",
+  "references": [
+    "RPG4.Networking",
+    "RPG4.Raid.Domain",
+    "RPG4.Raid.Application",
+    "RPG4.Networking.Contracts",
+    "RPG4.LoadoutTemplate",
+    "RPG4.UI",
+    "RPG4.StateMachine",
+    "RPG4.Input",
+    "RPG4.PlayerMovement",
+    "RPG4.Backpack.Items",
+    "RPG4.Backpack.Core",
+    "Mirror",
+    "Mirror.Transports",
+    "Unity.TextMeshPro",
+    "UnityEngine.UI",
+    "Unity.InputSystem",
+    "RPG4.Combat.UI"
+  ],
+  "autoReferenced": true
+}

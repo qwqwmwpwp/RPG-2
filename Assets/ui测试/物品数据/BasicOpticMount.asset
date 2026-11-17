@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c6d32d868fbe4ae2b9158f48e28f9615, type: 3}
+  m_Name: BasicOpticMount
+  m_EditorClassIdentifier:
+  definitionId: BasicOpticMount
+  displayName: 基础镜座
+  size: {x: 2, y: 1}
+  icon: {fileID: 21300000, guid: a3ed10bf66bd47a5973e87ea768c0261, type: 3}
+  itemType:
+    name: GameItems.Attachments.Optic.Mount.Basic
+  equipmentType:
+    name:
+  containerType: 0
+  itemManifest: {fileID: 11400000, guid: c020762a70a24448b260d8d00a4a6d62, type: 2}

@@ -344,13 +344,14 @@ public class Character_Weapon_Controller : MonoBehaviour
 
     // Internal Variables
     private Animator animator;
-    private RPG4.PlayerMovement.Player player;
+    // Model ownership is static; never derive legacy writes from solved IK output.
+    private bool presentationOwnsPose;
     private int[] lastStateHashes;
 
     private void Awake()
     {
         animator = GetComponent<Animator>();
-        player = GetComponentInParent<RPG4.PlayerMovement.Player>();
+        presentationOwnsPose = GetComponent<RPG4.CharacterAnimation.CharacterPresentationSystem>() != null;
 
         if (weaponSlots != null)
         {
@@ -432,12 +433,7 @@ public class Character_Weapon_Controller : MonoBehaviour
 
     private void Update()
     {
-        // A zero-weight layer may skip IK callbacks; discard the old blend even then.
-        if (player != null && !player.WeaponIKEnabled)
-        {
-            foreach (var ik in supportIKSettings)
-                ik.currentWeight = 0f;
-        }
+        if (presentationOwnsPose) return;
 
         if (defaultEventSetting == null || !defaultEventSetting.enabled || string.IsNullOrEmpty(defaultEventSetting.eventName) || animator == null) return;
 
@@ -537,7 +533,7 @@ public class Character_Weapon_Controller : MonoBehaviour
 
     private void PerformSocketSwitch(string triggerEventName, string sourceInfo)
     {
-        if (string.IsNullOrEmpty(triggerEventName)) return;
+        if (presentationOwnsPose || string.IsNullOrEmpty(triggerEventName)) return;
 
         // Split incoming string by commas to process sequential multi-commands on the same frame.
         string[] commands = triggerEventName.Split(',');
@@ -650,16 +646,7 @@ public class Character_Weapon_Controller : MonoBehaviour
     {
         if (animator == null) return;
 
-        if (player != null && !player.WeaponIKEnabled)
-        {
-            foreach (var ik in supportIKSettings)
-            {
-                ik.currentWeight = 0f;
-                animator.SetIKPositionWeight(ik.ikHand, 0f);
-                animator.SetIKRotationWeight(ik.ikHand, 0f);
-            }
-            return;
-        }
+        if (presentationOwnsPose) return;
 
         // Iterate through all tracked IK modules for individual smooth lerp transitioning.
         foreach (var ik in supportIKSettings)

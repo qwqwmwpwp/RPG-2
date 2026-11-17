@@ -1,0 +1,93 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 594c8466812546c2b8faf39b6e77b334, type: 3}
+  m_Name: DefaultCharacterIKIntent
+  m_EditorClassIdentifier:
+  schemaVersion: 1
+  waistPitchOffset: 0
+  actions:
+  - id: FreeLocomotion
+    allowSupportHand: 0
+    waistPitchOffset: 0
+    shotReference: 0
+    stages: []
+  - id: StrafeLocomotion
+    allowSupportHand: 0
+    waistPitchOffset: 0
+    shotReference: 0
+    stages: []
+  - id: TurnLeft
+    allowSupportHand: 0
+    waistPitchOffset: 0
+    shotReference: 0
+    stages: []
+  - id: TurnRight
+    allowSupportHand: 0
+    waistPitchOffset: 0
+    shotReference: 0
+    stages: []
+  - id: Aim
+    allowSupportHand: 1
+    waistPitchOffset: 0
+    shotReference: 0
+    stages: []
+  - id: PreviewGrip
+    allowSupportHand: 1
+    waistPitchOffset: 0
+    shotReference: 0
+    stages: []
+  - id: HipFire
+    allowSupportHand: 1
+    waistPitchOffset: 0
+    shotReference: 1
+    stages: []
+  - id: ADSFire
+    allowSupportHand: 1
+    waistPitchOffset: 0
+    shotReference: 1
+    stages: []
+  - id: HipAutoFire
+    allowSupportHand: 1
+    waistPitchOffset: 0
+    shotReference: 1
+    stages: []
+  - id: ADSAutoFire
+    allowSupportHand: 1
+    waistPitchOffset: 0
+    shotReference: 1
+    stages: []
+  - id: Reload
+    allowSupportHand: 1
+    waistPitchOffset: 0
+    shotReference: 1
+    stages:
+    - phase: 0
+      socket: 2
+      supportHandMultiplier: 0
+    - phase: 1
+      socket: 0
+      supportHandMultiplier: 1
+  - id: UseConsumable
+    allowSupportHand: 0
+    waistPitchOffset: 0
+    shotReference: 0
+    stages: []
+  - id: Hurt
+    allowSupportHand: 0
+    waistPitchOffset: 0
+    shotReference: 0
+    stages: []
+  - id: Dead
+    allowSupportHand: 0
+    waistPitchOffset: 0
+    shotReference: 0
+    stages: []

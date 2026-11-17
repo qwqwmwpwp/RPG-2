@@ -12,6 +12,7 @@ using RPG4.Networking.Transports;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
+using UnityEditor.Compilation;
 using UnityEngine;
 using kcp2k;
 
@@ -19,12 +20,12 @@ namespace RPG4.Editor.Build
 {
     /// <summary>Explicit preparation/build actions. Only ApplyClientBuildSettings changes the default scene list;
     /// only GenerateContentManifest updates the shared generated digest. No action fabricates server trust.</summary>
-    public static class GameBuild
+    public static partial class GameBuild
     {
         private const string RequiredUnity = "2022.3.62f3";
-        private const string ManifestPath = "Assets/_Project/Content/Settings/EntryContentManifest.asset";
-        private const string CatalogPath = "Assets/_Project/Content/Settings/ClientServerCatalog.asset";
-        private const string ManagerPath = "Assets/_Project/Runtime/Player/OnlineNetworkManager.prefab";
+        private const string ManifestPath = "Assets/_Project/Code/Networking/EntryContentManifest.asset";
+        private const string CatalogPath = "Assets/_Project/Code/Frontend/ClientServerCatalog.asset";
+        private const string ManagerPath = "Assets/_Project/Prefabs/OnlineNetworkManager.prefab";
         private static readonly string[] ClientScenes = { "Assets/Scenes/ClientBootstrap.unity", EntryContentManifest.MainMenuScenePath, EntryContentManifest.LobbyScenePath, EntryProtocol.GameplayScene };
         private static readonly string[] ServerScenes = { "Assets/Scenes/ServerBootstrap.unity", EntryProtocol.GameplayScene };
         private static readonly string[] DatabasePlugins = {
@@ -82,6 +83,8 @@ namespace RPG4.Editor.Build
             EntrySceneValidation.Validate();
             EntrySceneValidation.ValidateSceneOrder(ClientScenes, false);
             EditorBuildSettings.scenes = ClientScenes.Select(path => new EditorBuildSettingsScene(path, true)).ToArray();
+            EditorUserBuildSettings.standaloneBuildSubtarget = StandaloneBuildSubtarget.Player;
+            CompilationPipeline.RequestScriptCompilation();
             Debug.Log("Default build scenes set to ClientBootstrap, MainMenu, Lobby, OnlineGame. Dedicated Server uses its explicit entry list.");
         });
 
@@ -95,7 +98,8 @@ namespace RPG4.Editor.Build
             {
                 string reason = exception is BuildFailedException ? exception.Message : "Entry preparation failed.";
                 Debug.LogError(reason);
-                if (Application.isBatchMode) EditorApplication.Exit(1);
+                Debug.LogException(exception);
+                if (Application.isBatchMode && oneClick == null) EditorApplication.Exit(1);
                 throw new BuildFailedException(reason);
             }
         }
@@ -114,27 +118,46 @@ namespace RPG4.Editor.Build
             File.WriteAllText(Path.Combine(folder, EntryContentManifest.GenerationRule + ".json"), snapshot.Json, new UTF8Encoding(false, true));
         }
 
-        private static void BuildWindows(bool server)
+        private static void BuildWindows(bool server) => BuildWindowsAttempt(server, null, true);
+
+        private static BuildAttempt BuildWindowsAttempt(bool server, string pinnedHash, bool restoreSubtarget)
         {
             string log = null;
+            BuildTrace trace = null;
+            StandaloneBuildSubtarget previousStandaloneBuildSubtarget = EditorUserBuildSettings.standaloneBuildSubtarget;
             try
             {
+                EditorUserBuildSettings.standaloneBuildSubtarget = server
+                    ? StandaloneBuildSubtarget.Server
+                    : StandaloneBuildSubtarget.Player;
                 string root = Path.GetDirectoryName(Application.dataPath);
                 string outputRoot = Path.Combine(root, "服务器", "构建");
-                string attempt = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N");
+                string attempt = NewBuildId();
                 string logDirectory = Path.Combine(outputRoot, "日志");
                 Directory.CreateDirectory(logDirectory);
                 log = Path.Combine(logDirectory, (server ? "server-" : "client-") + attempt + ".log");
+                trace = CreateTrace((server ? "server-" : "client-") + attempt, server ? "server" : "client", pinnedHash != null ? oneClick.trace.id : null);
+                if (pinnedHash != null)
+                {
+                    oneClick.currentTrace = trace;
+                    oneClick.trace.attemptRecordIds.Add(trace.id);
+                    SaveTrace(oneClick.trace);
+                    SaveOneClickRun();
+                }
+                if (pinnedHash != null) RecordOneClickBuildLog(log);
                 AppendLog(log, "validation_started");
                 string[] scenes = server ? ServerScenes : ClientScenes;
-                ScriptingImplementation backend = ValidateEnvironment(server);
-                EntrySceneValidation.ValidateSceneOrder(scenes, server);
-                EntrySceneValidation.Validate();
-                AuthoritySnapshot snapshot = AuthorityContentCollector.Calculate();
-                RequireCurrentManifest(snapshot);
-                EntryContentManifest manifest = ValidateAssets(scenes);
-                ValidateDependencyBoundary();
-                DeploymentIdentityValidation.Validate();
+                EntryContentManifest manifest = ValidateBuildInputs(server, trace, out ScriptingImplementation backend);
+                Check(trace, "source_and_content_pin", () =>
+                {
+                    if (pinnedHash != null)
+                    {
+                        RequirePinnedOneClickManifest(pinnedHash);
+                        RequireSameBuildSource(oneClick.trace.source);
+                        trace.source = oneClick.trace.source;
+                    }
+                    else trace.source = CaptureBuildSource();
+                });
                 // Build into a new, empty attempt directory. Existing builds are never deleted, overlaid or
                 // consulted as evidence that this attempt produced its required executable/runtime files.
                 string outputDirectory = Path.Combine(outputRoot, server ? "ServerWindows" : "ClientWindows", attempt);
@@ -144,8 +167,11 @@ namespace RPG4.Editor.Build
                 if (Directory.EnumerateFileSystemEntries(outputDirectory).Any())
                     throw new BuildFailedException("Build attempt output must be empty.");
                 string destination = Path.Combine(outputDirectory, server ? "RPG4Server.exe" : "RPG4Client.exe");
+                if (pinnedHash != null) RequirePinnedOneClickManifest(pinnedHash);
                 AppendLog(log, "build_started protocol=" + EntryProtocol.Version + " content=" + manifest.ContentHash
                     + " output=" + destination);
+                StartTraceStage(trace, "build_player");
+                if (pinnedHash != null) SaveOneClickRun();
                 BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
                 {
                     scenes = scenes,
@@ -155,17 +181,34 @@ namespace RPG4.Editor.Build
                     subtarget = (int)(server ? StandaloneBuildSubtarget.Server : StandaloneBuildSubtarget.Player),
                     options = BuildOptions.None
                 });
-                ValidateBuildOutput(report, destination, server, backend);
+                CompleteTraceStage(trace, null);
+                Check(trace, "build_report_and_output", () => ValidateBuildOutput(report, destination, server, backend));
+                Check(trace, "final_source_and_content_pin", () =>
+                {
+                    RequireSameBuildSource(trace.source);
+                    EntryContentManifest current = RequireCurrentManifest(AuthorityContentCollector.Calculate());
+                    if (current.ContentHash != manifest.ContentHash) throw new BuildFailedException("Authority content changed during the build.");
+                    if (pinnedHash != null) RequirePinnedOneClickManifest(pinnedHash);
+                });
+                FinishTrace(trace, true);
                 AppendLog(log, "build_succeeded output=" + destination);
                 Debug.Log("Windows " + (server ? "Dedicated Server" : "Client") + " build succeeded: " + destination);
+                return new BuildAttempt { destination = destination, log = log, hash = manifest.ContentHash, recordId = trace.id, batchId = trace.batchId };
             }
             catch (Exception exception)
             {
                 string reason = exception is BuildFailedException ? exception.Message : "Build setup or execution failed.";
+                try { FinishTrace(trace, false, exception); } catch (Exception) { Debug.LogError("Unable to finish build trace record."); }
                 if (log != null) { try { AppendLog(log, "build_failed " + reason); } catch (Exception) { } }
                 Debug.LogError(reason);
-                if (Application.isBatchMode) EditorApplication.Exit(1);
+                Debug.LogException(exception);
+                if (Application.isBatchMode && pinnedHash == null) EditorApplication.Exit(1);
                 throw new BuildFailedException(reason);
+            }
+            finally
+            {
+                if (restoreSubtarget)
+                    EditorUserBuildSettings.standaloneBuildSubtarget = previousStandaloneBuildSubtarget;
             }
         }
 
@@ -283,8 +326,8 @@ namespace RPG4.Editor.Build
         private static void ValidateDependencyBoundary()
         {
             ValidatePrivateAssetBoundary();
-            AssemblyBoundary server = ReadBoundary("Assets/_Project/Runtime/Scripts/Server/RPG4.Server.asmdef");
-            string serverGuid = "GUID:" + AssetDatabase.AssetPathToGUID("Assets/_Project/Runtime/Scripts/Server/RPG4.Server.asmdef");
+            AssemblyBoundary server = ReadBoundary("Assets/_Project/Code/Server/RPG4.Server.asmdef");
+            string serverGuid = "GUID:" + AssetDatabase.AssetPathToGUID("Assets/_Project/Code/Server/RPG4.Server.asmdef");
             if (!server.overrideReferences || server.defineConstraints == null || server.defineConstraints.Length != 1
                 || server.defineConstraints[0] != "UNITY_EDITOR || UNITY_SERVER")
                 throw new BuildFailedException("Server code must compile only in Editor or Dedicated Server.");
@@ -303,8 +346,10 @@ namespace RPG4.Editor.Build
                     || !explicitlyReferenced)
                     throw new BuildFailedException("Database plugins must be explicit references restricted to Editor or Dedicated Server.");
             }
-            foreach (string path in new[] { "Assets/_Project/Runtime/Scripts/Networking/RPG4.Networking.asmdef",
-                "Assets/_Project/Runtime/Scripts/Networking/Contracts/RPG4.Networking.Contracts.asmdef", "Assets/_Project/Runtime/Scripts/Frontend/RPG4.Frontend.asmdef" })
+            foreach (string path in new[] { "Assets/_Project/Code/Networking/RPG4.Networking.asmdef",
+                "Assets/_Project/Code/Networking/Contracts/RPG4.Networking.Contracts.asmdef", "Assets/_Project/Code/Frontend/RPG4.Frontend.asmdef",
+                "Assets/_Project/Code/LoadoutTemplate/RPG4.LoadoutTemplate.asmdef",
+                "Assets/_Project/Code/LoadoutTemplate/Presentation/RPG4.LoadoutPresentation.asmdef" })
             {
                 AssemblyBoundary shared = ReadBoundary(path);
                 if ((shared.references ?? Array.Empty<string>()).Any(reference =>

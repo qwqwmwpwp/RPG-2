@@ -1,0 +1,2005 @@
+{
+  "SchemaVersion": 1,
+  "GeneratedUtc": "2026-11-16T08:39:25.3462529Z",
+  "CutoffUtc": "2026-11-13T08:34:50Z",
+  "Scope": "Exactly 47 allowlisted Unity Library directories; source and project metadata excluded",
+  "ExternalEvidenceReviewRequired": true,
+  "ExternalRecentRoots": [],
+  "CurrentUnityProjectRoots": [
+    "E:\\github\\RPG-2"
+  ],
+  "Items": [
+    {
+      "Path": "E:\\unity\\hhzpt\\Library",
+      "ProjectRoot": "E:\\unity\\hhzpt",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 3183505934,
+      "Files": 30535,
+      "MaxFileWriteTimeUtc": "2026-08-29T08:20:56.9580189Z",
+      "MaxFilePath": "E:\\unity\\hhzpt\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-08-29T08:20:56.7133193Z",
+      "MaxTraceWriteTimeUtc": "2026-08-29T08:20:56.9580189Z",
+      "MaxTracePath": "E:\\unity\\hhzpt\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3c1; m_EditorVersionWithRevision: 2022.3.62f3c1 (1623fc0bbb97)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 3183505934,
+          "Files": 30535,
+          "MaxFileWriteTimeUtc": "2026-08-29T08:20:56.9580189Z",
+          "MaxFilePath": "E:\\unity\\hhzpt\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 23194,
+          "Files": 5,
+          "MaxFileWriteTimeUtc": "2026-08-29T08:20:56.9387251Z",
+          "MaxFilePath": "E:\\unity\\hhzpt\\Logs\\shadercompiler-AssetImportWorker0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\My project\\Library",
+      "ProjectRoot": "E:\\unity\\My project",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2707085359,
+      "Files": 47542,
+      "MaxFileWriteTimeUtc": "2025-11-29T09:31:56.273764Z",
+      "MaxFilePath": "E:\\unity\\My project\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2025-11-29T09:31:56.0163697Z",
+      "MaxTraceWriteTimeUtc": "2025-11-29T09:31:56.273764Z",
+      "MaxTracePath": "E:\\unity\\My project\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f1c1; m_EditorVersionWithRevision: 2022.3.62f1c1 (b0109b07edb8)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2707085359,
+          "Files": 47542,
+          "MaxFileWriteTimeUtc": "2025-11-29T09:31:56.273764Z",
+          "MaxFilePath": "E:\\unity\\My project\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 2360,
+          "Files": 2,
+          "MaxFileWriteTimeUtc": "2025-11-29T08:46:04.8434852Z",
+          "MaxFilePath": "E:\\unity\\My project\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\live2D-2\\Library",
+      "ProjectRoot": "E:\\unity\\live2D-2",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2545437633,
+      "Files": 36498,
+      "MaxFileWriteTimeUtc": "2026-08-11T09:55:45.7540115Z",
+      "MaxFilePath": "E:\\unity\\live2D-2\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-08-11T09:55:45.5309215Z",
+      "MaxTraceWriteTimeUtc": "2026-08-11T09:55:45.7540115Z",
+      "MaxTracePath": "E:\\unity\\live2D-2\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3c1; m_EditorVersionWithRevision: 2022.3.62f3c1 (1623fc0bbb97)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2545437633,
+          "Files": 36498,
+          "MaxFileWriteTimeUtc": "2026-08-11T09:55:45.7540115Z",
+          "MaxFilePath": "E:\\unity\\live2D-2\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 74523,
+          "Files": 7,
+          "MaxFileWriteTimeUtc": "2026-08-11T09:55:45.7514718Z",
+          "MaxFilePath": "E:\\unity\\live2D-2\\Logs\\shadercompiler-AssetImportWorker0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\TieJiangPu\\Library",
+      "ProjectRoot": "E:\\unity\\TieJiangPu",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2404720755,
+      "Files": 41615,
+      "MaxFileWriteTimeUtc": "2025-12-17T14:02:19.0808401Z",
+      "MaxFilePath": "E:\\unity\\TieJiangPu\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2025-12-17T14:02:18.7282816Z",
+      "MaxTraceWriteTimeUtc": "2025-12-17T14:02:19.0808401Z",
+      "MaxTracePath": "E:\\unity\\TieJiangPu\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f1c1; m_EditorVersionWithRevision: 2022.3.62f1c1 (b0109b07edb8)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2404720755,
+          "Files": 41615,
+          "MaxFileWriteTimeUtc": "2025-12-17T14:02:19.0808401Z",
+          "MaxFilePath": "E:\\unity\\TieJiangPu\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 281203,
+          "Files": 20,
+          "MaxFileWriteTimeUtc": "2025-12-17T14:02:18.9482668Z",
+          "MaxFilePath": "E:\\unity\\TieJiangPu\\Logs\\shadercompiler-AssetImportWorker0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\lianji\\Library",
+      "ProjectRoot": "E:\\unity\\lianji",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2385647761,
+      "Files": 37538,
+      "MaxFileWriteTimeUtc": "2026-03-18T12:37:27.6767438Z",
+      "MaxFilePath": "E:\\unity\\lianji\\Library\\Bee\\fullprofile.json",
+      "MaxDirectoryWriteTimeUtc": "2026-03-18T12:37:27.6252885Z",
+      "MaxTraceWriteTimeUtc": "2026-03-18T12:37:27.6767438Z",
+      "MaxTracePath": "E:\\unity\\lianji\\Library\\Bee\\fullprofile.json",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3c1; m_EditorVersionWithRevision: 2022.3.62f3c1 (1623fc0bbb97)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2385647761,
+          "Files": 37538,
+          "MaxFileWriteTimeUtc": "2026-03-18T12:37:27.6767438Z",
+          "MaxFilePath": "E:\\unity\\lianji\\Library\\Bee\\fullprofile.json",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 1747,
+          "Files": 1,
+          "MaxFileWriteTimeUtc": "2026-03-14T03:44:44.5298205Z",
+          "MaxFilePath": "E:\\unity\\lianji\\Logs\\Packages-Update.log",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Temp",
+          "Bytes": 1059,
+          "Files": 3,
+          "MaxFileWriteTimeUtc": "2026-03-18T12:37:25.5897094Z",
+          "MaxFilePath": "E:\\unity\\lianji\\Temp\\FSTimeGet-5ca4f10574c0ba043a11f2548bbe95c7",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\ecs1\\Library",
+      "ProjectRoot": "E:\\unity\\ecs1",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2356847437,
+      "Files": 40917,
+      "MaxFileWriteTimeUtc": "2026-07-20T12:16:14.8512498Z",
+      "MaxFilePath": "E:\\unity\\ecs1\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-07-20T12:16:14.0457868Z",
+      "MaxTraceWriteTimeUtc": "2026-07-20T12:16:14.8512498Z",
+      "MaxTracePath": "E:\\unity\\ecs1\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3c1; m_EditorVersionWithRevision: 2022.3.62f3c1 (1623fc0bbb97)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2356847437,
+          "Files": 40917,
+          "MaxFileWriteTimeUtc": "2026-07-20T12:16:14.8512498Z",
+          "MaxFilePath": "E:\\unity\\ecs1\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 85552,
+          "Files": 4,
+          "MaxFileWriteTimeUtc": "2026-07-20T12:16:14.15955Z",
+          "MaxFilePath": "E:\\unity\\ecs1\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Temp",
+          "Bytes": 0,
+          "Files": 0,
+          "MaxFileWriteTimeUtc": null,
+          "MaxFilePath": null,
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\lianji3\\Library",
+      "ProjectRoot": "E:\\unity\\lianji3",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2344876281,
+      "Files": 32787,
+      "MaxFileWriteTimeUtc": "2026-03-27T14:31:10.2006861Z",
+      "MaxFilePath": "E:\\unity\\lianji3\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-03-27T14:31:09.7654133Z",
+      "MaxTraceWriteTimeUtc": "2026-03-27T14:31:10.2006861Z",
+      "MaxTracePath": "E:\\unity\\lianji3\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3c1; m_EditorVersionWithRevision: 2022.3.62f3c1 (1623fc0bbb97)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2344876281,
+          "Files": 32787,
+          "MaxFileWriteTimeUtc": "2026-03-27T14:31:10.2006861Z",
+          "MaxFilePath": "E:\\unity\\lianji3\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 252837,
+          "Files": 22,
+          "MaxFileWriteTimeUtc": "2026-03-27T14:31:10.1219775Z",
+          "MaxFilePath": "E:\\unity\\lianji3\\Logs\\shadercompiler-AssetImportWorker0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\特效\\Library",
+      "ProjectRoot": "E:\\unity\\特效",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2341166275,
+      "Files": 37975,
+      "MaxFileWriteTimeUtc": "2026-05-04T12:41:39.8017962Z",
+      "MaxFilePath": "E:\\unity\\特效\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-05-04T12:41:39.5316595Z",
+      "MaxTraceWriteTimeUtc": "2026-05-04T12:41:39.8017962Z",
+      "MaxTracePath": "E:\\unity\\特效\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3c1; m_EditorVersionWithRevision: 2022.3.62f3c1 (1623fc0bbb97)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2341166275,
+          "Files": 37975,
+          "MaxFileWriteTimeUtc": "2026-05-04T12:41:39.8017962Z",
+          "MaxFilePath": "E:\\unity\\特效\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 24045,
+          "Files": 1,
+          "MaxFileWriteTimeUtc": "2026-05-04T12:41:39.631258Z",
+          "MaxFilePath": "E:\\unity\\特效\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\zdxt\\Library",
+      "ProjectRoot": "E:\\unity\\zdxt",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2336721786,
+      "Files": 36724,
+      "MaxFileWriteTimeUtc": "2026-09-02T08:26:22.4310192Z",
+      "MaxFilePath": "E:\\unity\\zdxt\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-09-02T08:26:22.2414651Z",
+      "MaxTraceWriteTimeUtc": "2026-09-02T08:26:22.4310192Z",
+      "MaxTracePath": "E:\\unity\\zdxt\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3c1; m_EditorVersionWithRevision: 2022.3.62f3c1 (1623fc0bbb97)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2336721786,
+          "Files": 36724,
+          "MaxFileWriteTimeUtc": "2026-09-02T08:26:22.4310192Z",
+          "MaxFilePath": "E:\\unity\\zdxt\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 283091,
+          "Files": 4,
+          "MaxFileWriteTimeUtc": "2026-09-02T08:26:22.3319496Z",
+          "MaxFilePath": "E:\\unity\\zdxt\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Temp",
+          "Bytes": 0,
+          "Files": 0,
+          "MaxFileWriteTimeUtc": null,
+          "MaxFilePath": null,
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\My project (3)\\Library",
+      "ProjectRoot": "E:\\unity\\My project (3)",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2241423561,
+      "Files": 31666,
+      "MaxFileWriteTimeUtc": "2026-03-20T14:22:45.8597979Z",
+      "MaxFilePath": "E:\\unity\\My project (3)\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-03-20T14:22:45.58417Z",
+      "MaxTraceWriteTimeUtc": "2026-03-20T14:22:45.8597979Z",
+      "MaxTracePath": "E:\\unity\\My project (3)\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3c1; m_EditorVersionWithRevision: 2022.3.62f3c1 (1623fc0bbb97)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2241423561,
+          "Files": 31666,
+          "MaxFileWriteTimeUtc": "2026-03-20T14:22:45.8597979Z",
+          "MaxFilePath": "E:\\unity\\My project (3)\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 225302,
+          "Files": 7,
+          "MaxFileWriteTimeUtc": "2026-03-20T14:22:45.7989946Z",
+          "MaxFilePath": "E:\\unity\\My project (3)\\Logs\\shadercompiler-AssetImportWorker0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\UmaViewer\\Library",
+      "ProjectRoot": "E:\\unity\\UmaViewer",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2240002590,
+      "Files": 27652,
+      "MaxFileWriteTimeUtc": "2026-11-11T17:43:30.8774885Z",
+      "MaxFilePath": "E:\\unity\\UmaViewer\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-11-11T17:43:30.8510626Z",
+      "MaxTraceWriteTimeUtc": "2026-11-11T17:43:30.8774885Z",
+      "MaxTracePath": "E:\\unity\\UmaViewer\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3; m_EditorVersionWithRevision: 2022.3.62f3 (96770f904ca7)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2240002590,
+          "Files": 27652,
+          "MaxFileWriteTimeUtc": "2026-11-11T17:43:30.8774885Z",
+          "MaxFilePath": "E:\\unity\\UmaViewer\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 1698155,
+          "Files": 20,
+          "MaxFileWriteTimeUtc": "2026-11-11T17:43:30.8119948Z",
+          "MaxFilePath": "E:\\unity\\UmaViewer\\Logs\\shadercompiler-AssetImportWorker0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\BUG\\Library",
+      "ProjectRoot": "E:\\unity\\BUG",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2227356337,
+      "Files": 38833,
+      "MaxFileWriteTimeUtc": "2026-03-24T17:16:49.5980062Z",
+      "MaxFilePath": "E:\\unity\\BUG\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-03-24T17:16:49.3175954Z",
+      "MaxTraceWriteTimeUtc": "2026-03-24T17:16:49.5980062Z",
+      "MaxTracePath": "E:\\unity\\BUG\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f1c1; m_EditorVersionWithRevision: 2022.3.62f1c1 (b0109b07edb8)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2227356337,
+          "Files": 38833,
+          "MaxFileWriteTimeUtc": "2026-03-24T17:16:49.5980062Z",
+          "MaxFilePath": "E:\\unity\\BUG\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 72842,
+          "Files": 7,
+          "MaxFileWriteTimeUtc": "2026-03-24T17:16:49.5398378Z",
+          "MaxFilePath": "E:\\unity\\BUG\\Logs\\shadercompiler-AssetImportWorker0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\huihezhi\\Library",
+      "ProjectRoot": "E:\\unity\\huihezhi",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2205482798,
+      "Files": 35155,
+      "MaxFileWriteTimeUtc": "2026-03-20T12:30:47.6743888Z",
+      "MaxFilePath": "E:\\unity\\huihezhi\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-03-20T12:30:47.4179872Z",
+      "MaxTraceWriteTimeUtc": "2026-03-20T12:30:47.6743888Z",
+      "MaxTracePath": "E:\\unity\\huihezhi\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f1c1; m_EditorVersionWithRevision: 2022.3.62f1c1 (b0109b07edb8)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2205482798,
+          "Files": 35155,
+          "MaxFileWriteTimeUtc": "2026-03-20T12:30:47.6743888Z",
+          "MaxFilePath": "E:\\unity\\huihezhi\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 2252,
+          "Files": 2,
+          "MaxFileWriteTimeUtc": "2026-03-20T12:30:47.4988635Z",
+          "MaxFilePath": "E:\\unity\\huihezhi\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\ZhangDou\\Library",
+      "ProjectRoot": "E:\\unity\\ZhangDou",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2204012165,
+      "Files": 42855,
+      "MaxFileWriteTimeUtc": "2025-09-12T06:31:07.3736063Z",
+      "MaxFilePath": "E:\\unity\\ZhangDou\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2025-09-12T06:31:07.0207124Z",
+      "MaxTraceWriteTimeUtc": "2025-09-12T06:31:07.3736063Z",
+      "MaxTracePath": "E:\\unity\\ZhangDou\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.51f1c1; m_EditorVersionWithRevision: 2022.3.51f1c1 (e9648b0586b8)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2204012165,
+          "Files": 42855,
+          "MaxFileWriteTimeUtc": "2025-09-12T06:31:07.3736063Z",
+          "MaxFilePath": "E:\\unity\\ZhangDou\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 1976,
+          "Files": 2,
+          "MaxFileWriteTimeUtc": "2025-09-12T06:31:07.1381039Z",
+          "MaxFilePath": "E:\\unity\\ZhangDou\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\RPG-2\\Library",
+      "ProjectRoot": "E:\\unity\\RPG-2",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2200987399,
+      "Files": 37237,
+      "MaxFileWriteTimeUtc": "2026-10-04T16:36:06.5264586Z",
+      "MaxFilePath": "E:\\unity\\RPG-2\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-10-04T16:36:06.0142905Z",
+      "MaxTraceWriteTimeUtc": "2026-10-04T16:36:06.5264586Z",
+      "MaxTracePath": "E:\\unity\\RPG-2\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3; m_EditorVersionWithRevision: 2022.3.62f3 (96770f904ca7)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2200987399,
+          "Files": 37237,
+          "MaxFileWriteTimeUtc": "2026-10-04T16:36:06.5264586Z",
+          "MaxFilePath": "E:\\unity\\RPG-2\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 950398,
+          "Files": 20,
+          "MaxFileWriteTimeUtc": "2026-10-04T16:36:06.3771625Z",
+          "MaxFilePath": "E:\\unity\\RPG-2\\Logs\\shadercompiler-AssetImportWorker0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\lianji2\\Library",
+      "ProjectRoot": "E:\\unity\\lianji2",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2112538517,
+      "Files": 24235,
+      "MaxFileWriteTimeUtc": "2026-03-18T14:10:57.9501137Z",
+      "MaxFilePath": "E:\\unity\\lianji2\\Library\\EditorOnlyScriptingSettings.json",
+      "MaxDirectoryWriteTimeUtc": "2026-03-18T14:10:57.6365873Z",
+      "MaxTraceWriteTimeUtc": "2026-03-18T14:10:57.9501137Z",
+      "MaxTracePath": "E:\\unity\\lianji2\\Library\\EditorOnlyScriptingSettings.json",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3c1; m_EditorVersionWithRevision: 2022.3.62f3c1 (1623fc0bbb97)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2112538517,
+          "Files": 24235,
+          "MaxFileWriteTimeUtc": "2026-03-18T14:10:57.9501137Z",
+          "MaxFilePath": "E:\\unity\\lianji2\\Library\\EditorOnlyScriptingSettings.json",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 22555,
+          "Files": 3,
+          "MaxFileWriteTimeUtc": "2026-03-18T14:06:47.6447278Z",
+          "MaxFilePath": "E:\\unity\\lianji2\\Logs\\AssetImportWorker1-prev.log",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Temp",
+          "Bytes": 1059,
+          "Files": 3,
+          "MaxFileWriteTimeUtc": "2026-03-18T14:10:31.2653186Z",
+          "MaxFilePath": "E:\\unity\\lianji2\\Temp\\FSTimeGet-edec32e53fff280478c8b19e981f6310",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\zhanqi\\Library",
+      "ProjectRoot": "E:\\unity\\zhanqi",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2099960244,
+      "Files": 32554,
+      "MaxFileWriteTimeUtc": "2026-02-07T14:37:44.2666594Z",
+      "MaxFilePath": "E:\\unity\\zhanqi\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-02-07T14:37:44.0233131Z",
+      "MaxTraceWriteTimeUtc": "2026-02-07T14:37:44.2666594Z",
+      "MaxTracePath": "E:\\unity\\zhanqi\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f1c1; m_EditorVersionWithRevision: 2022.3.62f1c1 (b0109b07edb8)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2099960244,
+          "Files": 32554,
+          "MaxFileWriteTimeUtc": "2026-02-07T14:37:44.2666594Z",
+          "MaxFilePath": "E:\\unity\\zhanqi\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 1950,
+          "Files": 2,
+          "MaxFileWriteTimeUtc": "2026-02-07T14:37:44.1041242Z",
+          "MaxFilePath": "E:\\unity\\zhanqi\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\jszl\\Library",
+      "ProjectRoot": "E:\\unity\\jszl",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2062265571,
+      "Files": 31573,
+      "MaxFileWriteTimeUtc": "2026-03-21T12:01:41.7433925Z",
+      "MaxFilePath": "E:\\unity\\jszl\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-03-21T12:01:41.54825Z",
+      "MaxTraceWriteTimeUtc": "2026-03-21T12:01:41.7433925Z",
+      "MaxTracePath": "E:\\unity\\jszl\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f1c1; m_EditorVersionWithRevision: 2022.3.62f1c1 (b0109b07edb8)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2062265571,
+          "Files": 31573,
+          "MaxFileWriteTimeUtc": "2026-03-21T12:01:41.7433925Z",
+          "MaxFilePath": "E:\\unity\\jszl\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 1909,
+          "Files": 2,
+          "MaxFileWriteTimeUtc": "2026-03-21T12:01:41.6092063Z",
+          "MaxFilePath": "E:\\unity\\jszl\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\YZCT\\Library",
+      "ProjectRoot": "E:\\unity\\YZCT",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 1994712498,
+      "Files": 35976,
+      "MaxFileWriteTimeUtc": "2025-05-25T13:37:28.8996111Z",
+      "MaxFilePath": "E:\\unity\\YZCT\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2025-05-25T13:37:28.5701704Z",
+      "MaxTraceWriteTimeUtc": "2025-05-25T13:37:28.8996111Z",
+      "MaxTracePath": "E:\\unity\\YZCT\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.55f1c1; m_EditorVersionWithRevision: 2022.3.55f1c1 (06b99830297d)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 1994712498,
+          "Files": 35976,
+          "MaxFileWriteTimeUtc": "2025-05-25T13:37:28.8996111Z",
+          "MaxFilePath": "E:\\unity\\YZCT\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 303065,
+          "Files": 7,
+          "MaxFileWriteTimeUtc": "2025-05-25T13:37:28.8500254Z",
+          "MaxFilePath": "E:\\unity\\YZCT\\Logs\\shadercompiler-AssetImportWorker0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\RPJ\\Library",
+      "ProjectRoot": "E:\\unity\\RPJ",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 1960944396,
+      "Files": 26877,
+      "MaxFileWriteTimeUtc": "2026-01-07T12:22:00.7409962Z",
+      "MaxFilePath": "E:\\unity\\RPJ\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-01-07T12:22:00.4801871Z",
+      "MaxTraceWriteTimeUtc": "2026-01-07T12:22:00.7409962Z",
+      "MaxTracePath": "E:\\unity\\RPJ\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f1c1; m_EditorVersionWithRevision: 2022.3.62f1c1 (b0109b07edb8)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 1960944396,
+          "Files": 26877,
+          "MaxFileWriteTimeUtc": "2026-01-07T12:22:00.7409962Z",
+          "MaxFilePath": "E:\\unity\\RPJ\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 603812,
+          "Files": 13,
+          "MaxFileWriteTimeUtc": "2026-01-07T12:22:00.7279048Z",
+          "MaxFilePath": "E:\\unity\\RPJ\\Logs\\shadercompiler-AssetImportWorker0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\3C\\Library",
+      "ProjectRoot": "E:\\unity\\3C",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 1943725036,
+      "Files": 27619,
+      "MaxFileWriteTimeUtc": "2026-11-11T17:02:46.5207771Z",
+      "MaxFilePath": "E:\\unity\\3C\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-11-11T17:02:46.2826873Z",
+      "MaxTraceWriteTimeUtc": "2026-11-11T17:02:46.5207771Z",
+      "MaxTracePath": "E:\\unity\\3C\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3; m_EditorVersionWithRevision: 2022.3.62f3 (96770f904ca7)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 1943725036,
+          "Files": 27619,
+          "MaxFileWriteTimeUtc": "2026-11-11T17:02:46.5207771Z",
+          "MaxFilePath": "E:\\unity\\3C\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 72294,
+          "Files": 5,
+          "MaxFileWriteTimeUtc": "2026-11-11T17:02:46.3839347Z",
+          "MaxFilePath": "E:\\unity\\3C\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\WOW\\Library",
+      "ProjectRoot": "E:\\unity\\WOW",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 1922417630,
+      "Files": 26755,
+      "MaxFileWriteTimeUtc": "2026-02-07T14:38:35.134068Z",
+      "MaxFilePath": "E:\\unity\\WOW\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-02-07T14:38:34.9024261Z",
+      "MaxTraceWriteTimeUtc": "2026-02-07T14:38:35.134068Z",
+      "MaxTracePath": "E:\\unity\\WOW\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f1c1; m_EditorVersionWithRevision: 2022.3.62f1c1 (b0109b07edb8)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 1922417630,
+          "Files": 26755,
+          "MaxFileWriteTimeUtc": "2026-02-07T14:38:35.134068Z",
+          "MaxFilePath": "E:\\unity\\WOW\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 1909,
+          "Files": 2,
+          "MaxFileWriteTimeUtc": "2026-02-07T14:38:34.9665924Z",
+          "MaxFilePath": "E:\\unity\\WOW\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\科研\\Library",
+      "ProjectRoot": "E:\\unity\\科研",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 1864001450,
+      "Files": 23483,
+      "MaxFileWriteTimeUtc": "2026-08-11T08:43:12.7399984Z",
+      "MaxFilePath": "E:\\unity\\科研\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-08-11T08:43:12.4517012Z",
+      "MaxTraceWriteTimeUtc": "2026-08-11T08:43:12.7399984Z",
+      "MaxTracePath": "E:\\unity\\科研\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f1c1; m_EditorVersionWithRevision: 2022.3.62f1c1 (b0109b07edb8)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 1864001450,
+          "Files": 23483,
+          "MaxFileWriteTimeUtc": "2026-08-11T08:43:12.7399984Z",
+          "MaxFilePath": "E:\\unity\\科研\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 66060,
+          "Files": 19,
+          "MaxFileWriteTimeUtc": "2026-08-11T08:43:12.6817486Z",
+          "MaxFilePath": "E:\\unity\\科研\\Logs\\shadercompiler-AssetImportWorker0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\Hui he (2)\\Library",
+      "ProjectRoot": "E:\\unity\\Hui he (2)",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 1863278536,
+      "Files": 34270,
+      "MaxFileWriteTimeUtc": "2025-05-07T14:03:34.3396859Z",
+      "MaxFilePath": "E:\\unity\\Hui he (2)\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2025-05-07T14:03:34.1187036Z",
+      "MaxTraceWriteTimeUtc": "2025-05-07T14:03:34.3396859Z",
+      "MaxTracePath": "E:\\unity\\Hui he (2)\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.53f1c1; m_EditorVersionWithRevision: 2022.3.53f1c1 (f16e16b78e06)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 1863278536,
+          "Files": 34270,
+          "MaxFileWriteTimeUtc": "2025-05-07T14:03:34.3396859Z",
+          "MaxFilePath": "E:\\unity\\Hui he (2)\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 117616,
+          "Files": 5,
+          "MaxFileWriteTimeUtc": "2025-05-07T13:43:09.3739862Z",
+          "MaxFilePath": "E:\\unity\\Hui he (2)\\Logs\\AssetImportWorker1.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\My project (2)\\Library",
+      "ProjectRoot": "E:\\unity\\My project (2)",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 1647898590,
+      "Files": 20995,
+      "MaxFileWriteTimeUtc": "2026-03-20T12:33:53.1761123Z",
+      "MaxFilePath": "E:\\unity\\My project (2)\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-03-20T12:33:52.9743245Z",
+      "MaxTraceWriteTimeUtc": "2026-03-20T12:33:53.1761123Z",
+      "MaxTracePath": "E:\\unity\\My project (2)\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f1c1; m_EditorVersionWithRevision: 2022.3.62f1c1 (b0109b07edb8)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 1647898590,
+          "Files": 20995,
+          "MaxFileWriteTimeUtc": "2026-03-20T12:33:53.1761123Z",
+          "MaxFilePath": "E:\\unity\\My project (2)\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 1881,
+          "Files": 4,
+          "MaxFileWriteTimeUtc": "2026-03-20T12:33:53.038294Z",
+          "MaxFilePath": "E:\\unity\\My project (2)\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\My project (1)\\Library",
+      "ProjectRoot": "E:\\unity\\My project (1)",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 1580176103,
+      "Files": 25980,
+      "MaxFileWriteTimeUtc": "2025-08-24T14:52:36.2098582Z",
+      "MaxFilePath": "E:\\unity\\My project (1)\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2025-08-24T14:52:35.8972006Z",
+      "MaxTraceWriteTimeUtc": "2025-08-24T14:52:36.2098582Z",
+      "MaxTracePath": "E:\\unity\\My project (1)\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.53f1c1; m_EditorVersionWithRevision: 2022.3.53f1c1 (f16e16b78e06)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 1580176103,
+          "Files": 25980,
+          "MaxFileWriteTimeUtc": "2025-08-24T14:52:36.2098582Z",
+          "MaxFilePath": "E:\\unity\\My project (1)\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 1927,
+          "Files": 2,
+          "MaxFileWriteTimeUtc": "2025-08-24T14:52:35.9978355Z",
+          "MaxFilePath": "E:\\unity\\My project (1)\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\xfj\\Library",
+      "ProjectRoot": "E:\\unity\\xfj",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 1486601638,
+      "Files": 28191,
+      "MaxFileWriteTimeUtc": "2025-09-22T13:19:25.9819847Z",
+      "MaxFilePath": "E:\\unity\\xfj\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2025-09-22T13:19:25.7074251Z",
+      "MaxTraceWriteTimeUtc": "2025-09-22T13:19:25.9819847Z",
+      "MaxTracePath": "E:\\unity\\xfj\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.53f1c1; m_EditorVersionWithRevision: 2022.3.53f1c1 (f16e16b78e06)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 1486601638,
+          "Files": 28191,
+          "MaxFileWriteTimeUtc": "2025-09-22T13:19:25.9819847Z",
+          "MaxFilePath": "E:\\unity\\xfj\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 20030,
+          "Files": 4,
+          "MaxFileWriteTimeUtc": "2025-09-22T13:19:25.7680981Z",
+          "MaxFilePath": "E:\\unity\\xfj\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\HHZ\\Library",
+      "ProjectRoot": "E:\\unity\\HHZ",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 1447670890,
+      "Files": 27047,
+      "MaxFileWriteTimeUtc": "2025-09-23T09:07:07.3356022Z",
+      "MaxFilePath": "E:\\unity\\HHZ\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2025-09-23T09:07:07.0705772Z",
+      "MaxTraceWriteTimeUtc": "2025-09-23T09:07:07.3356022Z",
+      "MaxTracePath": "E:\\unity\\HHZ\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.53f1c1; m_EditorVersionWithRevision: 2022.3.53f1c1 (f16e16b78e06)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 1447670890,
+          "Files": 27047,
+          "MaxFileWriteTimeUtc": "2025-09-23T09:07:07.3356022Z",
+          "MaxFilePath": "E:\\unity\\HHZ\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 20855,
+          "Files": 4,
+          "MaxFileWriteTimeUtc": "2025-09-23T09:07:07.1403708Z",
+          "MaxFilePath": "E:\\unity\\HHZ\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\分层状态机\\Library",
+      "ProjectRoot": "E:\\unity\\分层状态机",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 502768040,
+      "Files": 17993,
+      "MaxFileWriteTimeUtc": "2026-07-03T13:02:30.1888975Z",
+      "MaxFilePath": "E:\\unity\\分层状态机\\Library\\StateCache\\SceneView\\6f\\6f2b5721343dae1c98c6f68c51ea902a.json",
+      "MaxDirectoryWriteTimeUtc": "2026-07-03T13:02:30.1718537Z",
+      "MaxTraceWriteTimeUtc": "2026-07-03T13:02:30.1888975Z",
+      "MaxTracePath": "E:\\unity\\分层状态机\\Library\\StateCache\\SceneView\\6f\\6f2b5721343dae1c98c6f68c51ea902a.json",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3c1; m_EditorVersionWithRevision: 2022.3.62f3c1 (1623fc0bbb97)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 502768040,
+          "Files": 17993,
+          "MaxFileWriteTimeUtc": "2026-07-03T13:02:30.1888975Z",
+          "MaxFilePath": "E:\\unity\\分层状态机\\Library\\StateCache\\SceneView\\6f\\6f2b5721343dae1c98c6f68c51ea902a.json",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 147,
+          "Files": 1,
+          "MaxFileWriteTimeUtc": "2026-07-03T12:42:01.4700164Z",
+          "MaxFilePath": "E:\\unity\\分层状态机\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\zq\\Library",
+      "ProjectRoot": "E:\\unity\\zq",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 263215185,
+      "Files": 16779,
+      "MaxFileWriteTimeUtc": "2025-11-29T11:58:52.6585733Z",
+      "MaxFilePath": "E:\\unity\\zq\\Library\\StateCache\\MainStageHierarchy\\4d\\4d2a36d9faf65734f0bbefb3ee623532.json",
+      "MaxDirectoryWriteTimeUtc": "2025-11-29T11:58:52.6321962Z",
+      "MaxTraceWriteTimeUtc": "2025-11-29T11:58:52.853172Z",
+      "MaxTracePath": "E:\\unity\\zq\\Logs\\shadercompiler-AssetImportWorker0.log",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f1c1; m_EditorVersionWithRevision: 2022.3.62f1c1 (b0109b07edb8)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 263215185,
+          "Files": 16779,
+          "MaxFileWriteTimeUtc": "2025-11-29T11:58:52.6585733Z",
+          "MaxFilePath": "E:\\unity\\zq\\Library\\StateCache\\MainStageHierarchy\\4d\\4d2a36d9faf65734f0bbefb3ee623532.json",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 99734,
+          "Files": 15,
+          "MaxFileWriteTimeUtc": "2025-11-29T11:58:52.853172Z",
+          "MaxFilePath": "E:\\unity\\zq\\Logs\\shadercompiler-AssetImportWorker0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\unity\\gongjue\\Library",
+      "ProjectRoot": "E:\\unity\\gongjue",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 243881715,
+      "Files": 15087,
+      "MaxFileWriteTimeUtc": "2026-02-01T11:12:23.7931665Z",
+      "MaxFilePath": "E:\\unity\\gongjue\\Library\\UIElements\\EditorWindows\\UnityEditor.InspectorWindow.pref",
+      "MaxDirectoryWriteTimeUtc": "2026-02-01T11:12:23.7931665Z",
+      "MaxTraceWriteTimeUtc": "2026-02-01T11:12:23.867232Z",
+      "MaxTracePath": "E:\\unity\\gongjue\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f1c1; m_EditorVersionWithRevision: 2022.3.62f1c1 (b0109b07edb8)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 243881715,
+          "Files": 15087,
+          "MaxFileWriteTimeUtc": "2026-02-01T11:12:23.7931665Z",
+          "MaxFilePath": "E:\\unity\\gongjue\\Library\\UIElements\\EditorWindows\\UnityEditor.InspectorWindow.pref",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 311114,
+          "Files": 4,
+          "MaxFileWriteTimeUtc": "2026-02-01T11:12:23.867232Z",
+          "MaxFilePath": "E:\\unity\\gongjue\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\github\\unity\\BBB\\Library",
+      "ProjectRoot": "E:\\github\\unity\\BBB",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 3083546600,
+      "Files": 35067,
+      "MaxFileWriteTimeUtc": "2026-05-26T13:50:19.0939341Z",
+      "MaxFilePath": "E:\\github\\unity\\BBB\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-05-26T13:50:18.6730189Z",
+      "MaxTraceWriteTimeUtc": "2026-05-26T13:50:19.0939341Z",
+      "MaxTracePath": "E:\\github\\unity\\BBB\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3c1; m_EditorVersionWithRevision: 2022.3.62f3c1 (1623fc0bbb97)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 3083546600,
+          "Files": 35067,
+          "MaxFileWriteTimeUtc": "2026-05-26T13:50:19.0939341Z",
+          "MaxFilePath": "E:\\github\\unity\\BBB\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 1850473,
+          "Files": 13,
+          "MaxFileWriteTimeUtc": "2026-05-26T13:50:19.0486484Z",
+          "MaxFilePath": "E:\\github\\unity\\BBB\\Logs\\shadercompiler-AssetImportWorker0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Temp",
+          "Bytes": 0,
+          "Files": 0,
+          "MaxFileWriteTimeUtc": null,
+          "MaxFilePath": null,
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\github\\unity\\dot-of-dot\\dot of dot\\Library",
+      "ProjectRoot": "E:\\github\\unity\\dot-of-dot\\dot of dot",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 3065227859,
+      "Files": 46636,
+      "MaxFileWriteTimeUtc": "2026-04-11T14:44:55.7598775Z",
+      "MaxFilePath": "E:\\github\\unity\\dot-of-dot\\dot of dot\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-04-11T14:44:55.4445788Z",
+      "MaxTraceWriteTimeUtc": "2026-04-11T14:44:55.7598775Z",
+      "MaxTracePath": "E:\\github\\unity\\dot-of-dot\\dot of dot\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3c1; m_EditorVersionWithRevision: 2022.3.62f3c1 (1623fc0bbb97)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 3065227859,
+          "Files": 46636,
+          "MaxFileWriteTimeUtc": "2026-04-11T14:44:55.7598775Z",
+          "MaxFilePath": "E:\\github\\unity\\dot-of-dot\\dot of dot\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 1063,
+          "Files": 1,
+          "MaxFileWriteTimeUtc": "2026-04-11T14:44:55.5582134Z",
+          "MaxFilePath": "E:\\github\\unity\\dot-of-dot\\dot of dot\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\github\\unity\\banana\\Library",
+      "ProjectRoot": "E:\\github\\unity\\banana",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2970144666,
+      "Files": 42805,
+      "MaxFileWriteTimeUtc": "2026-05-24T15:27:31.3115195Z",
+      "MaxFilePath": "E:\\github\\unity\\banana\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-05-24T15:27:30.7962258Z",
+      "MaxTraceWriteTimeUtc": "2026-05-24T15:27:31.3115195Z",
+      "MaxTracePath": "E:\\github\\unity\\banana\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.17f1c1; m_EditorVersionWithRevision: 2022.3.17f1c1 (a01dafa986ec)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2970144666,
+          "Files": 42805,
+          "MaxFileWriteTimeUtc": "2026-05-24T15:27:31.3115195Z",
+          "MaxFilePath": "E:\\github\\unity\\banana\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 739108,
+          "Files": 3,
+          "MaxFileWriteTimeUtc": "2026-05-24T15:27:30.9275568Z",
+          "MaxFilePath": "E:\\github\\unity\\banana\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\github\\unity\\ecs\\Library",
+      "ProjectRoot": "E:\\github\\unity\\ecs",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2643013139,
+      "Files": 40964,
+      "MaxFileWriteTimeUtc": "2026-08-04T15:50:38.4338576Z",
+      "MaxFilePath": "E:\\github\\unity\\ecs\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-08-04T15:50:37.909312Z",
+      "MaxTraceWriteTimeUtc": "2026-08-04T15:50:38.4338576Z",
+      "MaxTracePath": "E:\\github\\unity\\ecs\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3c1; m_EditorVersionWithRevision: 2022.3.62f3c1 (1623fc0bbb97)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2643013139,
+          "Files": 40964,
+          "MaxFileWriteTimeUtc": "2026-08-04T15:50:38.4338576Z",
+          "MaxFilePath": "E:\\github\\unity\\ecs\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 1909,
+          "Files": 2,
+          "MaxFileWriteTimeUtc": "2026-08-04T15:50:38.0046724Z",
+          "MaxFilePath": "E:\\github\\unity\\ecs\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Temp",
+          "Bytes": 0,
+          "Files": 0,
+          "MaxFileWriteTimeUtc": null,
+          "MaxFilePath": null,
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\github\\unity\\nongchangbaoweizhan\\Library",
+      "ProjectRoot": "E:\\github\\unity\\nongchangbaoweizhan",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2612530559,
+      "Files": 45327,
+      "MaxFileWriteTimeUtc": "2026-05-08T20:57:35.7708659Z",
+      "MaxFilePath": "E:\\github\\unity\\nongchangbaoweizhan\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-05-08T20:57:35.3638446Z",
+      "MaxTraceWriteTimeUtc": "2026-05-08T20:57:35.7708659Z",
+      "MaxTracePath": "E:\\github\\unity\\nongchangbaoweizhan\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3c1; m_EditorVersionWithRevision: 2022.3.62f3c1 (1623fc0bbb97)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2612530559,
+          "Files": 45327,
+          "MaxFileWriteTimeUtc": "2026-05-08T20:57:35.7708659Z",
+          "MaxFilePath": "E:\\github\\unity\\nongchangbaoweizhan\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 296372,
+          "Files": 4,
+          "MaxFileWriteTimeUtc": "2026-05-08T20:57:35.704829Z",
+          "MaxFilePath": "E:\\github\\unity\\nongchangbaoweizhan\\Logs\\shadercompiler-AssetImportWorker0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\github\\unity\\RPG\\Library",
+      "ProjectRoot": "E:\\github\\unity\\RPG",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2376372395,
+      "Files": 32628,
+      "MaxFileWriteTimeUtc": "2026-08-18T12:24:30.0847486Z",
+      "MaxFilePath": "E:\\github\\unity\\RPG\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-08-18T12:24:29.884779Z",
+      "MaxTraceWriteTimeUtc": "2026-08-18T12:24:30.0877578Z",
+      "MaxTracePath": "E:\\github\\unity\\RPG\\Logs\\shadercompiler-AssetImportWorker0.log",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3c1; m_EditorVersionWithRevision: 2022.3.62f3c1 (1623fc0bbb97)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2376372395,
+          "Files": 32628,
+          "MaxFileWriteTimeUtc": "2026-08-18T12:24:30.0847486Z",
+          "MaxFilePath": "E:\\github\\unity\\RPG\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 623949,
+          "Files": 9,
+          "MaxFileWriteTimeUtc": "2026-08-18T12:24:30.0877578Z",
+          "MaxFilePath": "E:\\github\\unity\\RPG\\Logs\\shadercompiler-AssetImportWorker0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\github\\ZDXT2\\Library",
+      "ProjectRoot": "E:\\github\\ZDXT2",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2361417631,
+      "Files": 36458,
+      "MaxFileWriteTimeUtc": "2026-10-04T17:11:28.6277973Z",
+      "MaxFilePath": "E:\\github\\ZDXT2\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-10-04T17:11:28.2798278Z",
+      "MaxTraceWriteTimeUtc": "2026-10-04T17:11:28.6277973Z",
+      "MaxTracePath": "E:\\github\\ZDXT2\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3; m_EditorVersionWithRevision: 2022.3.62f3 (96770f904ca7)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2361417631,
+          "Files": 36458,
+          "MaxFileWriteTimeUtc": "2026-10-04T17:11:28.6277973Z",
+          "MaxFilePath": "E:\\github\\ZDXT2\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 631608,
+          "Files": 13,
+          "MaxFileWriteTimeUtc": "2026-10-04T17:11:28.5983702Z",
+          "MaxFilePath": "E:\\github\\ZDXT2\\Logs\\shadercompiler-AssetImportWorker0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\github\\ZDXT\\Library",
+      "ProjectRoot": "E:\\github\\ZDXT",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2336666669,
+      "Files": 36727,
+      "MaxFileWriteTimeUtc": "2026-09-14T04:03:31.9986188Z",
+      "MaxFilePath": "E:\\github\\ZDXT\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-09-14T04:03:31.7432665Z",
+      "MaxTraceWriteTimeUtc": "2026-09-14T04:03:31.9986188Z",
+      "MaxTracePath": "E:\\github\\ZDXT\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3c1; m_EditorVersionWithRevision: 2022.3.62f3c1 (1623fc0bbb97)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2336666669,
+          "Files": 36727,
+          "MaxFileWriteTimeUtc": "2026-09-14T04:03:31.9986188Z",
+          "MaxFilePath": "E:\\github\\ZDXT\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 23037,
+          "Files": 5,
+          "MaxFileWriteTimeUtc": "2026-09-14T04:03:31.9868247Z",
+          "MaxFilePath": "E:\\github\\ZDXT\\Logs\\shadercompiler-AssetImportWorker0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\github\\unity\\RPG\\ecs\\Library",
+      "ProjectRoot": "E:\\github\\unity\\RPG\\ecs",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2076553159,
+      "Files": 33902,
+      "MaxFileWriteTimeUtc": "2026-07-13T11:45:37.2035888Z",
+      "MaxFilePath": "E:\\github\\unity\\RPG\\ecs\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-07-13T11:45:36.6815229Z",
+      "MaxTraceWriteTimeUtc": "2026-07-13T11:45:37.2035888Z",
+      "MaxTracePath": "E:\\github\\unity\\RPG\\ecs\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3c1; m_EditorVersionWithRevision: 2022.3.62f3c1 (1623fc0bbb97)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2076553159,
+          "Files": 33902,
+          "MaxFileWriteTimeUtc": "2026-07-13T11:45:37.2035888Z",
+          "MaxFilePath": "E:\\github\\unity\\RPG\\ecs\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 78173,
+          "Files": 4,
+          "MaxFileWriteTimeUtc": "2026-07-13T11:45:36.7621883Z",
+          "MaxFilePath": "E:\\github\\unity\\RPG\\ecs\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\github\\RPG-1\\Library",
+      "ProjectRoot": "E:\\github\\RPG-1",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2055941453,
+      "Files": 33354,
+      "MaxFileWriteTimeUtc": "2026-10-04T17:16:49.9957207Z",
+      "MaxFilePath": "E:\\github\\RPG-1\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-10-04T17:16:49.7824234Z",
+      "MaxTraceWriteTimeUtc": "2026-10-04T17:16:49.9957207Z",
+      "MaxTracePath": "E:\\github\\RPG-1\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3; m_EditorVersionWithRevision: 2022.3.62f3 (96770f904ca7)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2055941453,
+          "Files": 33354,
+          "MaxFileWriteTimeUtc": "2026-10-04T17:16:49.9957207Z",
+          "MaxFilePath": "E:\\github\\RPG-1\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 858474,
+          "Files": 18,
+          "MaxFileWriteTimeUtc": "2026-10-04T17:16:49.8836789Z",
+          "MaxFilePath": "E:\\github\\RPG-1\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Temp",
+          "Bytes": 0,
+          "Files": 0,
+          "MaxFileWriteTimeUtc": null,
+          "MaxFilePath": null,
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\github\\RPG-1-verify\\Library",
+      "ProjectRoot": "E:\\github\\RPG-1-verify",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 1930716379,
+      "Files": 27587,
+      "MaxFileWriteTimeUtc": "2026-10-01T18:15:58.0627722Z",
+      "MaxFilePath": "E:\\github\\RPG-1-verify\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-10-01T18:15:57.470506Z",
+      "MaxTraceWriteTimeUtc": "2026-10-01T18:15:58.0627722Z",
+      "MaxTracePath": "E:\\github\\RPG-1-verify\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3; m_EditorVersionWithRevision: 2022.3.62f3 (96770f904ca7)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 1930716379,
+          "Files": 27587,
+          "MaxFileWriteTimeUtc": "2026-10-01T18:15:58.0627722Z",
+          "MaxFilePath": "E:\\github\\RPG-1-verify\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 0,
+          "Files": 0,
+          "MaxFileWriteTimeUtc": null,
+          "MaxFilePath": null,
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\rpg_probe\\Library",
+      "ProjectRoot": "E:\\rpg_probe",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 1935117007,
+      "Files": 27585,
+      "MaxFileWriteTimeUtc": "2026-10-01T17:33:32.6151055Z",
+      "MaxFilePath": "E:\\rpg_probe\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-10-01T17:33:32.5857264Z",
+      "MaxTraceWriteTimeUtc": "2026-10-01T17:33:32.6151055Z",
+      "MaxTracePath": "E:\\rpg_probe\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3; m_EditorVersionWithRevision: 2022.3.62f3 (96770f904ca7)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 1935117007,
+          "Files": 27585,
+          "MaxFileWriteTimeUtc": "2026-10-01T17:33:32.6151055Z",
+          "MaxFilePath": "E:\\rpg_probe\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 673108,
+          "Files": 16,
+          "MaxFileWriteTimeUtc": "2026-10-01T17:33:32.4530167Z",
+          "MaxFilePath": "E:\\rpg_probe\\Logs\\shadercompiler-UnityShaderCompiler.exe14.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\rpg_probe3\\Library",
+      "ProjectRoot": "E:\\rpg_probe3",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 1935159662,
+      "Files": 27587,
+      "MaxFileWriteTimeUtc": "2026-10-01T17:52:49.8013317Z",
+      "MaxFilePath": "E:\\rpg_probe3\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-10-01T17:52:49.7721353Z",
+      "MaxTraceWriteTimeUtc": "2026-10-01T17:52:49.8013317Z",
+      "MaxTracePath": "E:\\rpg_probe3\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3; m_EditorVersionWithRevision: 2022.3.62f3 (96770f904ca7)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 1935159662,
+          "Files": 27587,
+          "MaxFileWriteTimeUtc": "2026-10-01T17:52:49.8013317Z",
+          "MaxFilePath": "E:\\rpg_probe3\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 673138,
+          "Files": 16,
+          "MaxFileWriteTimeUtc": "2026-10-01T17:52:49.5938579Z",
+          "MaxFilePath": "E:\\rpg_probe3\\Logs\\shadercompiler-UnityShaderCompiler.exe15.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\rpg_probe4\\Library",
+      "ProjectRoot": "E:\\rpg_probe4",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 1935364321,
+      "Files": 27586,
+      "MaxFileWriteTimeUtc": "2026-10-01T18:02:07.3797617Z",
+      "MaxFilePath": "E:\\rpg_probe4\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-10-01T18:02:07.3556642Z",
+      "MaxTraceWriteTimeUtc": "2026-10-01T18:02:07.3797617Z",
+      "MaxTracePath": "E:\\rpg_probe4\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3; m_EditorVersionWithRevision: 2022.3.62f3 (96770f904ca7)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 1935364321,
+          "Files": 27586,
+          "MaxFileWriteTimeUtc": "2026-10-01T18:02:07.3797617Z",
+          "MaxFilePath": "E:\\rpg_probe4\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 673138,
+          "Files": 16,
+          "MaxFileWriteTimeUtc": "2026-10-01T18:02:07.2682848Z",
+          "MaxFilePath": "E:\\rpg_probe4\\Logs\\shadercompiler-UnityShaderCompiler.exe14.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\rpg1review\\Library",
+      "ProjectRoot": "E:\\rpg1review",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 1933531276,
+      "Files": 27588,
+      "MaxFileWriteTimeUtc": "2026-10-01T17:44:28.9468223Z",
+      "MaxFilePath": "E:\\rpg1review\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-10-01T17:44:28.3468708Z",
+      "MaxTraceWriteTimeUtc": "2026-10-01T17:44:28.9468223Z",
+      "MaxTracePath": "E:\\rpg1review\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.62f3; m_EditorVersionWithRevision: 2022.3.62f3 (96770f904ca7)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 1933531276,
+          "Files": 27588,
+          "MaxFileWriteTimeUtc": "2026-10-01T17:44:28.9468223Z",
+          "MaxFilePath": "E:\\rpg1review\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 0,
+          "Files": 0,
+          "MaxFileWriteTimeUtc": null,
+          "MaxFilePath": null,
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    },
+    {
+      "Path": "E:\\Git\\banana\\Library",
+      "ProjectRoot": "E:\\Git\\banana",
+      "CutoffUtc": "2026-11-13T08:34:50Z",
+      "Bytes": 2891800625,
+      "Files": 41889,
+      "MaxFileWriteTimeUtc": "2026-05-20T12:40:06.0792167Z",
+      "MaxFilePath": "E:\\Git\\banana\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "MaxDirectoryWriteTimeUtc": "2026-05-20T12:40:04.1455721Z",
+      "MaxTraceWriteTimeUtc": "2026-05-20T12:40:06.0792167Z",
+      "MaxTracePath": "E:\\Git\\banana\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+      "ProjectVersion": "m_EditorVersion: 2022.3.17f1c1; m_EditorVersionWithRevision: 2022.3.17f1c1 (a01dafa986ec)",
+      "ProjectStructureVerified": true,
+      "TraceStats": [
+        {
+          "Name": "Library",
+          "Bytes": 2891800625,
+          "Files": 41889,
+          "MaxFileWriteTimeUtc": "2026-05-20T12:40:06.0792167Z",
+          "MaxFilePath": "E:\\Git\\banana\\Library\\BurstCache\\JIT\\BurstCacheManifest.cm",
+          "Errors": [],
+          "ReparsePoints": []
+        },
+        {
+          "Name": "Logs",
+          "Bytes": 198,
+          "Files": 1,
+          "MaxFileWriteTimeUtc": "2026-05-20T12:40:04.2680365Z",
+          "MaxFilePath": "E:\\Git\\banana\\Logs\\shadercompiler-UnityShaderCompiler.exe0.log",
+          "Errors": [],
+          "ReparsePoints": []
+        }
+      ],
+      "ReparsePoints": [],
+      "NestedProjects": [],
+      "Errors": [],
+      "Decision": "DeleteEligible",
+      "Reasons": [
+        "Verified Unity project; complete metadata; no linked/embedded project or recent runtime evidence"
+      ]
+    }
+  ],
+  "AdditionalGitMarkerCheckUtc": "2026-11-16T08:40:40.7177089Z",
+  "AdditionalGitMarkers": []
+}

@@ -1,0 +1,331 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &500001
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 500002}
+  - component: {fileID: 500003}
+  m_Layer: 0
+  m_Name: 角色装备控制器
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &500002
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 500001}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 501002}
+  - {fileID: 502002}
+  - {fileID: 503002}
+  - {fileID: 504002}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &500003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 500001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e73b06bfab4f4dfeb2ac474f7761481b, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  ownerKey: local-player
+  manifestCatalog: {fileID: 11400000, guid: 30764ee9304076d49882ee9672e4fab9, type: 2}
+  selectedWeaponSlot: 8
+  runtimeItemDefinitions:
+  - {fileID: 11400000, guid: 24150e1572cd41c19785d34f79f73958, type: 2}
+  - {fileID: 11400000, guid: 1ede7fa861e2419fb65aecf2a9c8df86, type: 2}
+  - {fileID: 11400000, guid: 6e2c1f769fb04120b08355e6f442dd3c, type: 2}
+  - {fileID: 11400000, guid: 24b8934052384af99b62f108677445b3, type: 2}
+  - {fileID: 11400000, guid: 5f8bbf9999fb497ebc14bbcb774866f9, type: 2}
+  - {fileID: 11400000, guid: 825d65d52c4840c4a87150e1c09dc6bb, type: 2}
+  - {fileID: 11400000, guid: 05840fb2ae12474ba79cc1dd4ad05030, type: 2}
+  slots:
+  - slotId: 0
+    containerController: {fileID: 501003}
+    rule: {fileID: 11400000, guid: db833065044a49e6b26cf0583e7b9f56, type: 2}
+    initialItem: {fileID: 0}
+    initialItemId:
+  - slotId: 1
+    containerController: {fileID: 502003}
+    rule: {fileID: 11400000, guid: 391a2ed8340643a984ab9b2eabb9cbe7, type: 2}
+    initialItem: {fileID: 0}
+    initialItemId:
+  - slotId: 2
+    containerController: {fileID: 503003}
+    rule: {fileID: 11400000, guid: 3c8ec33f027d4953ad83021611d47852, type: 2}
+    initialItem: {fileID: 0}
+    initialItemId:
+  - slotId: 3
+    containerController: {fileID: 504003}
+    rule: {fileID: 11400000, guid: 8d9bf8d13ee04526aafae57532717135, type: 2}
+    initialItem: {fileID: 0}
+    initialItemId:
+  - slotId: 4
+    containerController: {fileID: 0}
+    rule: {fileID: 11400000, guid: 0e981bcf182a48b1b2a30f1dbb7b05cc, type: 2}
+    initialItem: {fileID: 0}
+    initialItemId:
+  - slotId: 5
+    containerController: {fileID: 0}
+    rule: {fileID: 11400000, guid: 7ea7a91ccada447180db91467c01db31, type: 2}
+    initialItem: {fileID: 0}
+    initialItemId:
+  - slotId: 6
+    containerController: {fileID: 0}
+    rule: {fileID: 11400000, guid: f42f2fc2531545e99ae61eb7ffc5da15, type: 2}
+    initialItem: {fileID: 0}
+    initialItemId:
+  - slotId: 7
+    containerController: {fileID: 0}
+    rule: {fileID: 11400000, guid: 2860636fb3824aa0847a37d70e79c7d9, type: 2}
+    initialItem: {fileID: 0}
+    initialItemId:
+  - slotId: 8
+    containerController: {fileID: 0}
+    rule: {fileID: 11400000, guid: fb02b103d5af4d8a9c7f273f9b5473bf, type: 2}
+    initialItem: {fileID: 0}
+    initialItemId:
+  - slotId: 9
+    containerController: {fileID: 0}
+    rule: {fileID: 11400000, guid: 94dbc67fdced4d87977d34c13b8de17d, type: 2}
+    initialItem: {fileID: 0}
+    initialItemId:
+--- !u!1 &501001
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 501002}
+  - component: {fileID: 501003}
+  m_Layer: 0
+  m_Name: ChestRig
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &501002
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 501001}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 500002}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &501003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 501001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 63239f695149499b8e4b572002056bb4, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  containerId: chestrig
+  autoGenerateInstanceId: 1
+  containerType: 1
+  gridSize: {x: 4, y: 3}
+  layoutMode: 1
+  validCells: []
+  containerIcon: {fileID: 21300000, guid: 35fde32347a740df8939847890ab0ec3, type: 3}
+  containerItemDefinition: {fileID: 11400000, guid: 0880fceb0174441291deef694a9151f5, type: 2}
+  containerSlotRule: {fileID: 11400000, guid: db833065044a49e6b26cf0583e7b9f56, type: 2}
+  contents: []
+  seedTestItems: 0
+  testItems: []
+--- !u!1 &502001
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 502002}
+  - component: {fileID: 502003}
+  m_Layer: 0
+  m_Name: Pocket
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &502002
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 502001}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 500002}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &502003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 502001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 63239f695149499b8e4b572002056bb4, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  containerId: pocket
+  autoGenerateInstanceId: 1
+  containerType: 2
+  gridSize: {x: 4, y: 1}
+  layoutMode: 1
+  validCells: []
+  containerIcon: {fileID: 21300000, guid: 90836ed84f2744d8825373ee57fc8673, type: 3}
+  containerItemDefinition: {fileID: 11400000, guid: 6e8fd83e531046ddb6bd0157ca612943, type: 2}
+  containerSlotRule: {fileID: 11400000, guid: 391a2ed8340643a984ab9b2eabb9cbe7, type: 2}
+  contents: []
+  seedTestItems: 0
+  testItems: []
+--- !u!1 &503001
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 503002}
+  - component: {fileID: 503003}
+  m_Layer: 0
+  m_Name: Backpack
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &503002
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 503001}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 500002}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &503003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 503001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 63239f695149499b8e4b572002056bb4, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  containerId: backpack
+  autoGenerateInstanceId: 1
+  containerType: 3
+  gridSize: {x: 5, y: 3}
+  layoutMode: 1
+  validCells: []
+  containerIcon: {fileID: 21300000, guid: b21d329e0d0643b9b6443801c30fcdc0, type: 3}
+  containerItemDefinition: {fileID: 11400000, guid: 8f4771852f054defbfc1dd11b9132e36, type: 2}
+  containerSlotRule: {fileID: 11400000, guid: 3c8ec33f027d4953ad83021611d47852, type: 2}
+  contents: []
+  seedTestItems: 0
+  testItems: []
+--- !u!1 &504001
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 504002}
+  - component: {fileID: 504003}
+  m_Layer: 0
+  m_Name: SafeBox
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &504002
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 504001}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 500002}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &504003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 504001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 63239f695149499b8e4b572002056bb4, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  containerId: safebox
+  autoGenerateInstanceId: 1
+  containerType: 4
+  gridSize: {x: 2, y: 2}
+  layoutMode: 1
+  validCells: []
+  containerIcon: {fileID: 21300000, guid: 3794fb0d991246a19c6fbbbf1267fe8f, type: 3}
+  containerItemDefinition: {fileID: 11400000, guid: 98721bdefaf748dbb64cf505b9a8e29e, type: 2}
+  containerSlotRule: {fileID: 11400000, guid: 8d9bf8d13ee04526aafae57532717135, type: 2}
+  contents: []
+  seedTestItems: 0
+  testItems: []

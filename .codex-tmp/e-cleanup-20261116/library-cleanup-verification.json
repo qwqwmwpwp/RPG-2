@@ -1,0 +1,965 @@
+{
+  "VerifiedUtc": "2026-11-16T08:55:39.6344939Z",
+  "Completed": 47,
+  "CompletedBytes": 99064433510.0,
+  "CompletedFiles": 1534633.0,
+  "PreservedOrFailed": [],
+  "TargetsAbsent": 47,
+  "SourceStructureChecked": 47,
+  "SourceStructureIssues": [],
+  "ProtectedProjects": {
+    "CurrentRpg2LibraryPresent": true,
+    "NxM1LibraryPresent": true,
+    "NxM1LogsPresent": true
+  },
+  "LogPaths": [
+    "E:\\github\\RPG-2\\.codex-tmp\\e-cleanup-20261116\\execution-20261116-164149-657.jsonl",
+    "E:\\github\\RPG-2\\.codex-tmp\\e-cleanup-20261116\\execution-20261116-164837-339-2872ebd6.jsonl",
+    "E:\\github\\RPG-2\\.codex-tmp\\e-cleanup-20261116\\execution-20261116-164837-325-2894fdc2.jsonl"
+  ],
+  "FreeBytesNow": 340921352192,
+  "PerTargetChecks": [
+    {
+      "Library": "E:\\unity\\hhzpt\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\hhzpt",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\My project\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\My project",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\live2D-2\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\live2D-2",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\TieJiangPu\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\TieJiangPu",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\lianji\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\lianji",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\ecs1\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\ecs1",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\lianji3\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\lianji3",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\特效\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\特效",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\zdxt\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\zdxt",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\My project (3)\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\My project (3)",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\UmaViewer\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\UmaViewer",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\BUG\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\BUG",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\huihezhi\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\huihezhi",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\ZhangDou\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\ZhangDou",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\RPG-2\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\RPG-2",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\lianji2\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\lianji2",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\zhanqi\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\zhanqi",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\jszl\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\jszl",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\YZCT\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\YZCT",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\RPJ\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\RPJ",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\3C\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\3C",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\WOW\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\WOW",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\科研\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\科研",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\Hui he (2)\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\Hui he (2)",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\My project (2)\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\My project (2)",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\My project (1)\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\My project (1)",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\xfj\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\xfj",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\HHZ\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\HHZ",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\分层状态机\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\分层状态机",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\zq\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\zq",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\unity\\gongjue\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\unity\\gongjue",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\github\\unity\\BBB\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\github\\unity\\BBB",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\github\\unity\\dot-of-dot\\dot of dot\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\github\\unity\\dot-of-dot\\dot of dot",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\github\\unity\\banana\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\github\\unity\\banana",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\github\\unity\\ecs\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\github\\unity\\ecs",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\github\\unity\\nongchangbaoweizhan\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\github\\unity\\nongchangbaoweizhan",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\github\\unity\\RPG\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\github\\unity\\RPG",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\github\\ZDXT2\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\github\\ZDXT2",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\github\\ZDXT\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\github\\ZDXT",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\github\\unity\\RPG\\ecs\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\github\\unity\\RPG\\ecs",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\github\\RPG-1\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\github\\RPG-1",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\github\\RPG-1-verify\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\github\\RPG-1-verify",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\rpg_probe\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\rpg_probe",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\rpg_probe3\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\rpg_probe3",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\rpg_probe4\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\rpg_probe4",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\rpg1review\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\rpg1review",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    },
+    {
+      "Library": "E:\\Git\\banana\\Library",
+      "LibraryAbsent": true,
+      "ProjectRoot": "E:\\Git\\banana",
+      "ProjectRootExists": true,
+      "AssetsExists": true,
+      "PackagesExists": true,
+      "ProjectSettingsExists": true,
+      "ProjectVersionExists": true
+    }
+  ],
+  "FinalEvents": [
+    {
+      "Utc": "2026-11-16T08:50:26.2751806Z",
+      "Path": "E:\\Git\\banana\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2891800625,
+      "FilesBefore": 41889,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:55:12.7709178Z",
+      "Path": "E:\\github\\RPG-1-verify\\Library",
+      "Status": "Completed",
+      "BytesBefore": 1930716379,
+      "FilesBefore": 27587,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:54:32.4633307Z",
+      "Path": "E:\\github\\RPG-1\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2055941453,
+      "FilesBefore": 33354,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:50:06.6929728Z",
+      "Path": "E:\\github\\unity\\banana\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2970144666,
+      "FilesBefore": 42805,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:49:02.8617789Z",
+      "Path": "E:\\github\\unity\\BBB\\Library",
+      "Status": "Completed",
+      "BytesBefore": 3083546600,
+      "FilesBefore": 35067,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:49:36.5775031Z",
+      "Path": "E:\\github\\unity\\dot-of-dot\\dot of dot\\Library",
+      "Status": "Completed",
+      "BytesBefore": 3065227859,
+      "FilesBefore": 46636,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:51:05.7910213Z",
+      "Path": "E:\\github\\unity\\ecs\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2643013139,
+      "FilesBefore": 40964,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:51:33.1340452Z",
+      "Path": "E:\\github\\unity\\nongchangbaoweizhan\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2612530559,
+      "FilesBefore": 45327,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:52:58.7218212Z",
+      "Path": "E:\\github\\unity\\RPG\\ecs\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2076553159,
+      "FilesBefore": 33902,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:51:50.6789413Z",
+      "Path": "E:\\github\\unity\\RPG\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2376372395,
+      "FilesBefore": 32628,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:52:35.982214Z",
+      "Path": "E:\\github\\ZDXT\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2336666669,
+      "FilesBefore": 36727,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:52:12.2510897Z",
+      "Path": "E:\\github\\ZDXT2\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2361417631,
+      "FilesBefore": 36458,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:48:57.7469404Z",
+      "Path": "E:\\rpg_probe\\Library",
+      "Status": "Completed",
+      "BytesBefore": 1935117007,
+      "FilesBefore": 27585,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:49:17.9010631Z",
+      "Path": "E:\\rpg_probe3\\Library",
+      "Status": "Completed",
+      "BytesBefore": 1935159662,
+      "FilesBefore": 27587,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:49:37.4697537Z",
+      "Path": "E:\\rpg_probe4\\Library",
+      "Status": "Completed",
+      "BytesBefore": 1935364321,
+      "FilesBefore": 27586,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:49:56.6727947Z",
+      "Path": "E:\\rpg1review\\Library",
+      "Status": "Completed",
+      "BytesBefore": 1933531276,
+      "FilesBefore": 27588,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:50:08.6805913Z",
+      "Path": "E:\\unity\\3C\\Library",
+      "Status": "Completed",
+      "BytesBefore": 1943725036,
+      "FilesBefore": 27619,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:52:46.1903634Z",
+      "Path": "E:\\unity\\分层状态机\\Library",
+      "Status": "Completed",
+      "BytesBefore": 502768040,
+      "FilesBefore": 17993,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:51:14.4613538Z",
+      "Path": "E:\\unity\\科研\\Library",
+      "Status": "Completed",
+      "BytesBefore": 1864001450,
+      "FilesBefore": 23483,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:44:34.3294738Z",
+      "Path": "E:\\unity\\特效\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2341166275,
+      "FilesBefore": 37975,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:45:44.7528171Z",
+      "Path": "E:\\unity\\BUG\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2227356337,
+      "FilesBefore": 38833,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:44:00.7371449Z",
+      "Path": "E:\\unity\\ecs1\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2356847437,
+      "FilesBefore": 40917,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:53:07.589946Z",
+      "Path": "E:\\unity\\gongjue\\Library",
+      "Status": "Completed",
+      "BytesBefore": 243881715,
+      "FilesBefore": 15087,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:52:34.1346911Z",
+      "Path": "E:\\unity\\HHZ\\Library",
+      "Status": "Completed",
+      "BytesBefore": 1447670890,
+      "FilesBefore": 27047,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:42:09.0864356Z",
+      "Path": "E:\\unity\\hhzpt\\Library",
+      "Status": "Completed",
+      "BytesBefore": 3183505934,
+      "FilesBefore": 30535,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:51:33.946088Z",
+      "Path": "E:\\unity\\Hui he (2)\\Library",
+      "Status": "Completed",
+      "BytesBefore": 1863278536,
+      "FilesBefore": 34270,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:46:02.9565855Z",
+      "Path": "E:\\unity\\huihezhi\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2205482798,
+      "FilesBefore": 35155,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:49:05.1294638Z",
+      "Path": "E:\\unity\\jszl\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2062265571,
+      "FilesBefore": 31573,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:43:37.0817447Z",
+      "Path": "E:\\unity\\lianji\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2385647761,
+      "FilesBefore": 37538,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:48:20.6631666Z",
+      "Path": "E:\\unity\\lianji2\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2112538517,
+      "FilesBefore": 24235,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:44:17.1849752Z",
+      "Path": "E:\\unity\\lianji3\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2344876281,
+      "FilesBefore": 32787,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:42:54.7521812Z",
+      "Path": "E:\\unity\\live2D-2\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2545437633,
+      "FilesBefore": 36498,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:51:59.167116Z",
+      "Path": "E:\\unity\\My project (1)\\Library",
+      "Status": "Completed",
+      "BytesBefore": 1580176103,
+      "FilesBefore": 25980,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:51:44.8166996Z",
+      "Path": "E:\\unity\\My project (2)\\Library",
+      "Status": "Completed",
+      "BytesBefore": 1647898590,
+      "FilesBefore": 20995,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:45:07.2153885Z",
+      "Path": "E:\\unity\\My project (3)\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2241423561,
+      "FilesBefore": 31666,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:42:34.860192Z",
+      "Path": "E:\\unity\\My project\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2707085359,
+      "FilesBefore": 47542,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:48:06.4545887Z",
+      "Path": "E:\\unity\\RPG-2\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2200987399,
+      "FilesBefore": 37237,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:49:49.0483963Z",
+      "Path": "E:\\unity\\RPJ\\Library",
+      "Status": "Completed",
+      "BytesBefore": 1960944396,
+      "FilesBefore": 26877,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:43:15.4344221Z",
+      "Path": "E:\\unity\\TieJiangPu\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2404720755,
+      "FilesBefore": 41615,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:45:22.9410572Z",
+      "Path": "E:\\unity\\UmaViewer\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2240002590,
+      "FilesBefore": 27652,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:50:27.6764681Z",
+      "Path": "E:\\unity\\WOW\\Library",
+      "Status": "Completed",
+      "BytesBefore": 1922417630,
+      "FilesBefore": 26755,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:52:16.857061Z",
+      "Path": "E:\\unity\\xfj\\Library",
+      "Status": "Completed",
+      "BytesBefore": 1486601638,
+      "FilesBefore": 28191,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:49:30.1387862Z",
+      "Path": "E:\\unity\\YZCT\\Library",
+      "Status": "Completed",
+      "BytesBefore": 1994712498,
+      "FilesBefore": 35976,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:44:51.8461529Z",
+      "Path": "E:\\unity\\zdxt\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2336721786,
+      "FilesBefore": 36724,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:47:23.2946727Z",
+      "Path": "E:\\unity\\ZhangDou\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2204012165,
+      "FilesBefore": 42855,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:48:42.4149494Z",
+      "Path": "E:\\unity\\zhanqi\\Library",
+      "Status": "Completed",
+      "BytesBefore": 2099960244,
+      "FilesBefore": 32554,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    },
+    {
+      "Utc": "2026-11-16T08:52:57.3292721Z",
+      "Path": "E:\\unity\\zq\\Library",
+      "Status": "Completed",
+      "BytesBefore": 263215185,
+      "FilesBefore": 16779,
+      "Reason": "Library removed; parent project retained",
+      "RemainingBytes": null,
+      "RemainingFiles": null
+    }
+  ]
+}

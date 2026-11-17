@@ -1,0 +1,9 @@
+{
+  "name": "RPG4.Networking.Contracts",
+  "rootNamespace": "RPG4.Networking.Contracts",
+  "references": [
+    "Mirror",
+    "RPG4.Raid.Domain"
+  ],
+  "autoReferenced": true
+}

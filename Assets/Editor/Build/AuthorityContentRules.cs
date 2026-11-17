@@ -16,11 +16,9 @@ namespace RPG4.Editor.Build
             "RPG4.Networking.OnlineSpawnConfiguration", "RPG4.Networking.ExtractionZone", "RPG4.Networking.RaidLootBag", "RPG4.Networking.OnlinePlayerIdentity",
             "RPG4.Networking.NetworkPlayerController", "RPG4.Networking.NetworkCharacterHealth", "RPG4.Combat.ItemAssemblyModelView",
             "RPG4.CharacterAttributes.CharacterAttributes", "RPG4.Combat.TrainingDummy", "RPG4.Combat.ContactDamage",
-            "RPG4.PlayerMovement.Player", "RPG4.PlayerMovement.PlayerEquipment", "RPG4.Input.PlayerInput",
-            "RPG4.Backpack.Runtime.BackpackInventory", "RPG4.Backpack.Runtime.EquipmentInventory",
-            "RPG4.Backpack.Runtime.CharacterBackpack", "RPG4.Backpack.Runtime.ChestInventory",
-            "RPG4.Backpack.Network.BackpackNetworkPlayer", "RPG4.Backpack.Network.BackpackNetworkInventory",
-            "RPG4.Backpack.Network.BackpackNetworkEquipment", "RPG4.Backpack.Network.NetworkWorldPickup"
+            "RPG4.LoadoutTemplate.NetworkRoleLoadout", "RPG4.LoadoutTemplate.NetworkLootSource", "RPG4.LoadoutTemplate.FixedLootChest", "RPG4.LoadoutTemplate.NetworkGroundLootItem", "RPG4.LoadoutTemplate.RoleLoadoutController",
+            "RPG4.LoadoutTemplate.BackpackContainerController",
+            "RPG4.PlayerMovement.Player", "RPG4.PlayerMovement.PlayerEquipment", "RPG4.Input.PlayerInput"
         };
         internal static readonly HashSet<string> ManagedTypes = new HashSet<string>(StringComparer.Ordinal)
         {
@@ -30,16 +28,17 @@ namespace RPG4.Editor.Build
             "ItemAssemblyDefinitionFragment", "AssemblySizeDefinitionFragment"
         };
         internal static readonly string[] SourceRoots = {
-            "Assets/_Project/Runtime/Scripts/CharacterAttributes", "Assets/_Project/Runtime/Scripts/Combat", "Assets/_Project/Runtime/Scripts/PlayerIntent",
-            "Assets/_Project/Runtime/Scripts/PlayerMovement", "Assets/_Project/Runtime/Scripts/StateMachine", "Assets/_Project/Runtime/Scripts/Networking",
-            "Assets/_Project/Runtime/Backpack/Scripts/Core", "Assets/_Project/Runtime/Backpack/Scripts/Equipment", "Assets/_Project/Runtime/Backpack/Scripts/Inventory",
-            "Assets/_Project/Runtime/Backpack/Scripts/Items", "Assets/_Project/Runtime/Backpack/Scripts/Runtime", "Assets/_Project/Runtime/Backpack/Scripts/Network", "Assets/_Project/Runtime/Backpack/Scripts/World",
+            "Assets/_Project/Code/LoadoutTemplate",
+            "Assets/_Project/Code/CharacterAttributes", "Assets/_Project/Code/Combat", "Assets/_Project/Code/PlayerIntent",
+            "Assets/_Project/Code/PlayerMovement", "Assets/_Project/Code/StateMachine", "Assets/_Project/Code/Networking",
+            "Assets/_Project/Code/Foundation", "Assets/_Project/Code/WeaponRuntime",
+            "Assets/_Project/Code/Items", "Assets/_Project/Code/LoadoutContracts",
             "Assets/Mirror/Core", "Assets/Mirror/Components/InterestManagement/Distance", "Assets/Mirror/Transports/KCP", "Assets/Mirror/Transports/Encryption",
             "Assets/Mirror/Editor/Weaver"
         };
         // These owning assembly definitions sit outside the selected source directories.
         internal static readonly string[] AdditionalAssemblyInputs = {
-            "Assets/_Project/Runtime/Scripts/Input/RPG4.Input.asmdef", "Assets/Mirror/Components/Mirror.Components.asmdef",
+            "Assets/_Project/Code/Input/RPG4.Input.asmdef", "Assets/Mirror/Components/Mirror.Components.asmdef",
             "Assets/Mirror/Transports/Mirror.Transports.asmdef"
         };
         internal static readonly string[] SharedBinaries = {
@@ -50,7 +49,9 @@ namespace RPG4.Editor.Build
         internal static readonly HashSet<string> ExcludedSourceNames = new HashSet<string>(StringComparer.Ordinal)
         { "CharacterEquipmentPresentation.cs", "CharacterPresentation.cs", "EntryContentManifest.cs", "ClientPresentationRoot.cs", "PlayerCameraController.cs", "PlayerViewController.cs", "PlayerPresenter.cs", "PlayerAimPose.cs", "PlayerWeaponRig.cs", "PlayerBodyAimConstraint.cs", "PlayerShotPoseConstraint.cs",
             "WeaponView.cs", "WeaponAttachmentView.cs", "ItemAssemblyModelView.cs", "PlayerConsumablePresentation.cs", "PlayerLocomotionPresentation.cs", "PlayerWeaponPresentation.cs", "PlayerPresentationTargets.cs",
-            "PlayerRenderPose.cs", "PlayerLocalWeaponPresentation.cs", "PlayerLocalActionAnticipation.cs" };
+            "CellUI.cs", "ContainerUI.cs", "ContainerSlotUI.cs", "ItemViewUI.cs", "LoadoutSlotUI.cs",
+            "LoadoutDragVisual.cs", "LoadoutDragController.cs", "LoadoutTemplateUI.cs", "LoadoutWindowUI.cs", "LootWindowUI.cs", "LootContainerListUI.cs", "RoleLoadoutPresentation.cs",
+            "PlayerRenderPose.cs", "PlayerAnimationAdapter.cs", "PlayerLocalWeaponPresentation.cs", "PlayerLocalActionAnticipation.cs" };
 
         internal static bool ExcludeSourcePath(string path) => path.Contains("/Rigging/")
             || path.Contains("/Editor/") && !path.StartsWith("Assets/Mirror/Editor/Weaver/", StringComparison.Ordinal);
@@ -76,12 +77,20 @@ namespace RPG4.Editor.Build
                 || name.StartsWith("UnityEngine.Animations.Rigging.", StringComparison.Ordinal)) return true;
             switch (name)
             {
-                case "RPG4.Networking.ClientPresentationRoot": case "RPG4.Frontend.GameplayUiBindingAdapter":
+                case "RPG4.LoadoutTemplate.LoadoutTemplateUI": case "RPG4.LoadoutTemplate.LoadoutWindowUI":
+                case "RPG4.LoadoutTemplate.LootWindowUI": case "RPG4.LoadoutTemplate.LootContainerListUI":
+                case "RPG4.LoadoutTemplate.RoleLoadoutPresentation":
+                case "RPG4.LoadoutTemplate.LoadoutDragController": case "RPG4.LoadoutTemplate.ContainerUI":
+                case "RPG4.LoadoutTemplate.ContainerSlotUI": case "RPG4.LoadoutTemplate.LoadoutSlotUI":
+                case "RPG4.LoadoutTemplate.CellUI": case "RPG4.LoadoutTemplate.ItemViewUI":
+                case "RPG4.Networking.NetworkPlayerAppearance": case "RPG4.Networking.ClientPresentationRoot": case "RPG4.Frontend.GameplayUiBindingAdapter":
                 case "RPG4.Combat.ItemAssemblyModelView":
                 case "RPG4.PlayerMovement.PlayerCameraController": case "RPG4.PlayerMovement.PlayerViewController":
                 case "RPG4.PlayerMovement.CharacterPresentation":
-                case "RPG4.PlayerMovement.PlayerAimPose": case "RPG4.PlayerMovement.PlayerWeaponRig":
-                case "RPG4.PlayerMovement.PlayerBodyAimConstraint": case "RPG4.PlayerMovement.PlayerShotPoseConstraint":
+                case "RPG4.CharacterAnimation.CharacterPresentationSystem":
+                case "RPG4.CharacterAnimation.PlayerAimPose": case "RPG4.CharacterAnimation.PlayerWeaponRig":
+                case "RPG4.CharacterAnimation.PlayerBodyAimConstraint": case "RPG4.CharacterAnimation.PlayerShotPoseConstraint":
+                case "RPG4.Interaction.CharacterLootInteractable":
                 case "RPG4.Interaction.PlayerInteraction": // Local camera targeting; server access limits live in the network ingress.
                 case "UnityEngine.Rendering.Universal.UniversalAdditionalCameraData":
                 case "UnityEngine.Rendering.Universal.UniversalAdditionalLightData":
@@ -90,7 +99,6 @@ namespace RPG4.Editor.Build
                 case "MagicaCloth2.MagicaCapsuleCollider": case "MagicaCloth2.MagicaSphereCollider":
                 case "RPG4.UI.UIManager": case "RPG4.UI.CharacterHealthView": case "RPG4.UI.CharacterStatusHUD":
                 case "RPG4.UI.PlayerDeathUI": case "RPG4.UI.UiTextScale":
-                case "RPG4.Backpack.UI.InventoryUICoordinator": case "RPG4.Backpack.UI.InventoryUIInputRouter":
                 case "RPG4.Backpack.UI.ConsumableHUD": case "RPG4.Backpack.UI.ConsumableHudOwner":
                 case "RPG4.Backpack.UI.WeaponAmmoHUD": return true;
                 default: return false;
@@ -104,22 +112,21 @@ namespace RPG4.Editor.Build
             if (owner == "UnityEngine.Transform") return path != "m_LocalPosition" && path != "m_LocalRotation" && path != "m_LocalScale" && path != "m_Father";
             if (owner == "Mirror.NetworkIdentity" && (path == "sceneId" || path == "hasSpawned")) return true;
             if (owner == "RPG4.Networking.GameplaySceneBindings" && (path == "localCamera" || path == "localHealthViews" || path == "requiredClientBindings")) return true;
+            // Ownership and server inventory configuration contribute to the digest; owned view references do not.
+            if (owner == "RPG4.LoadoutTemplate.NetworkRoleLoadout" && path == "presentation") return true;
+            if (owner == "RPG4.LoadoutTemplate.LoadoutItemDefinition" && path == "icon") return true;
+            if (owner == "RPG4.LoadoutTemplate.BackpackContainerController"
+                && (path == "containerIcon" || path.EndsWith(".icon", StringComparison.Ordinal))) return true;
             if (owner == "RPG4.Networking.NetworkPlayerController" && path == "additionalClientPresentationBehaviours") return true;
             if (owner == "RPG4.Combat.TrainingDummy" && (path == "hitRenderers" || path == "flashDuration")) return true;
-            if (owner == "RPG4.Backpack.Network.BackpackNetworkPlayer"
+            if (owner == "RPG4.Networking.NetworkPlayerAppearance"
                 && (path == "bodyRenderer" || path == "localColor" || path == "remoteColor")) return true;
-            if (owner == "RPG4.PlayerMovement.PlayerEquipment" && path == "weaponRig") return true;
             if (owner == "RPG4.PlayerMovement.Player")
             {
                 switch (path)
                 {
-                    case "presentationEnabled": case "stateData.content.animator": case "stateData.content.viewController":
-                    case "stateData.content.aimPose": case "stateData.content.presentationRoot": case "stateData.ownerCorrection":
-                    case "stateData.attack": case "stateData.exploration.animationTransitionDuration":
-                    case "stateData.aim.aimAnimation": case "stateData.aim.animationTransitionDuration":
-                    case "stateData.aim.animationParameterSmoothTime": case "stateData.aim.turnAnimationThreshold":
-                    case "stateData.aim.turnAnimationMoveThreshold": case "stateData.aim.turnAnimationTransitionDuration":
-                    case "stateData.hurt.transitionDuration": case "stateData.reload.reloadClip": case "stateData.reload.crouchReloadClip": return true;
+                    case "presentationEnabled": case "stateData.content.animationSystem": case "stateData.content.viewController":
+                    case "stateData.content.presentationRoot": case "stateData.ownerCorrection": return true;
                 }
             }
             if (owner == "RPG4.Networking.AuthoritativeNetworkManager" && (path == "localCamera" || path == "offlinePlayer"

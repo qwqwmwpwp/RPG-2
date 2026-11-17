@@ -1,9 +1,11 @@
 ﻿// Magica Cloth 2.
 // Copyright (c) 2023 MagicaSoft.
 // https://magicasoft.jp
+using System.Collections.Generic;
 using System.Text;
 using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
@@ -69,9 +71,13 @@ namespace MagicaCloth2
 
         /// <summary>
         /// 読み込み用トランスフォームアクセス配列
-        /// この配列は上記の配列グループとインデックが同期している
+        /// 有効なTransformのみ格納し、データ配列との対応は下記のマッピングで管理する
         /// </summary>
         internal TransformAccessArray transformAccessArray;
+
+        // DataChunk indices remain stable; reserved/removed slots have no TransformAccess entry.
+        readonly List<int> dataToTransformIndex = new List<int>();
+        NativeList<int> transformToDataIndex;
 
 
         internal int Count => flagArray?.Count ?? 0;
@@ -121,6 +127,9 @@ namespace MagicaCloth2
 
             if (transformAccessArray.isCreated)
                 transformAccessArray.Dispose();
+            if (transformToDataIndex.IsCreated)
+                transformToDataIndex.Dispose();
+            dataToTransformIndex.Clear();
             //if (writeTransformAccessArray.isCreated)
             //    writeTransformAccessArray.Dispose();
         }
@@ -147,6 +156,7 @@ namespace MagicaCloth2
             teamIdArray = new ExNativeArray<short>(capacity);
 
             transformAccessArray = new TransformAccessArray(capacity);
+            transformToDataIndex = new NativeList<int>(capacity, Allocator.Persistent);
 
             isValid = true;
         }
@@ -186,25 +196,11 @@ namespace MagicaCloth2
             // チームID
             teamIdArray.AddRange(cnt, (short)teamId);
 
-            // トランスフォーム
-            int nowcnt = transformAccessArray.length;
-
-            // データチャンクの開始まで埋める
-            int start = c.startIndex;
-            while (nowcnt < start)
-            {
-                transformAccessArray.Add(null);
-                nowcnt++;
-            }
-
+            // 空きデータ領域はTransformAccessArrayに登録しない
             for (int i = 0; i < cnt; i++)
             {
                 Transform t = cmesh.GetTransformFromIndex(i);
-                int index = c.startIndex + i;
-                if (index < nowcnt)
-                    transformAccessArray[index] = t;
-                else
-                    transformAccessArray.Add(t);
+                SetTransformAccess(c.startIndex + i, t);
             }
 
             return c;
@@ -221,7 +217,7 @@ namespace MagicaCloth2
                 return default;
 
             // 領域のみ追加する
-            var c = flagArray.AddRange(count);
+            var c = flagArray.AddRange(count, default);
             initLocalPositionArray.AddRange(count);
             initLocalRotationArray.AddRange(count);
             positionArray.AddRange(count);
@@ -234,26 +230,8 @@ namespace MagicaCloth2
             // チームID
             teamIdArray.AddRange(count, (short)teamId);
 
-            // トランスフォームはすべてnullで登録する
-            int nowcnt = transformAccessArray.length;
-
-            // データチャンクの開始まで埋める
-            int start = c.startIndex;
-            while (nowcnt < start)
-            {
-                transformAccessArray.Add(null);
-                nowcnt++;
-            }
-
-            for (int i = 0; i < count; i++)
-            {
-                Transform t = null;
-                int index = c.startIndex + i;
-                if (index < nowcnt)
-                    transformAccessArray[index] = t;
-                else
-                    transformAccessArray.Add(t);
-            }
+            // データ領域のみ予約し、実際のTransformはSetTransformで登録する
+            EnsureTransformIndexCapacity(c.startIndex + c.dataLength);
 
             return c;
         }
@@ -283,13 +261,7 @@ namespace MagicaCloth2
             // チームID
             teamIdArray.Add((short)teamId);
 
-            // トランスフォーム
-            int nowcnt = transformAccessArray.length;
-            int index = c.startIndex;
-            if (index < nowcnt)
-                transformAccessArray[index] = t;
-            else
-                transformAccessArray.Add(t);
+            SetTransformAccess(c.startIndex, t);
 
             return c;
         }
@@ -318,13 +290,13 @@ namespace MagicaCloth2
                 localPositionArray[index] = t.localPosition;
                 localRotationArray[index] = t.localRotation;
                 teamIdArray[index] = (short)teamId;
-                transformAccessArray[index] = t;
+                SetTransformAccess(index, t);
             }
             else
             {
                 // データクリア（無効化）
                 flagArray[index] = default;
-                transformAccessArray[index] = null;
+                SetTransformAccess(index, null);
                 teamIdArray[index] = 0;
             }
         }
@@ -348,7 +320,8 @@ namespace MagicaCloth2
             scaleArray[toIndex] = scaleArray[fromIndex];
             localPositionArray[toIndex] = localPositionArray[fromIndex];
             localRotationArray[toIndex] = localRotationArray[fromIndex];
-            transformAccessArray[toIndex] = transformAccessArray[fromIndex];
+            int accessIndex = dataToTransformIndex[fromIndex];
+            SetTransformAccess(toIndex, accessIndex >= 0 ? transformAccessArray[accessIndex] : null);
             teamIdArray[toIndex] = teamIdArray[fromIndex];
         }
 
@@ -378,7 +351,39 @@ namespace MagicaCloth2
             for (int i = 0; i < c.dataLength; i++)
             {
                 int index = c.startIndex + i;
-                transformAccessArray[index] = null;
+                SetTransformAccess(index, null);
+            }
+        }
+
+        void EnsureTransformIndexCapacity(int length)
+        {
+            while (dataToTransformIndex.Count < length)
+                dataToTransformIndex.Add(-1);
+        }
+
+        void SetTransformAccess(int dataIndex, Transform t)
+        {
+            EnsureTransformIndexCapacity(dataIndex + 1);
+            int accessIndex = dataToTransformIndex[dataIndex];
+            if (t != null)
+            {
+                if (accessIndex >= 0)
+                    transformAccessArray[accessIndex] = t;
+                else
+                {
+                    dataToTransformIndex[dataIndex] = transformAccessArray.length;
+                    transformAccessArray.Add(t);
+                    transformToDataIndex.Add(dataIndex);
+                }
+            }
+            else if (accessIndex >= 0)
+            {
+                int movedDataIndex = transformToDataIndex[transformToDataIndex.Length - 1];
+                transformAccessArray.RemoveAtSwapBack(accessIndex);
+                transformToDataIndex.RemoveAtSwapBack(accessIndex);
+                dataToTransformIndex[dataIndex] = -1;
+                if (accessIndex < transformToDataIndex.Length)
+                    dataToTransformIndex[movedDataIndex] = accessIndex;
             }
         }
 
@@ -451,7 +456,7 @@ namespace MagicaCloth2
                 return default;
 
             // 領域
-            var nc = flagArray.Expand(c, newLength);
+            var nc = flagArray.ExpandAndFill(c, newLength);
             initLocalPositionArray.Expand(c, newLength);
             initLocalRotationArray.Expand(c, newLength);
             positionArray.Expand(c, newLength);
@@ -462,19 +467,22 @@ namespace MagicaCloth2
             localRotationArray.Expand(c, newLength);
 
             // チームID
-            teamIdArray.Expand(c, newLength);
+            teamIdArray.ExpandAndFill(c, newLength);
 
-            // トランスフォームアクセス配列の拡張
+            // Transform自体は移動せず、データ参照先だけ新しいチャンクへ移す
             if (c.startIndex != nc.startIndex)
             {
-                while (transformAccessArray.length < (nc.startIndex + nc.dataLength))
-                    transformAccessArray.Add(null);
+                EnsureTransformIndexCapacity(nc.startIndex + nc.dataLength);
 
                 for (int i = 0; i < c.dataLength; i++)
                 {
-                    Transform t = transformAccessArray[c.startIndex + i];
-                    transformAccessArray[nc.startIndex + i] = t;
-                    transformAccessArray[c.startIndex + i] = null;
+                    int oldIndex = c.startIndex + i;
+                    int newIndex = nc.startIndex + i;
+                    int accessIndex = dataToTransformIndex[oldIndex];
+                    dataToTransformIndex[newIndex] = accessIndex;
+                    dataToTransformIndex[oldIndex] = -1;
+                    if (accessIndex >= 0)
+                        transformToDataIndex[accessIndex] = newIndex;
                 }
             }
 
@@ -495,6 +503,7 @@ namespace MagicaCloth2
                 //Debug.Log("RestoreTransform");
                 var job = new RestoreTransformJob()
                 {
+                    transformToDataIndex = transformToDataIndex.AsArray(),
                     flagList = flagArray.GetNativeArray(),
                     localPositionArray = initLocalPositionArray.GetNativeArray(),
                     localRotationArray = initLocalRotationArray.GetNativeArray(),
@@ -511,6 +520,9 @@ namespace MagicaCloth2
         [BurstCompile]
         struct RestoreTransformJob : IJobParallelForTransform
         {
+            [Unity.Collections.ReadOnly]
+            public NativeArray<int> transformToDataIndex;
+
             [Unity.Collections.ReadOnly]
             public NativeArray<ExBitFlag8> flagList;
 
@@ -530,6 +542,7 @@ namespace MagicaCloth2
             {
                 if (transform.isValid == false)
                     return;
+                index = transformToDataIndex[index];
                 var flag = flagList[index];
                 if (flag.IsSet(Flag_Enable) == false)
                     return;
@@ -561,6 +574,7 @@ namespace MagicaCloth2
 
                 var job = new ReadTransformJob()
                 {
+                    transformToDataIndex = transformToDataIndex.AsArray(),
                     flagList = flagArray.GetNativeArray(),
                     positionArray = positionArray.GetNativeArray(),
                     rotationArray = rotationArray.GetNativeArray(),
@@ -583,18 +597,28 @@ namespace MagicaCloth2
         struct ReadTransformJob : IJobParallelForTransform
         {
             [Unity.Collections.ReadOnly]
+            public NativeArray<int> transformToDataIndex;
+
+            [Unity.Collections.ReadOnly]
             public NativeArray<ExBitFlag8> flagList;
 
+            // Each access entry maps to a unique data slot, which can differ from the job index.
+            [NativeDisableParallelForRestriction]
             [Unity.Collections.WriteOnly]
             public NativeArray<float3> positionArray;
+            [NativeDisableParallelForRestriction]
             [Unity.Collections.WriteOnly]
             public NativeArray<quaternion> rotationArray;
+            [NativeDisableParallelForRestriction]
             [Unity.Collections.WriteOnly]
             public NativeArray<float3> scaleList;
+            [NativeDisableParallelForRestriction]
             [Unity.Collections.WriteOnly]
             public NativeArray<float3> localPositionArray;
+            [NativeDisableParallelForRestriction]
             [Unity.Collections.WriteOnly]
             public NativeArray<quaternion> localRotationArray;
+            [NativeDisableParallelForRestriction]
             [Unity.Collections.WriteOnly]
             public NativeArray<quaternion> inverseRotationArray;
 
@@ -609,6 +633,7 @@ namespace MagicaCloth2
             {
                 if (transform.isValid == false)
                     return;
+                index = transformToDataIndex[index];
                 var flag = flagList[index];
                 if (flag.IsSet(Flag_Enable) == false)
                     return;
@@ -652,6 +677,7 @@ namespace MagicaCloth2
         {
             var job = new WriteTransformJob()
             {
+                transformToDataIndex = transformToDataIndex.AsArray(),
                 flagList = flagArray.GetNativeArray(),
                 worldPositions = positionArray.GetNativeArray(),
                 worldRotations = rotationArray.GetNativeArray(),
@@ -670,6 +696,9 @@ namespace MagicaCloth2
         [BurstCompile]
         struct WriteTransformJob : IJobParallelForTransform
         {
+            [Unity.Collections.ReadOnly]
+            public NativeArray<int> transformToDataIndex;
+
             [Unity.Collections.ReadOnly]
             public NativeArray<ExBitFlag8> flagList;
 
@@ -693,6 +722,7 @@ namespace MagicaCloth2
             {
                 if (transform.isValid == false)
                     return;
+                index = transformToDataIndex[index];
                 var flag = flagList[index];
                 if (flag.IsSet(Flag_Enable) == false)
                     return;
@@ -751,9 +781,10 @@ namespace MagicaCloth2
 
                 if (transformAccessArray.isCreated)
                 {
-                    for (int i = 0; i < tcnt; i++)
+                    for (int i = 0; i < dataToTransformIndex.Count; i++)
                     {
-                        var t = transformAccessArray[i];
+                        int accessIndex = dataToTransformIndex[i];
+                        var t = accessIndex >= 0 ? transformAccessArray[accessIndex] : null;
                         var flag = flagArray[i];
                         var teamId = teamIdArray[i];
                         sb.Append($"  [{i}] team:{teamId} (");

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using Mirror;
 using RPG4.Backpack.Items;
+using RPG4.LoadoutTemplate;
 using RPG4.Networking;
 using RPG4.Networking.Contracts;
 using UnityEditor;
@@ -33,7 +34,7 @@ namespace RPG4.Editor.Build
             collector.sceneIds = EntrySceneValidation.ReadAuthoredSceneIds(EntryProtocol.GameplayScene);
             EntrySceneValidation.ReadScene(EntryProtocol.GameplayScene, scene =>
             { foreach (GameObject root in scene.GetRootGameObjects()) collector.CollectRoot(root); });
-            foreach (string path in new[] { "Assets/_Project/Runtime/Player/OnlinePlayer.prefab", "Assets/_Project/Runtime/Player/OnlineNetworkManager.prefab" })
+            foreach (string path in new[] { "Assets/_Project/Prefabs/OnlinePlayer.prefab", "Assets/_Project/Prefabs/OnlineNetworkManager.prefab" })
             {
                 GameObject root = AssetDatabase.LoadAssetAtPath<GameObject>(path);
                 if (root == null) throw new BuildFailedException("Authority prefab is unavailable: " + path);
@@ -122,6 +123,9 @@ namespace RPG4.Editor.Build
                     }
                 }
             }
+            // Empty authored IDs intentionally fall back to the asset name; that effective wire ID is authoritative.
+            if (value is LoadoutItemDefinition definition)
+                fields.Add(new AuthorityField("effectiveDefinitionId", "String", definition.DefinitionId));
             if (value is NetworkIdentity identity && !EditorUtility.IsPersistent(identity))
             {
                 long fileId = checked((long)GlobalObjectId.GetGlobalObjectIdSlow(identity).targetObjectId);
@@ -164,6 +168,15 @@ namespace RPG4.Editor.Build
                     item.ValidateConfiguration();
                     Project(item, Key(item), Source(item), item.GetType().FullName);
                 }
+            }
+            else if (value is LoadoutItemDefinition definition)
+            {
+                if (visited.Add(definition))
+                    Project(definition, Key(definition), Source(definition), definition.GetType().FullName);
+            }
+            else if (value is LoadoutSlotRule rule)
+            {
+                if (visited.Add(rule)) Project(rule, Key(rule), Source(rule), rule.GetType().FullName);
             }
             else if (value is PhysicMaterial material)
             { if (visited.Add(material)) Project(material, Key(material), Source(material), material.GetType().FullName); }
@@ -243,7 +256,7 @@ namespace RPG4.Editor.Build
                         if (!AuthorityContentRules.ExcludeSourcePath(path)) CollectAssemblyInput(path);
                     }
             }
-            foreach (string path in new[] { "Assets/_Project/Runtime/Scripts/Input/PlayerInput.cs" })
+            foreach (string path in new[] { "Assets/_Project/Code/Input/PlayerInput.cs" })
                 CollectSource(path);
             foreach (string path in AuthorityContentRules.AdditionalAssemblyInputs) CollectAssemblyInput(path);
             foreach (string path in AuthorityContentRules.SharedBinaries)

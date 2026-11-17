@@ -1,0 +1,428 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7fc9599868984508a240a6cdc3a86861, type: 3}
+  m_Name: DefaultCharacterAnimation
+  m_EditorClassIdentifier: 
+  controller: {fileID: 9100000, guid: b583316d375e4584ab56b156933af3c9, type: 2}
+  channels:
+  - channel: 0
+    layerName: Base Layer
+    mask: {fileID: 0}
+    additive: 0
+    emptyState: 
+  - channel: 1
+    layerName: UpperBody Shooting
+    mask: {fileID: 31900000, guid: 206db03de8174df68bd28b139650251d, type: 2}
+    additive: 0
+    emptyState: UpperBody Shooting.Empty
+  - channel: 2
+    layerName: Damage Reaction
+    mask: {fileID: 31900000, guid: 206db03de8174df68bd28b139650251d, type: 2}
+    additive: 0
+    emptyState: Damage Reaction.Empty
+  actions:
+  - id: FreeLocomotion
+    playback: 0
+    channel: 0
+    group: 1
+    requireAll: 2
+    requireAny: 0
+    exclude: 128
+    priority: 0
+    occupiedBody: 1
+    participatingBody: 2
+    changeableBody: 3
+    compatibleGroups: 255
+    additive: 0
+    state: Base Layer.FreeLocomotion
+    crouchState: Base Layer.CrouchFreeLocomotion
+    motion: {fileID: 710000021, guid: b583316d375e4584ab56b156933af3c9, type: 2}
+    crouchMotion: {fileID: 710000022, guid: b583316d375e4584ab56b156933af3c9, type: 2}
+    speedParameter: AimLocomotionSpeed
+    progress: 1
+    fadeIn: 0.25
+    fadeOut: 0.08
+    weight: 1
+    allowAim: 0
+    allowSupportHand: 0
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+  - id: StrafeLocomotion
+    playback: 0
+    channel: 0
+    group: 1
+    requireAll: 130
+    requireAny: 0
+    exclude: 0
+    priority: 10
+    occupiedBody: 1
+    participatingBody: 2
+    changeableBody: 3
+    compatibleGroups: 255
+    additive: 0
+    state: Base Layer.AimLocomotion
+    crouchState: Base Layer.CrouchAimLocomotion
+    motion: {fileID: 710000011, guid: b583316d375e4584ab56b156933af3c9, type: 2}
+    crouchMotion: {fileID: 710000023, guid: b583316d375e4584ab56b156933af3c9, type: 2}
+    speedParameter: AimLocomotionSpeed
+    progress: 1
+    fadeIn: 0.15
+    fadeOut: 0.08
+    weight: 1
+    allowAim: 0
+    allowSupportHand: 0
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+  - id: TurnLeft
+    playback: 1
+    channel: 0
+    group: 2
+    requireAll: 32899
+    requireAny: 0
+    exclude: 0
+    priority: 20
+    occupiedBody: 1
+    participatingBody: 2
+    changeableBody: 3
+    compatibleGroups: 255
+    additive: 0
+    state: Base Layer.AimTurnLeft
+    crouchState: Base Layer.CrouchAimTurnLeft
+    motion: {fileID: 1339589392577680963, guid: 2a4870561aaf8214d975a5cb27814595, type: 3}
+    crouchMotion: {fileID: 3050715780838170797, guid: 7c5b20c42e130ee4eb494c4d3c0d269f, type: 3}
+    speedParameter: TurnSpeed
+    progress: 0
+    fadeIn: 0.08
+    fadeOut: 0.08
+    weight: 1
+    allowAim: 0
+    allowSupportHand: 0
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+  - id: TurnRight
+    playback: 1
+    channel: 0
+    group: 2
+    requireAll: 65667
+    requireAny: 0
+    exclude: 0
+    priority: 20
+    occupiedBody: 1
+    participatingBody: 2
+    changeableBody: 3
+    compatibleGroups: 255
+    additive: 0
+    state: Base Layer.AimTurnRight
+    crouchState: Base Layer.CrouchAimTurnRight
+    motion: {fileID: 6828742284989511704, guid: 4cfbd3bb619928e44bf0b32089bdfb4d, type: 3}
+    crouchMotion: {fileID: 1703438773353822627, guid: 2e02718a5424f7942a54b48a3dd8d903, type: 3}
+    speedParameter: TurnSpeed
+    progress: 0
+    fadeIn: 0.08
+    fadeOut: 0.08
+    weight: 1
+    allowAim: 0
+    allowSupportHand: 0
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+  - id: Aim
+    playback: 2
+    channel: 3
+    group: 4
+    requireAll: 307
+    requireAny: 0
+    exclude: 28672
+    priority: 30
+    occupiedBody: 0
+    participatingBody: 3
+    changeableBody: 3
+    compatibleGroups: 11
+    additive: 0
+    state: 
+    crouchState: 
+    motion: {fileID: 0}
+    crouchMotion: {fileID: 0}
+    speedParameter: 
+    progress: 1
+    fadeIn: 0.15
+    fadeOut: 0.08
+    weight: 1
+    allowAim: 1
+    allowSupportHand: 1
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+  - id: PreviewGrip
+    playback: 2
+    channel: 3
+    group: 4
+    requireAll: 393219
+    requireAny: 0
+    exclude: 0
+    priority: 30
+    occupiedBody: 0
+    participatingBody: 3
+    changeableBody: 3
+    compatibleGroups: 3
+    additive: 0
+    state: 
+    crouchState: 
+    motion: {fileID: 0}
+    crouchMotion: {fileID: 0}
+    speedParameter: 
+    progress: 1
+    fadeIn: 0.06
+    fadeOut: 0.08
+    weight: 1
+    allowAim: 0
+    allowSupportHand: 1
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+  - id: HipFire
+    playback: 3
+    channel: 1
+    group: 8
+    requireAll: 35
+    requireAny: 1536
+    exclude: 30976
+    priority: 70
+    occupiedBody: 2
+    participatingBody: 1
+    changeableBody: 1
+    compatibleGroups: 7
+    additive: 0
+    state: UpperBody Shooting.HipFire
+    crouchState: 
+    motion: {fileID: 7400000, guid: b17d825597d84e941ad5f73b67d0e225, type: 2}
+    crouchMotion: {fileID: 0}
+    speedParameter: ShotSpeed
+    progress: 1
+    fadeIn: 0.06
+    fadeOut: 0.06
+    weight: 1
+    allowAim: 1
+    allowSupportHand: 1
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+  - id: ADSFire
+    playback: 3
+    channel: 1
+    group: 8
+    requireAll: 291
+    requireAny: 1536
+    exclude: 30720
+    priority: 70
+    occupiedBody: 2
+    participatingBody: 1
+    changeableBody: 1
+    compatibleGroups: 7
+    additive: 0
+    state: UpperBody Shooting.ADSFire
+    crouchState: 
+    motion: {fileID: 7400000, guid: b17d825597d84e941ad5f73b67d0e225, type: 2}
+    crouchMotion: {fileID: 0}
+    speedParameter: ShotSpeed
+    progress: 1
+    fadeIn: 0.06
+    fadeOut: 0.06
+    weight: 1
+    allowAim: 1
+    allowSupportHand: 1
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+  - id: HipAutoFire
+    playback: 3
+    channel: 1
+    group: 8
+    requireAll: 2083
+    requireAny: 1536
+    exclude: 28928
+    priority: 70
+    occupiedBody: 2
+    participatingBody: 1
+    changeableBody: 1
+    compatibleGroups: 7
+    additive: 0
+    state: UpperBody Shooting.HipAutoFire
+    crouchState: 
+    motion: {fileID: 7400000, guid: 665748e59c3e9694686b8227e739169e, type: 2}
+    crouchMotion: {fileID: 0}
+    speedParameter: ShotSpeed
+    progress: 1
+    fadeIn: 0.06
+    fadeOut: 0.06
+    weight: 1
+    allowAim: 1
+    allowSupportHand: 1
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+  - id: ADSAutoFire
+    playback: 3
+    channel: 1
+    group: 8
+    requireAll: 2339
+    requireAny: 1536
+    exclude: 28672
+    priority: 70
+    occupiedBody: 2
+    participatingBody: 1
+    changeableBody: 1
+    compatibleGroups: 7
+    additive: 0
+    state: UpperBody Shooting.ADSAutoFire
+    crouchState: 
+    motion: {fileID: 7400000, guid: 665748e59c3e9694686b8227e739169e, type: 2}
+    crouchMotion: {fileID: 0}
+    speedParameter: ShotSpeed
+    progress: 1
+    fadeIn: 0.06
+    fadeOut: 0.06
+    weight: 1
+    allowAim: 1
+    allowSupportHand: 1
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+  - id: Reload
+    playback: 4
+    channel: 1
+    group: 16
+    requireAll: 4131
+    requireAny: 0
+    exclude: 24576
+    priority: 80
+    occupiedBody: 2
+    participatingBody: 1
+    changeableBody: 1
+    compatibleGroups: 3
+    additive: 0
+    state: UpperBody Shooting.Reload
+    crouchState: UpperBody Shooting.CrouchReload
+    motion: {fileID: 5714656323464922859, guid: 0cca85e4195c278438de2c6dc0070788, type: 3}
+    crouchMotion: {fileID: -6602412621051750717, guid: bac5ede3f395a424d8f81ec498611f5d, type: 3}
+    speedParameter: ReloadSpeed
+    progress: 2
+    fadeIn: 0
+    fadeOut: 0.08
+    weight: 1
+    allowAim: 0
+    allowSupportHand: 0
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+  - id: UseConsumable
+    playback: 5
+    channel: 1
+    group: 32
+    requireAll: 8195
+    requireAny: 0
+    exclude: 16384
+    priority: 90
+    occupiedBody: 2
+    participatingBody: 1
+    changeableBody: 1
+    compatibleGroups: 3
+    additive: 0
+    state: UpperBody Shooting.UseConsumable
+    crouchState: 
+    motion: {fileID: 7400000, guid: c3b5a615f64f4e31b6e9f8a4bc721d6e, type: 2}
+    crouchMotion: {fileID: 0}
+    speedParameter: UseConsumableSpeed
+    progress: 2
+    fadeIn: 0.08
+    fadeOut: 0.08
+    weight: 1
+    allowAim: 0
+    allowSupportHand: 0
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+  - id: Hurt
+    playback: 6
+    channel: 2
+    group: 64
+    requireAll: 16387
+    requireAny: 0
+    exclude: 0
+    priority: 100
+    occupiedBody: 2
+    participatingBody: 1
+    changeableBody: 1
+    compatibleGroups: 3
+    additive: 0
+    state: Damage Reaction.Hit
+    crouchState: 
+    motion: {fileID: -931760275423846564, guid: 8030672582f1a5b4a9712aa6aec547b8, type: 3}
+    crouchMotion: {fileID: 0}
+    speedParameter: HurtSpeed
+    progress: 2
+    fadeIn: 0.08
+    fadeOut: 0.08
+    weight: 1
+    allowAim: 0
+    allowSupportHand: 0
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+  - id: Dead
+    playback: 7
+    channel: 0
+    group: 128
+    requireAll: 4
+    requireAny: 0
+    exclude: 0
+    priority: 1000
+    occupiedBody: 3
+    participatingBody: 0
+    changeableBody: 0
+    compatibleGroups: 0
+    additive: 0
+    state: Base Layer.Dead
+    crouchState: 
+    motion: {fileID: 5447582539675603047, guid: a0c38a748b749e646abf30c366cbace9, type: 3}
+    crouchMotion: {fileID: 0}
+    speedParameter: 
+    progress: 0
+    fadeIn: 0.08
+    fadeOut: 0.08
+    weight: 1
+    allowAim: 0
+    allowSupportHand: 0
+    allowBodyTurn: 0
+    yawOffset: 0
+    waistPitchOffset: 0
+  locomotion:
+    parameterSmoothTime: 0.1
+    freeTurnSmoothTime: 0.12
+    strafeTurnSmoothTime: 0.08
+    freeReferenceSpeed: 5.130632
+    strafeReferenceSpeed: 2.5
+    crouchReferenceSpeed: 2
+    turnThreshold: 60
+    turnExitThreshold: 20
+    turnMoveThreshold: 0.15
+    postureTransition: 0.2
+  aimPose:
+    pitchRange: {x: -30, y: 45}
+    pitchSmoothTime: 0.1
+    waistFraction: 0.8
+    yawLimit: 80
+  yawOffset: 0
+  waistPitchOffset: 0

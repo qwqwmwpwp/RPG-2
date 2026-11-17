@@ -1,0 +1,8 @@
+{
+  "name": "RPG4.Networking.Transport",
+  "rootNamespace": "RPG4.Networking",
+  "references": [
+    "Mirror"
+  ],
+  "autoReferenced": true
+}

@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c6d32d868fbe4ae2b9158f48e28f9615, type: 3}
+  m_Name: Pocket
+  m_EditorClassIdentifier:
+  displayName: 口袋
+  size: {x: 2, y: 2}
+  icon: {fileID: 21300000, guid: 90836ed84f2744d8825373ee57fc8673, type: 3}
+  itemType:
+    name: GameItems.Equipment.Containers.Pocket
+  equipmentType:
+    name: GameItems.Equipment.Containers.Pocket
+  containerType: 2

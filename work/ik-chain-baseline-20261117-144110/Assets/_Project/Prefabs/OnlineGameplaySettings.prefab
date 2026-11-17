@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &910000000
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 10339, guid: 0112f30f45e14c9e8c45ab8061826323, type: 3}
+      propertyPath: blocksOtherWindows
+      value: 1
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 0112f30f45e14c9e8c45ab8061826323, type: 3}
+--- !u!1 &910000002 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 10290, guid: 0112f30f45e14c9e8c45ab8061826323, type: 3}
+  m_PrefabInstance: {fileID: 910000000}
+  m_PrefabAsset: {fileID: 0}
+--- !u!224 &910000004 stripped
+RectTransform:
+  m_CorrespondingSourceObject: {fileID: 10291, guid: 0112f30f45e14c9e8c45ab8061826323, type: 3}
+  m_PrefabInstance: {fileID: 910000000}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &910000003 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 10339, guid: 0112f30f45e14c9e8c45ab8061826323, type: 3}
+  m_PrefabInstance: {fileID: 910000000}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 910000002}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8e7550b86cbd4886a833c5c74db70c84, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:

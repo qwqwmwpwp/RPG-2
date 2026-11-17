@@ -1,0 +1,54 @@
+using System;
+
+namespace RPG4.Backpack.Items
+{
+    /// <summary>运行时物品标识生成器：在单个服务端会话内单调递增地产出 ItemId；只在服务端主线程使用、一个会话一个实例且不加锁，每次生成 O(1) 且无堆分配，标识空间耗尽时抛 OverflowException 绝不回绕。</summary>
+    public sealed class ItemIdGenerator
+    {
+        public const ulong FirstValue = 1UL; // 首个有效标识的底层值。
+
+        private ulong lastIssued; // 最近一次发放的底层值。
+        private ulong lastAllowed = ulong.MaxValue;
+
+        /// <summary>Install a durably reserved range before server world creation. Exhaustion always fails closed.</summary>
+        public void ConfigurePersistentRange(ulong first, ulong last)
+        {
+            if (first == 0 || first > last || first <= lastIssued)
+                throw new ArgumentOutOfRangeException(nameof(first), "持久物品号段必须位于已发放标识之后。");
+            lastIssued = first - 1;
+            lastAllowed = last;
+        }
+
+        /// <summary>创建从 FirstValue 开始发放的生成器。</summary>
+        public ItemIdGenerator()
+        {
+        }
+
+        /// <summary>创建从指定值之后继续递增的生成器，用于会话续接或存档恢复（0 表示尚未发放）。</summary>
+        public ItemIdGenerator(ulong lastIssuedValue)
+        {
+            lastIssued = lastIssuedValue;
+        }
+
+        public ItemId LastIssued => new ItemId(lastIssued); // 最近一次发放的标识；尚未发放时为 ItemId.None。
+
+        /// <summary>恢复已验证的权威存档后接续高水位；越过预留号段上界时不改变发号器。</summary>
+        public void Observe(ItemId itemId)
+        {
+            if (itemId.Value > lastAllowed) throw new ArgumentOutOfRangeException(nameof(itemId), "恢复物品标识超出预留号段。");
+            if (itemId.Value > lastIssued) lastIssued = itemId.Value;
+        }
+
+        /// <summary>产出下一个唯一标识；标识空间（ulong）耗尽时抛出 OverflowException，绝不回绕。</summary>
+        public ItemId Next()
+        {
+            if (lastIssued >= lastAllowed)
+            {
+                throw new OverflowException("ItemId 标识空间已耗尽（ulong.MaxValue），拒绝回绕以避免产生重复标识。");
+            }
+
+            lastIssued++;
+            return new ItemId(lastIssued);
+        }
+    }
+}

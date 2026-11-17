@@ -1,0 +1,18 @@
+{
+    "name": "RPG4.Input",
+    "rootNamespace": "RPG4.Input",
+    "references": [
+        "Unity.InputSystem",
+        "RPG4.UI",
+        "RPG4.PlayerIntent"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

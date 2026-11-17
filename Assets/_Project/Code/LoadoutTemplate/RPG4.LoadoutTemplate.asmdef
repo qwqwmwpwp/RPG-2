@@ -1,0 +1,15 @@
+{
+  "name": "RPG4.LoadoutTemplate",
+  "rootNamespace": "RPG4.LoadoutTemplate",
+  "references": [
+    "RPG4.Backpack.Core",
+    "RPG4.Backpack.Items",
+    "Mirror",
+    "RPG4.LoadoutContracts"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "autoReferenced": true,
+  "noEngineReferences": false
+}

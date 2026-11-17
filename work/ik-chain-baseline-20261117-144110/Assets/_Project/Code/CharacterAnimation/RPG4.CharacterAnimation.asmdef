@@ -1,0 +1,5 @@
+{
+  "name": "RPG4.CharacterAnimation",
+  "rootNamespace": "RPG4.CharacterAnimation",
+  "references": ["Unity.Animation.Rigging"]
+}

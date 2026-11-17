@@ -1,0 +1,19 @@
+{
+  "name": "RPG4.Combat.UI",
+  "rootNamespace": "RPG4.Combat.UI",
+  "references": [
+    "RPG4.LoadoutTemplate",
+    "RPG4.LoadoutContracts",
+    "RPG4.PlayerMovement",
+    "RPG4.PlayerIntent",
+    "RPG4.Backpack.Core",
+    "RPG4.Backpack.Items",
+    "RPG4.UI",
+    "RPG4.Input",
+    "Unity.TextMeshPro",
+    "UnityEngine.UI",
+    "Unity.InputSystem",
+    "Mirror"
+  ],
+  "autoReferenced": true
+}

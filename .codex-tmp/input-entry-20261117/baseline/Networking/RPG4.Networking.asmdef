@@ -1,0 +1,27 @@
+{
+  "name": "RPG4.Networking",
+  "rootNamespace": "RPG4.Networking",
+  "references": [
+    "Mirror",
+    "Mirror.Transports",
+    "RPG4.Networking.Contracts",
+    "RPG4.LoadoutTemplate",
+    "Cinemachine",
+    "RPG4.UI",
+    "RPG4.PlayerMovement",
+    "RPG4.PlayerIntent",
+    "RPG4.Input",
+    "RPG4.CharacterAttributes",
+    "RPG4.Combat",
+    "RPG4.Backpack.Core",
+    "RPG4.Backpack.Items",
+    "RPG4.Backpack.Equipment",
+    "MagicaClothV2",
+    "RPG4.Raid.Domain",
+    "RPG4.Raid.Application",
+    "RPG4.Networking.Transport",
+    "RPG4.LoadoutContracts",
+    "Mirror.Components",
+    "RPG4.CharacterAnimation"
+  ]
+}

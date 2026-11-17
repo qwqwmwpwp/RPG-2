@@ -1,0 +1,20 @@
+{
+  "TimeUtc": "2026-11-16T08:45:52.7496430Z",
+  "Mode": "Execute",
+  "Results": [
+    {
+      "Path": "E:\\WPS\\WPS Office\\12.1.0.29161",
+      "Status": "Deleted",
+      "Bytes": 1554486242,
+      "TargetAbsent": true,
+      "CurrentExeExists": true
+    },
+    {
+      "Path": "E:\\腾讯\\WeChat",
+      "Status": "Deleted",
+      "Bytes": 837436467,
+      "TargetAbsent": true,
+      "CurrentExeExists": true
+    }
+  ]
+}

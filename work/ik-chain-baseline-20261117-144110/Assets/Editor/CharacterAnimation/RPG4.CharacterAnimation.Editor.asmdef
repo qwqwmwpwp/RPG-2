@@ -1,0 +1,6 @@
+{
+  "name": "RPG4.CharacterAnimation.Editor",
+  "rootNamespace": "RPG4.CharacterAnimation.Editor",
+  "references": ["RPG4.CharacterAnimation"],
+  "includePlatforms": ["Editor"]
+}

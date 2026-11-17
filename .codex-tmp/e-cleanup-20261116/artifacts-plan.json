@@ -1,0 +1,73 @@
+{
+  "CreatedAt": "2026-11-16T16:39:14.0985350+08:00",
+  "Mode": "Preflight only; no deletion performed",
+  "Targets": [
+    {
+      "Path": "E:\\PS\\Adobe Photoshop 2025 26.10.0.7 m0nkrus.zip",
+      "Kind": "File",
+      "Exists": true,
+      "Bytes": 5638265514,
+      "FileCount": 1,
+      "DirectoryCount": 0,
+      "ReparsePoints": [],
+      "RootAttributes": "Archive",
+      "RootLastWriteTime": "2025-12-12T12:11:58.1885619+08:00"
+    },
+    {
+      "Path": "E:\\PS\\Adobe Photoshop 2025 26.10.0.7 m0nkrus",
+      "Kind": "Directory",
+      "Exists": true,
+      "Bytes": 5661346237,
+      "FileCount": 283,
+      "DirectoryCount": 101,
+      "ReparsePoints": [],
+      "RootAttributes": "Directory",
+      "RootLastWriteTime": "2025-09-12T22:02:39.4943203+08:00"
+    },
+    {
+      "Path": "E:\\Git\\banana-master.zip",
+      "Kind": "File",
+      "Exists": true,
+      "Bytes": 1358881480,
+      "FileCount": 1,
+      "DirectoryCount": 0,
+      "ReparsePoints": [],
+      "RootAttributes": "Archive",
+      "RootLastWriteTime": "2026-04-28T19:56:52.8426763+08:00"
+    },
+    {
+      "Path": "E:\\UE转换\\cache",
+      "Kind": "Directory",
+      "Exists": true,
+      "Bytes": 1286337548,
+      "FileCount": 6826,
+      "DirectoryCount": 1967,
+      "ReparsePoints": [],
+      "RootAttributes": "Directory",
+      "RootLastWriteTime": "2026-11-01T02:53:40.9105495+08:00"
+    }
+  ],
+  "ProcessReferences": [],
+  "Actions": [
+    {
+      "Path": "E:\\PS\\Adobe Photoshop 2025 26.10.0.7 m0nkrus.zip",
+      "Action": "Delete only after explicit execution instruction",
+      "Purpose": "Authorized archive"
+    },
+    {
+      "Path": "E:\\PS\\Adobe Photoshop 2025 26.10.0.7 m0nkrus",
+      "Action": "Delete only after explicit execution instruction",
+      "Purpose": "Authorized extracted installer package"
+    },
+    {
+      "Path": "E:\\Git\\banana-master.zip",
+      "Action": "Delete only after explicit execution instruction",
+      "Purpose": "Authorized archive"
+    },
+    {
+      "Path": "E:\\UE转换\\cache",
+      "Action": "Delete only after explicit execution instruction",
+      "Purpose": "Authorized conversion cache"
+    }
+  ]
+}

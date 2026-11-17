@@ -459,8 +459,6 @@ GameObject:
   m_Component:
     - component: {fileID: 10000021}
     - component: {fileID: 10000020}
-    - component: {fileID: 10000022}
-    - component: {fileID: 10000023}
   m_Layer: 0
   m_Name: UIManager
   m_TagString: Untagged
@@ -482,8 +480,6 @@ MonoBehaviour:
   m_EditorClassIdentifier:
   windowRoot: {fileID: 10000006}
   windowPrefabs:
-    - {fileID: 5093767911312014143, guid: 5db9c98c86636d84db308c7f6edc6a30, type: 3}
-    - {fileID: 6630096708533370529, guid: b983c9da1794d37468be892203d0bc8b, type: 3}
     - {fileID: 910000003, guid: 7cbcac81b6a7453fa4a64d6a46ffaaf3, type: 3}
 --- !u!4 &10000021
 Transform:
@@ -500,30 +496,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 10000031}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &10000022
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 10000019}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 42335824f8a84bf5adec0066d85b650a, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
---- !u!114 &10000023
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 10000019}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 42bda7f3b5604a899cef6bcf65e03c82, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
 --- !u!1 &10000032
 GameObject:
   m_ObjectHideFlags: 0
@@ -2219,6 +2191,7 @@ MonoBehaviour:
   healthView: {fileID: 10000050}
   restartButton: {fileID: 10000121}
   statusLabel: {fileID: 10000116}
+  actionLabel: {fileID: 10000125}
 --- !u!1 &10000105
 GameObject:
   m_ObjectHideFlags: 0
@@ -4271,7 +4244,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &10000183
 Transform:
   m_ObjectHideFlags: 0
@@ -5968,10 +5941,31 @@ MonoBehaviour:
   m_GameObject: {fileID: 10000258}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ea18f82789764509a4ba897b23349321, type: 3}
+  m_Script: {fileID: 11500000, guid: 6f62e93397284cf0aa42bf3ab4f0106b, type: 3}
   m_Name:
   m_EditorClassIdentifier:
-  fillCatalogOnStart: 0
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  chestId: online-game-chest
+  columns: 5
+  rows: 6
+  seeds:
+  - itemId: rifle-a
+    definition: {fileID: 11400000, guid: 781d47236cf64d3cb3348018ff01ffe6, type: 2}
+    origin: {x: 0, y: 0}
+    count: 1
+    rotated: 0
+  - itemId: pistol
+    definition: {fileID: 11400000, guid: 94e440602065486e8ed15650f66bb12c, type: 2}
+    origin: {x: 4, y: 0}
+    count: 1
+    rotated: 1
+  - itemId: knife
+    definition: {fileID: 11400000, guid: 48a50c903fd4480990ca879cef15f6ba, type: 2}
+    origin: {x: 0, y: 3}
+    count: 1
+    rotated: 1
 --- !u!114 &10000264
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5981,12 +5975,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 10000258}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b26f8d1a5c0e4339a7f2d41960be8c35, type: 3}
+  m_Script: {fileID: 11500000, guid: 91db2ea987e24cb6991349331fe52f6e, type: 3}
   m_Name:
   m_EditorClassIdentifier:
-  rows: 6
-  columns: 8
-  catalog: {fileID: 11400000, guid: 30764ee9304076d49882ee9672e4fab9, type: 2}
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  interactionDistance: 3
 --- !u!114 &10000256
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6045,17 +6040,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 10000258}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 79c2a665dd6a49949893858357b4edbf, type: 3}
+  m_Script: {fileID: 11500000, guid: 71410d1d28d1403ab802ee39934eeb30, type: 3}
   m_Name:
   m_EditorClassIdentifier:
-  syncDirection: 0
-  syncMode: 1
-  syncInterval: 0
-  sharedContainer: 1
-  interactionRange: 3
-  catalog: {fileID: 11400000, guid: 30764ee9304076d49882ee9672e4fab9, type: 2}
-  rows: 6
-  columns: 8
+  interactionPrompt: "E 打开箱子"
+  emptyInteractionPrompt: "空箱子 · E 打开"
 --- !u!1 &10000267
 GameObject:
   m_ObjectHideFlags: 0
@@ -6241,11 +6230,7 @@ MonoBehaviour:
   spawnPoints:
     - {fileID: 10000269}
     - {fileID: 10000272}
-  additionalCombatTargets:
-    - {fileID: 10000192}
-    - {fileID: 10000197}
-    - {fileID: 10000202}
-    - {fileID: 10000207}
+  additionalCombatTargets: []
   trustedSpawnConfiguration: {fileID: 10000027}
 --- !u!114 &10000027
 MonoBehaviour:
@@ -6260,20 +6245,8 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   catalog: {fileID: 11400000, guid: 30764ee9304076d49882ee9672e4fab9, type: 2}
-  initialWeapon: {fileID: 11400000, guid: d7b9e095cbe34d9a8a2991609dfd0d38, type: 2}
-  inventoryItems:
-    - Manifest: {fileID: 11400000, guid: 9b2a7679438b73045abb2686c957422c, type: 2}
-      Count: 60
-    - Manifest: {fileID: 11400000, guid: 8499b17e8f183f340bd0c6de4117ea0a, type: 2}
-      Count: 1
-    - Manifest: {fileID: 11400000, guid: 8499b17e8f183f340bd0c6de4117ea0a, type: 2}
-      Count: 1
-    - Manifest: {fileID: 11400000, guid: c020762a70a24448b260d8d00a4a6d62, type: 2}
-      Count: 1
-    - Manifest: {fileID: 11400000, guid: 75a0eee65f2a46178c428f9bcd868e6b, type: 2}
-      Count: 1
-    - Manifest: {fileID: 11400000, guid: 11d2a937c70edd04ea04bd006c5973f1, type: 2}
-      Count: 5
+  initialWeapon: {fileID: 0}
+  inventoryItems: []
 --- !u!114 &10000028
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6302,8 +6275,6 @@ MonoBehaviour:
   m_EditorClassIdentifier:
   uiManager: {fileID: 10000020}
   weaponHud: {fileID: 10000177}
-  inventoryInput: {fileID: 10000022}
-  inventoryCoordinator: {fileID: 10000023}
   clientOnlyRoots: []
 --- !u!1 &993000
 GameObject:
@@ -6438,6 +6409,8 @@ GameObject:
   - component: {fileID: 10000304}
   - component: {fileID: 10000305}
   - component: {fileID: 10000306}
+  - component: {fileID: 10000307}
+  - component: {fileID: 10000308}
   m_Layer: 0
   m_Name: World Pickup - Small Red Potion
   m_TagString: Untagged
@@ -6550,11 +6523,16 @@ MonoBehaviour:
   m_GameObject: {fileID: 10000300}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5db7ac34ba4041288a458fdb5fd74405, type: 3}
+  m_Script: {fileID: 11500000, guid: 48354dbc9fba4f3e9bf91ab91c22fa01, type: 3}
   m_Name:
   m_EditorClassIdentifier:
-  manifest: {fileID: 11400000, guid: 11d2a937c70edd04ea04bd006c5973f1, type: 2}
-  quantity: 2
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  initialDefinition: {fileID: 11400000, guid: 6e2c1f769fb04120b08355e6f442dd3c, type: 2}
+  initialCount: 2
+  collectionRadius: 3
+  worldVisual: {fileID: 0}
 --- !u!1 &10000310
 GameObject:
   m_ObjectHideFlags: 0
@@ -6569,6 +6547,8 @@ GameObject:
   - component: {fileID: 10000314}
   - component: {fileID: 10000315}
   - component: {fileID: 10000316}
+  - component: {fileID: 10000317}
+  - component: {fileID: 10000318}
   m_Layer: 0
   m_Name: World Pickup - Rifle Standard Ammo
   m_TagString: Untagged
@@ -6680,11 +6660,16 @@ MonoBehaviour:
   m_GameObject: {fileID: 10000310}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5db7ac34ba4041288a458fdb5fd74405, type: 3}
+  m_Script: {fileID: 11500000, guid: 48354dbc9fba4f3e9bf91ab91c22fa01, type: 3}
   m_Name:
   m_EditorClassIdentifier:
-  manifest: {fileID: 11400000, guid: 9b2a7679438b73045abb2686c957422c, type: 2}
-  quantity: 30
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  initialDefinition: {fileID: 11400000, guid: 1ede7fa861e2419fb65aecf2a9c8df86, type: 2}
+  initialCount: 30
+  collectionRadius: 3
+  worldVisual: {fileID: 0}
 --- !u!1 &10000320
 GameObject:
   m_ObjectHideFlags: 0
@@ -6699,6 +6684,8 @@ GameObject:
   - component: {fileID: 10000324}
   - component: {fileID: 10000325}
   - component: {fileID: 10000326}
+  - component: {fileID: 10000327}
+  - component: {fileID: 10000328}
   m_Layer: 0
   m_Name: World Pickup - Metal Rifle
   m_TagString: Untagged
@@ -6810,8 +6797,103 @@ MonoBehaviour:
   m_GameObject: {fileID: 10000320}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5db7ac34ba4041288a458fdb5fd74405, type: 3}
+  m_Script: {fileID: 11500000, guid: 48354dbc9fba4f3e9bf91ab91c22fa01, type: 3}
   m_Name:
   m_EditorClassIdentifier:
-  manifest: {fileID: 11400000, guid: 42c885270a814363b41bac417923d007, type: 2}
-  quantity: 1
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  initialDefinition: {fileID: 11400000, guid: 24150e1572cd41c19785d34f79f73958, type: 2}
+  initialCount: 1
+  collectionRadius: 3
+  worldVisual: {fileID: 0}
+--- !u!114 &10000307
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 10000300}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 91db2ea987e24cb6991349331fe52f6e, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  interactionDistance: 3
+--- !u!114 &10000308
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 10000300}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 71410d1d28d1403ab802ee39934eeb30, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  interactionPrompt: "E 搜索附近物品"
+  emptyInteractionPrompt: "已搜空 · E 查看"
+--- !u!114 &10000317
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 10000310}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 91db2ea987e24cb6991349331fe52f6e, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  interactionDistance: 3
+--- !u!114 &10000318
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 10000310}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 71410d1d28d1403ab802ee39934eeb30, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  interactionPrompt: "E 搜索附近物品"
+  emptyInteractionPrompt: "已搜空 · E 查看"
+--- !u!114 &10000327
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 10000320}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 91db2ea987e24cb6991349331fe52f6e, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  interactionDistance: 3
+--- !u!114 &10000328
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 10000320}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 71410d1d28d1403ab802ee39934eeb30, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  interactionPrompt: "E 搜索附近物品"
+  emptyInteractionPrompt: "已搜空 · E 查看"

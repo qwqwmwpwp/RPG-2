@@ -1,0 +1,140 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8a1c5e6f0b934b279d312f457c6a9021, type: 3}
+  m_Name: NetworkCharacterIK
+  m_EditorClassIdentifier: 
+  modules: 15
+  pitchRange: {x: -45, y: 60}
+  pitchSmoothTime: 0
+  waistFraction: 0.8
+  yawLimit: 80
+  yawOffset: 10
+  waistPitchOffset: 0
+  actions:
+  - id: FreeLocomotion
+    allowAim: 0
+    allowSupportHand: 0
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+    shotReference: 0
+    stages: []
+  - id: StrafeLocomotion
+    allowAim: 0
+    allowSupportHand: 0
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+    shotReference: 0
+    stages: []
+  - id: TurnLeft
+    allowAim: 0
+    allowSupportHand: 0
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+    shotReference: 0
+    stages: []
+  - id: TurnRight
+    allowAim: 0
+    allowSupportHand: 0
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+    shotReference: 0
+    stages: []
+  - id: Aim
+    allowAim: 1
+    allowSupportHand: 1
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+    shotReference: 0
+    stages: []
+  - id: PreviewGrip
+    allowAim: 0
+    allowSupportHand: 1
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+    shotReference: 0
+    stages: []
+  - id: HipFire
+    allowAim: 1
+    allowSupportHand: 1
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+    shotReference: 1
+    stages: []
+  - id: ADSFire
+    allowAim: 1
+    allowSupportHand: 1
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+    shotReference: 1
+    stages: []
+  - id: HipAutoFire
+    allowAim: 1
+    allowSupportHand: 1
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+    shotReference: 1
+    stages: []
+  - id: ADSAutoFire
+    allowAim: 1
+    allowSupportHand: 1
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+    shotReference: 1
+    stages: []
+  - id: Reload
+    allowAim: 0
+    allowSupportHand: 1
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+    shotReference: 1
+    stages:
+    - phase: 0
+      socket: 2
+      supportHandMultiplier: 0
+    - phase: 1
+      socket: 0
+      supportHandMultiplier: 1
+  - id: UseConsumable
+    allowAim: 0
+    allowSupportHand: 0
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+    shotReference: 0
+    stages: []
+  - id: Hurt
+    allowAim: 0
+    allowSupportHand: 0
+    allowBodyTurn: 1
+    yawOffset: 0
+    waistPitchOffset: 0
+    shotReference: 0
+    stages: []
+  - id: Dead
+    allowAim: 0
+    allowSupportHand: 0
+    allowBodyTurn: 0
+    yawOffset: 0
+    waistPitchOffset: 0
+    shotReference: 0
+    stages: []

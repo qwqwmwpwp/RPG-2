@@ -1,0 +1,21 @@
+{
+    "name": "RPG4.PlayerMovement",
+    "rootNamespace": "RPG4.PlayerMovement",
+    "references": [
+        "Mirror",
+        "RPG4.Input",
+        "RPG4.Interaction",
+        "RPG4.UI",
+        "RPG4.CharacterAttributes",
+        "RPG4.Combat",
+        "RPG4.StateMachine",
+        "Cinemachine",
+        "RPG4.PlayerIntent",
+        "RPG4.Backpack.Core",
+        "RPG4.Backpack.Items",
+        "RPG4.LoadoutContracts",
+        "RPG4.LoadoutTemplate",
+        "RPG4.Backpack.Equipment",
+        "RPG4.CharacterAnimation"
+    ]
+}

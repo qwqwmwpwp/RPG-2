@@ -1,0 +1,9 @@
+{
+  "name": "RPG4.LoadoutContracts",
+  "rootNamespace": "RPG4.LoadoutContracts",
+  "references": [
+    "RPG4.Backpack.Core",
+    "RPG4.Backpack.Items"
+  ],
+  "autoReferenced": true
+}
