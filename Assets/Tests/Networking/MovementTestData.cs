@@ -18,7 +18,7 @@ namespace RPG4.Networking.Tests
 
         internal static PlayerMovementRecord Record(ulong step, uint epoch = 1, uint correction = 0)
             => new PlayerMovementRecord { Report = Report(step, epoch, correction),
-                PredictedState = new PlayerNetworkState { Tick = 100 + (long)step, Time = 2d + step * .02d } };
+                PredictionTime = 2d + step * .02d };
 
         internal static MovementRuleContext Rules()
             => new MovementRuleContext { Active = true, Alive = true, CanUseWeapon = true, CanStand = true,

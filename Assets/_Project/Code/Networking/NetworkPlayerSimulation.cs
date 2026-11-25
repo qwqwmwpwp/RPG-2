@@ -1,3 +1,4 @@
+using RPG4.CharacterAttributes;
 using System.Collections.Generic;
 using Mirror;
 using RPG4.Combat;
@@ -66,7 +67,9 @@ namespace RPG4.Networking
                 Physics.SyncTransforms();
                 foreach (NetworkPlayerController player in stepPlayers) player.MoveServer(Tick, Time, deltaTime);
                 Physics.SyncTransforms();
-                // Movement and publication continue; combat history, shots and consumable completion are suspended.
+                if (CombatCapabilities.Online.WeaponActions) ResolveWeaponActions(deltaTime);
+                if (CombatCapabilities.Online.Consumables)
+                    foreach (NetworkPlayerController player in stepPlayers) player.CompleteDueUse(Time);
                 foreach (NetworkPlayerController player in stepPlayers) player.PublishServer(Tick);
             }
             finally
@@ -75,6 +78,17 @@ namespace RPG4.Networking
                 foreach (NetworkPlayerController player in stepPlayers)
                     if (player != null) player.CompleteOwnerInputCycle();
             }
+        }
+        private static void ResolveWeaponActions(float deltaTime)
+        {
+            targets.Clear();
+            foreach (NetworkPlayerController player in stepPlayers)
+                if (player.isServer && player.TryGetComponent(out CapsuleCollider capsule)) targets.Add(capsule);
+            if (extraTargets != null)
+                foreach (Collider target in extraTargets)
+                    if (target != null && !targets.Contains(target)) targets.Add(target);
+            history.Capture(Time, targets);
+            foreach (NetworkPlayerController player in stepPlayers) player.FlushCombat(history, Tick, Time, deltaTime);
         }
     }
 }

@@ -5,7 +5,7 @@ namespace RPG4.Networking.Contracts
 {
     public static class EntryProtocol
     {
-        public const uint Version = 8;
+        public const uint Version = 9;
         public const string Name = "rpg-entry-v4";
         public const string MapId = "online_game";
         public const string GameplayScene = "Assets/Scenes/OnlineGame.unity";

@@ -13,6 +13,19 @@ namespace RPG4.LoadoutTemplate
             add { CommitCoordinator.Committed += value; }
             remove { CommitCoordinator.Committed -= value; }
         }
+        public bool AffectsEquippedWeapon(LoadoutCommitRecord commit)
+        {
+            if (commit.SelectedWeaponChanged || !commit.DetailsComplete || commit.Before.Epoch != commit.After.Epoch
+                || commit.RuntimeItemsChanged && commit.Changes.Count == 0) return true;
+            foreach (var slot in WeaponFallbackOrder)
+            {
+                string endpoint = GetSlot(slot)?.Snapshot.Id;
+                foreach (LoadoutEndpointChange change in commit.Changes)
+                    if (change.EndpointId == endpoint) return true;
+            }
+            return false;
+        }
+
         public bool IsPublishingCommit => CommitCoordinator.IsPublishing;
 
         internal LoadoutOperationKey CreateOperationKey(LoadoutOperationChannel channel, int requestId = 0,

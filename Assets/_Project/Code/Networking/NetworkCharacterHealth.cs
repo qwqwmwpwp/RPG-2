@@ -1,3 +1,4 @@
+using RPG4.CharacterAttributes;
 using Mirror;
 using UnityEngine;
 using AttributeComponent = RPG4.CharacterAttributes.CharacterAttributes;
@@ -71,7 +72,8 @@ namespace RPG4.Networking
         {
             if (attributes == null) return;
             bool networking = NetworkServer.active || NetworkClient.active || serverStarted || clientStarted;
-            attributes.ConfigureAuthority(isActiveAndEnabled && serverStarted || !networking && offlineAuthority);
+            attributes.ConfigureAuthority(isActiveAndEnabled && serverStarted || !networking && offlineAuthority,
+                networking ? CombatCapabilities.Online : CombatCapabilities.Offline);
         }
 
         private void Subscribe()
@@ -115,7 +117,8 @@ namespace RPG4.Networking
         {
             Unsubscribe();
             if (attributes != null)
-                attributes.ConfigureAuthority(!NetworkServer.active && !NetworkClient.active && offlineAuthority);
+                attributes.ConfigureAuthority(!NetworkServer.active && !NetworkClient.active && offlineAuthority,
+                    NetworkServer.active || NetworkClient.active ? CombatCapabilities.Online : CombatCapabilities.Offline);
         }
     }
 

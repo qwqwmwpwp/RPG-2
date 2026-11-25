@@ -30,6 +30,7 @@ namespace RPG4.Frontend
             ObserveDeathWindow();
             if (!player.TryGetComponent(out loadout) || !loadout.IsReady || settings == null) return;
             boundPlayer = player;
+            player.LocalLoadout.BindNetwork(loadout);
             if (weaponHud != null) weaponHud.BindSessionSource(player.Equipment);
             SyncInputGate();
         }
@@ -42,11 +43,13 @@ namespace RPG4.Frontend
         public bool IsBoundTo(Player player) => isActiveAndEnabled && IsCurrentOwnedPlayer(player) && boundPlayer == player
             && uiManager != null && uiManager.isActiveAndEnabled && uiManager.gameObject.scene == gameObject.scene
             && loadout != null && loadout.gameObject == player.gameObject && loadout.IsReady
+            && player.LocalLoadout.IsBoundTo(loadout)
             && Owns(settings) && settings.Manager == uiManager && settings.isActiveAndEnabled;
         public void UnbindLocalPlayer()
         {
             if (deathWindow != null) deathWindow.ReturnToLobbyRequested -= ReturnToLobby;
             deathWindow = null;
+            if (boundPlayer != null) boundPlayer.LocalLoadout.UnbindNetwork();
             boundPlayer = null;
             if (uiManager != null) uiManager.CloseAll();
             if (weaponHud != null) weaponHud.UnbindSessionSource();

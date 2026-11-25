@@ -68,7 +68,7 @@ namespace RPG4.Networking
         }
         /// <summary>Hard recovery only: obsolete unsent inputs must not restart an endless missing-step cycle.</summary>
         public void RetireExpiredInputs(double minimumPredictionTime)
-        { records.RemoveAll(r => r.PredictedState.Time < minimumPredictionTime); }
+        { records.RemoveAll(r => r.PredictionTime < minimumPredictionTime); }
         public void ReplaceReplay(int index, in PlayerMovementRecord record)
         {
             if (index < 0 || index >= records.Count || record.Report.Epoch != Epoch || record.Report.CorrectionId != CorrectionId

@@ -17,8 +17,8 @@ namespace RPG4.PlayerMovement
         private PlayerInputFrame InputFrame => context.ReadState.Input.Snapshot.Frame;
         internal bool CanAct => frameAvailable && !context.Owner.SimulationInterrupted && context.CanUseWeapon;
         internal bool AimHeld => CanAct && InputFrame.AimHeld;
-        internal bool ReloadPressed => context.Owner.CanExecuteCombat && CanAct && InputFrame.ReloadPressed && context.Weapon.CanReload;
-        internal bool FireInputAvailable => context.Owner.CanExecuteCombat && CanAct && fireArmed && context.Owner.SimulationTick > fireRearmFrame;
+        internal bool ReloadPressed => context.Owner.Combat.WeaponActions && CanAct && InputFrame.ReloadPressed && context.Weapon.CanReload;
+        internal bool FireInputAvailable => context.Owner.Combat.WeaponActions && CanAct && fireArmed && context.Owner.SimulationTick > fireRearmFrame;
         internal bool FireHeld => FireInputAvailable && InputFrame.FireHeld;
         internal bool FirePressed => FireInputAvailable && InputFrame.FirePressed;
         internal bool IsReloading => context.Weapon != null && context.Weapon.IsReloading;
@@ -46,7 +46,7 @@ namespace RPG4.PlayerMovement
             frameAvailable = deltaTime > 0f && context.CanUseWeapon
                 && !context.ReadState.Weapon.WeaponCancellationRequested;
             if (!frameAvailable) CancelWeaponAction();
-            else if (context.Owner.CanExecuteCombat)
+            else if (context.Owner.Combat.WeaponActions)
             {
                 // 取消前的 held 不能自行恢复；新按下边沿可以开启下一次扳机会话。
                 PlayerInputFrame input = InputFrame;
@@ -75,7 +75,7 @@ namespace RPG4.PlayerMovement
         {
             RequireRelease();
             timeline.ClearAction();
-            if (context.Owner.CanExecuteCombat && CanAct) context.Weapon.TryBeginReload();
+            if (context.Owner.Combat.WeaponActions && CanAct) context.Weapon.TryBeginReload();
         }
         internal void TickReload()
             => context.Intents.RecordWeapon(PlayerMovementDemand.Compose(context.Data, CanAct,

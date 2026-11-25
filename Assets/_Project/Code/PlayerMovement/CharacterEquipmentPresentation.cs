@@ -19,8 +19,24 @@ namespace RPG4.PlayerMovement
         internal WeaponView View { get; private set; }
         internal ulong Identity => item != null ? item.ItemId.Value : 0;
         internal uint Version { get; private set; }
-        internal bool Matches(RuntimeItem value) => value == null ? item == null
-            : item != null && item.ItemId == value.ItemId && item.ItemType.Equals(value.ItemType) && revision == value.Revision;
+        private int structureRevision = -1;
+
+        // Only rebind the executing model when its geometry remains valid for the frozen IK plan.
+        internal bool TryReuseModel(RuntimeItem next)
+        {
+            if (item == null || next == null || View == null) return false;
+            bool sameInstance = ReferenceEquals(item, next);
+            if (sameInstance && revision == next.Revision) return true;
+            if (structureRevision != item.StructureRevision
+                || !sameInstance && !ItemAssemblyModelView.SameStructure(item, next)) return false;
+
+            View.ApplyItemState(next);
+            item = next;
+            revision = next.Revision;
+            structureRevision = next.StructureRevision;
+            return true;
+        }
+
         internal CharacterEquipmentPresentation(Transform carrier)
         {
             this.carrier = carrier;
@@ -95,11 +111,13 @@ namespace RPG4.PlayerMovement
                     Version = ++nextVersion;
                 }
                 revision = item.Revision;
+                structureRevision = item.StructureRevision;
                 return;
             }
             if (attempted && revision == item.Revision) return;
             attempted = true;
             revision = item.Revision;
+            structureRevision = item.StructureRevision;
             GameObject model = null;
             try
             {
@@ -130,7 +148,7 @@ namespace RPG4.PlayerMovement
             UnbindModel();
             item = null;
             attempted = false;
-            revision = -1;
+            revision = structureRevision = -1;
         }
     }
 
@@ -163,7 +181,7 @@ namespace RPG4.PlayerMovement
                 if (second.Identity == requiredIdentity.Value && second.View != null) return planned = second;
                 next = null;
             }
-            if (active != null && active.Matches(next)) return planned = active;
+            if (active != null && active.TryReuseModel(next)) return planned = active;
             planned = active == first ? second : first;
             // Building the hidden slot never replaces the model referenced by the current animation/IK plan.
             planned.SetVisible(true);

@@ -87,43 +87,55 @@ namespace RPG4.PlayerMovement
             crosshair.SetState(false, false);
         }
 
-        internal void Present(float deltaTime, bool reevaluate = false)
+        private bool pendingReevaluation;
+
+        internal void AdvanceFrame(float deltaTime)
         {
-            if (!enabled)
+            if (!enabled || advancedFrame == Time.frameCount) return;
+            // Recovery for a caller disabled between Update and LateUpdate: close the previous
+            // render transaction before opening another, without advancing either module twice.
+            if (advancedFrame >= 0 && committedRenderFrame != advancedFrame) CommitFrame(advancedFrame);
+            advancedFrame = Time.frameCount;
+            preparedFrame = blackboard.Published;
+            frame = committedFrame;
+            renderView = committedView;
+            frameDemand = committedDemand; frameZoom = committedZoom; frameShots = committedShots;
+            if (preparedFrame == null) return;
+            float step = Mathf.Max(0f, deltaTime);
+            renderPose.Advance(step);
+            if (preparedFrame.Active && preparedFrame.Alive) SampleMovement(preparedFrame, step);
+            else { hasMotionSample = false; presentationVelocity = Vector3.zero; }
+            CharacterAnimationState previous = animationSystem != null ? animationSystem.CommittedState : default;
+            CharacterEquipmentPresentation planningEquipment = equipment.BeginFrame(previous.EquipmentIdentity,
+                previous.EquipmentVersion, previous.HasEquipment, preparedFrame.WeaponId);
+            preparedView = owner != null ? owner.GetLocalRenderViewAngles(preparedFrame)
+                : new Vector2(preparedFrame.ViewYaw, preparedFrame.ViewPitch);
+            preparedZoom = owner != null ? owner.InputEvents.ConsumePresentationZoom() : 0f;
+            Transform visual = data.Content.PresentationRoot;
+            float yawOffset = visual != null ? Mathf.DeltaAngle(preparedFrame.BodyYaw, visual.eulerAngles.y) : 0f;
+            var pending = animationAdapter.Build(preparedFrame, presentationVelocity, preparedFrame.BodyYaw,
+                preparedView, yawOffset, planningEquipment);
+            preparedDemand = animationAdapter.Demand;
+            CaptureAnticipatedShots();
+            animationSystem?.Prepare(pending, step, Time.frameCount);
+            bool reevaluate = pendingReevaluation;
+            pendingReevaluation = false;
+            PresentPreparedFrame(true, reevaluate);
+        }
+
+        internal void RefreshPreparedFrame(bool reevaluate = false)
+        {
+            if (!enabled) return;
+            if (advancedFrame != Time.frameCount)
             {
-                lastEventSequence = blackboard.Published != null ? blackboard.Published.LastEventSequence : lastEventSequence;
+                pendingReevaluation |= reevaluate;
                 return;
             }
-            bool newFrame = advancedFrame != Time.frameCount;
-            if (newFrame)
-            {
-                // Recovery for a caller disabled between Update and LateUpdate: close the previous
-                // render transaction before opening another, without advancing either module twice.
-                if (advancedFrame >= 0 && committedRenderFrame != advancedFrame) CommitFrame(advancedFrame);
-                advancedFrame = Time.frameCount;
-                preparedFrame = blackboard.Published;
-                frame = committedFrame;
-                renderView = committedView;
-                frameDemand = committedDemand; frameZoom = committedZoom; frameShots = committedShots;
-                if (preparedFrame == null) return;
-                float step = Mathf.Max(0f, deltaTime);
-                renderPose.Advance(step);
-                if (preparedFrame.Active && preparedFrame.Alive) SampleMovement(preparedFrame, step);
-                else { hasMotionSample = false; presentationVelocity = Vector3.zero; }
-                CharacterAnimationState previous = animationSystem != null ? animationSystem.CommittedState : default;
-                CharacterEquipmentPresentation planningEquipment = equipment.BeginFrame(previous.EquipmentIdentity,
-                    previous.EquipmentVersion, previous.HasEquipment, preparedFrame.WeaponId);
-                preparedView = owner != null ? owner.GetLocalRenderViewAngles(preparedFrame)
-                    : new Vector2(preparedFrame.ViewYaw, preparedFrame.ViewPitch);
-                preparedZoom = owner != null ? owner.InputEvents.ConsumePresentationZoom() : 0f;
-                Transform visual = data.Content.PresentationRoot;
-                float yawOffset = visual != null ? Mathf.DeltaAngle(preparedFrame.BodyYaw, visual.eulerAngles.y) : 0f;
-                var pending = animationAdapter.Build(preparedFrame, presentationVelocity, preparedFrame.BodyYaw,
-                    preparedView, yawOffset, planningEquipment);
-                preparedDemand = animationAdapter.Demand;
-                CaptureAnticipatedShots();
-                animationSystem?.Prepare(pending, step, Time.frameCount);
-            }
+            PresentPreparedFrame(false, reevaluate);
+        }
+
+        private void PresentPreparedFrame(bool newFrame, bool reevaluate)
+        {
             animationSystem?.Present(Time.frameCount, reevaluate);
             animationState = animationSystem != null ? animationSystem.CurrentState : default;
             if (frame == null) return;
@@ -346,7 +358,7 @@ namespace RPG4.PlayerMovement
             preparedZoom = committedZoom = frameZoom = 0f;
             preparedShots = committedShots = frameShots = System.Array.Empty<PlayerAnticipatedShot>();
             advancedFrame = committedRenderFrame = -1;
-            if (value) Present(0f, true);
+            pendingReevaluation = value;
         }
         internal void Dispose()
         {

@@ -8,7 +8,6 @@ namespace RPG4.PlayerMovement
     internal sealed class LowerBodyRootState : State
     {
         private readonly PlayerContext context;
-        internal bool PhysicallyCrouched => context.World.PhysicallyCrouched;
         internal PostureState Standing { get; }
         internal PostureState Crouching { get; }
         internal LowerBodyRootState(HierarchicalStateMachine machine, PlayerContext context) : base(machine)
@@ -25,11 +24,8 @@ namespace RPG4.PlayerMovement
                 RestoreStrafeAngularLimit();
                 return;
             }
-            bool applied = context.World.ApplyPosture(context.ReadState.Locomotion.Plan.Crouched);
-            context.Intents.RecordPosture(PhysicallyCrouched, !PhysicallyCrouched
-                || (applied && context.ReadState.Locomotion.CanStand));
+            context.World.ApplyPosture(context.ReadState.Locomotion.Plan.Crouched);
         }
-        internal bool CanStand() => context.World.CanStand();
         internal void ResetTurn() => context.World.ResetTurn();
         internal void RestoreStrafeAngularLimit() => context.World.RestoreStrafeAngularLimit();
         internal void Move(bool strafe, float deltaTime) => context.World.Move(context.ReadState.Locomotion.Plan, strafe, deltaTime);

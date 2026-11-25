@@ -46,23 +46,53 @@ namespace RPG4.PlayerIntent
             publicationPending = false;
             Commit(pendingTick, pendingTime);
         }
-        internal bool OwnerActive { get; set; }
-        internal double HurtUntil { get; set; }
-        internal ConsumableActionSnapshot Consumable { get; set; }
-        internal Vector3 PlanarVelocity { get; set; }
-        internal Vector3 WorldPosition { get; set; }
-        internal float BodyYaw { get; set; }
-        internal ulong WeaponId { get; set; }
-        internal ulong ShotSequence { get; set; }
-        internal double ShotTime { get; set; }
-        internal float ShotDuration { get; set; }
-        internal float FadeDuration { get; set; }
-        internal float ReloadDuration { get; set; }
-        internal float CurrentHealth { get; set; }
-        internal float MaxHealth { get; set; }
-        internal bool InteractionVisible { get; set; }
-        internal bool HasInteractionTarget { get; set; }
-        internal string InteractionPrompt { get; set; }
+        private bool stateChanged;
+        private bool ownerActive, isAlive, isHurt, canMove, canLook, canUseWeapon, canInteract;
+        private bool interactionVisible, hasInteractionTarget, physicallyCrouched, canStand;
+        private bool isAiming, reloading, weaponCancellationRequested;
+        private double hurtUntil, shotTime;
+        private ConsumableActionSnapshot consumable;
+        private Vector3 planarVelocity, worldPosition;
+        private float bodyYaw, shotDuration, fadeDuration, reloadDuration, currentHealth, maxHealth, viewYaw, viewPitch, reloadPhase;
+        private ulong weaponId, shotSequence;
+        private string interactionPrompt;
+        private PlayerInputSnapshot snapshot;
+        private UpperBodyDemand weaponDemand;
+        private LocomotionPlan plan;
+        private WeaponActionSnapshot weaponAction;
+        private MonoBehaviour interactionTarget;
+
+        // Logic writes are normally coalesced by EndCycle. A later write invalidates same-tick reuse.
+        private void SetWorking<T>(ref T field, T value)
+        {
+            field = value;
+            stateChanged = true;
+        }
+
+        // External facts are sampled again before sending, even if the simulation already published.
+        private void SetObserved<T>(ref T field, T value) where T : System.IEquatable<T>
+        {
+            if (field.Equals(value)) return;
+            SetWorking(ref field, value);
+        }
+
+        internal bool OwnerActive { get => ownerActive; set => SetObserved(ref ownerActive, value); }
+        internal double HurtUntil { get => hurtUntil; set => SetObserved(ref hurtUntil, value); }
+        internal ConsumableActionSnapshot Consumable { get => consumable; set => SetObserved(ref consumable, value); }
+        internal Vector3 PlanarVelocity { get => planarVelocity; set => SetObserved(ref planarVelocity, value); }
+        internal Vector3 WorldPosition { get => worldPosition; set => SetObserved(ref worldPosition, value); }
+        internal float BodyYaw { get => bodyYaw; set => SetObserved(ref bodyYaw, value); }
+        internal ulong WeaponId { get => weaponId; set => SetObserved(ref weaponId, value); }
+        internal ulong ShotSequence { get => shotSequence; set => SetObserved(ref shotSequence, value); }
+        internal double ShotTime { get => shotTime; set => SetObserved(ref shotTime, value); }
+        internal float ShotDuration { get => shotDuration; set => SetObserved(ref shotDuration, value); }
+        internal float FadeDuration { get => fadeDuration; set => SetObserved(ref fadeDuration, value); }
+        internal float ReloadDuration { get => reloadDuration; set => SetObserved(ref reloadDuration, value); }
+        internal float CurrentHealth { get => currentHealth; set => SetObserved(ref currentHealth, value); }
+        internal float MaxHealth { get => maxHealth; set => SetObserved(ref maxHealth, value); }
+        internal bool InteractionVisible { get => interactionVisible; set => SetWorking(ref interactionVisible, value); }
+        internal bool HasInteractionTarget { get => hasInteractionTarget; set => SetWorking(ref hasInteractionTarget, value); }
+        internal string InteractionPrompt { get => interactionPrompt; set => SetWorking(ref interactionPrompt, value); }
 
         internal void RecordEvent(PlayerEventKind kind, double time, ulong weaponId = 0, ulong shotSequence = 0,
             float amount = 0f, string message = null, bool success = false,
@@ -74,8 +104,10 @@ namespace RPG4.PlayerIntent
             eventsChanged = true;
         }
 
-        internal void Publish(long tick, double time)
+        internal void Publish(long tick, double time, bool reuseUnchanged = false)
         {
+            if (reuseUnchanged && !publicationPending && !stateChanged && !eventsChanged
+                && published != null && published.Tick == tick && published.Time == time) return;
             pendingTick = tick; pendingTime = time;
             publicationPending = true;
         }
@@ -88,6 +120,7 @@ namespace RPG4.PlayerIntent
             }
             Volatile.Write(ref published, new PlayerPublishedFrame(++version, tick, time,
                 this, publishedEvents, eventSequence));
+            stateChanged = false;
             committedRead = (PlayerBlackboard)MemberwiseClone();
             committedRead.cycleRead = committedRead.committedRead = null;
         }
@@ -99,14 +132,14 @@ namespace RPG4.PlayerIntent
         IPlayerPoseState IPlayerReadState.Pose => Read;
         IPlayerInteractionState IPlayerReadState.Interaction => Read;
 
-        public bool IsAlive { get; internal set; }
-        public bool IsHurt { get; internal set; }
-        public PlayerInputSnapshot Snapshot { get; private set; }
+        public bool IsAlive { get => isAlive; internal set => SetWorking(ref isAlive, value); }
+        public bool IsHurt { get => isHurt; internal set => SetWorking(ref isHurt, value); }
+        public PlayerInputSnapshot Snapshot { get => snapshot; private set => SetWorking(ref snapshot, value); }
         public bool InputAllowed => Snapshot.InputAllowed;
-        public bool CanMove { get; internal set; }
-        public bool CanLook { get; internal set; }
-        public bool CanUseWeapon { get; internal set; }
-        public bool CanInteract { get; internal set; }
+        public bool CanMove { get => canMove; internal set => SetWorking(ref canMove, value); }
+        public bool CanLook { get => canLook; internal set => SetWorking(ref canLook, value); }
+        public bool CanUseWeapon { get => canUseWeapon; internal set => SetWorking(ref canUseWeapon, value); }
+        public bool CanInteract { get => canInteract; internal set => SetWorking(ref canInteract, value); }
         public PlayerInputFrame Frame => Snapshot.Frame;
         public ulong Version => Snapshot.Version;
         internal void SetInput(PlayerInputFrame frame, bool allowed, ulong inputVersion)
@@ -120,25 +153,28 @@ namespace RPG4.PlayerIntent
         public bool FireHeld => Frame.FireHeld;
         public bool ReloadPressed => Frame.ReloadPressed;
         public bool InteractPressed => Frame.InteractPressed;
-        public float ViewYaw { get; internal set; }
-        public float ViewPitch { get; internal set; }
-        public bool PhysicallyCrouched { get; internal set; }
-        public bool CanStand { get; internal set; }
-        public UpperBodyDemand WeaponDemand { get; internal set; }
-        public LocomotionPlan Plan { get; internal set; }
-        public WeaponActionSnapshot WeaponAction { get; internal set; }
-        public float ReloadPhase { get; internal set; }
-        public bool IsAiming { get; internal set; }
-        public bool Reloading { get; internal set; }
-        public bool WeaponCancellationRequested { get; internal set; }
-        public MonoBehaviour InteractionTarget { get; internal set; }
+        public float ViewYaw { get => viewYaw; internal set => SetWorking(ref viewYaw, value); }
+        public float ViewPitch { get => viewPitch; internal set => SetWorking(ref viewPitch, value); }
+        public bool PhysicallyCrouched { get => physicallyCrouched; internal set => SetWorking(ref physicallyCrouched, value); }
+        public bool CanStand { get => canStand; internal set => SetWorking(ref canStand, value); }
+        public UpperBodyDemand WeaponDemand { get => weaponDemand; internal set => SetWorking(ref weaponDemand, value); }
+        public LocomotionPlan Plan { get => plan; internal set => SetWorking(ref plan, value); }
+        public WeaponActionSnapshot WeaponAction { get => weaponAction; internal set => SetWorking(ref weaponAction, value); }
+        public float ReloadPhase { get => reloadPhase; internal set => SetWorking(ref reloadPhase, value); }
+        public bool IsAiming { get => isAiming; internal set => SetWorking(ref isAiming, value); }
+        public bool Reloading { get => reloading; internal set => SetWorking(ref reloading, value); }
+        public bool WeaponCancellationRequested { get => weaponCancellationRequested; internal set => SetWorking(ref weaponCancellationRequested, value); }
+        public MonoBehaviour InteractionTarget { get => interactionTarget; internal set => SetWorking(ref interactionTarget, value); }
     }
 
-    public readonly struct ConsumableActionSnapshot
+    public readonly struct ConsumableActionSnapshot : System.IEquatable<ConsumableActionSnapshot>
     {
         public readonly ulong ActionId, ItemId;
         public readonly double StartTime, EndTime;
         public readonly bool Active;
+        public bool Equals(ConsumableActionSnapshot other) => ActionId == other.ActionId && ItemId == other.ItemId
+            && StartTime == other.StartTime && EndTime == other.EndTime && Active == other.Active;
+
         public ConsumableActionSnapshot(ulong actionId, ulong itemId, double startTime, double endTime, bool active)
         { ActionId = actionId; ItemId = itemId; StartTime = startTime; EndTime = endTime; Active = active; }
     }

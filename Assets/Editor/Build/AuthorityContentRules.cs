@@ -89,6 +89,7 @@ namespace RPG4.Editor.Build
                 case "RPG4.PlayerMovement.CharacterPresentation":
                 case "RPG4.CharacterAnimation.CharacterPresentationSystem":
                 case "RPG4.CharacterAnimation.PlayerAimPose": case "RPG4.CharacterAnimation.PlayerWeaponRig":
+                case "RPG4.CharacterAnimation.PlayerSupportHandTargetConstraint":
                 case "RPG4.CharacterAnimation.PlayerBodyAimConstraint": case "RPG4.CharacterAnimation.PlayerShotPoseConstraint":
                 case "RPG4.Interaction.CharacterLootInteractable":
                 case "RPG4.Interaction.PlayerInteraction": // Local camera targeting; server access limits live in the network ingress.

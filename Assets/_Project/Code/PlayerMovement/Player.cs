@@ -1,8 +1,6 @@
 using RPG4.Input;
 using RPG4.CharacterAttributes;
 using RPG4.PlayerIntent;
-using RPG4.Backpack.Core;
-using RPG4.Backpack.Items;
 using UnityEngine;
 using CharacterAttributeComponent = RPG4.CharacterAttributes.CharacterAttributes;
 using HierarchicalStateMachine = RPG4.StateMachine.StateMachine;
@@ -14,7 +12,7 @@ namespace RPG4.PlayerMovement
     [DefaultExecutionOrder(150)]
     [RequireComponent(typeof(Rigidbody), typeof(CapsuleCollider), typeof(PlayerInput))]
     [RequireComponent(typeof(CharacterAttributeComponent))]
-    public sealed class Player : MonoBehaviour
+    public sealed partial class Player : MonoBehaviour
     {
         [SerializeField] private PlayerInput playerInput;
         [SerializeField] private PlayerStateData stateData = new PlayerStateData();
@@ -32,21 +30,19 @@ namespace RPG4.PlayerMovement
         private double hurtUntil;
         private long simulationTick;
         private double simulationTime;
-        private bool networkSimulation, networkAuthority, networkLocalInput;
-        private PlayerNetworkState confirmedNetworkState;
-        private bool hasConfirmedNetworkState;
-        private readonly PlayerLocalActionAnticipation localActions = new PlayerLocalActionAnticipation();
         public long SimulationTick => simulationTick;
         public double SimulationTime => simulationTime;
         public bool IsNetworkSimulation => networkSimulation;
         public bool HasSimulationAuthority => !networkSimulation || networkAuthority;
         // 联机首轮只开放移动、持枪瞄准和库存事务；离线保留原有战斗规则。
-        public bool CanExecuteCombat => !networkSimulation;
+        public CombatCapabilities Combat => networkSimulation ? CombatCapabilities.Online : CombatCapabilities.Offline;
+        public bool CanExecuteCombat => Combat.WeaponActions;
         public const string NetworkCombatPausedMessage = "联机战斗暂未开放，射击、战斗换弹和消耗品使用已暂停。";
         public PlayerViewController LocalView => stateData.Content.ViewController;
         public PlayerEquipment Equipment => context?.Equipment;
+        public PlayerLocalLoadout LocalLoadout { get; } = new PlayerLocalLoadout();
         public PlayerConsumableUse Consumables { get; private set; }
-        internal ConsumableActionSnapshot ConfirmedConsumableState => confirmedNetworkState.Consumable;
+        internal ConsumableActionSnapshot ConfirmedConsumableState => confirmedAuthority.Consumable;
         public PlayerPublishedFrame PublishedFrame => intents?.Blackboard.Published;
         public Vector2 PreviewViewAngles => GetLocalRenderViewAngles();
         private readonly Vector2 pitchRange = new Vector2(-89f, 89f);
@@ -78,13 +74,19 @@ namespace RPG4.PlayerMovement
         {
             localActions.Cancel();
             intents?.ClearInput();
-            if (!CanExecuteCombat) Equipment?.DiscardPendingShots();
+            if (!Combat.WeaponActions) Equipment?.DiscardPendingShots();
             CancelWeaponAction();
         }
         /// <summary>仅投影执行输入，不修改冻结快照、移动报告或序列回执。</summary>
         private PlayerInputFrame FilterCombatInput(PlayerInputFrame input)
-            => CanExecuteCombat ? input : new PlayerInputFrame(input.Move, input.Look, input.Zoom,
-                input.CrouchHeld, input.AimHeld, interactPressed: input.InteractPressed, viewAngles: input.ViewAngles);
+        {
+            var capabilities = Combat;
+            if (capabilities.WeaponActions && capabilities.Consumables) return input;
+            return new PlayerInputFrame(input.Move, input.Look, input.Zoom, input.CrouchHeld, input.AimHeld,
+                capabilities.WeaponActions && input.FirePressed, capabilities.WeaponActions && input.FireHeld,
+                capabilities.WeaponActions && input.ReloadPressed, input.InteractPressed, input.ViewAngles,
+                capabilities.Consumables && input.QuickUsePressed);
+        }
         internal Ray GetAimRay() => context.World.GetAimRay(ReadState.View.ViewYaw, ReadState.View.ViewPitch);
         internal void GetShotOrigins(Vector3 direction, out Vector3 bodyOrigin, out Vector3 muzzleOrigin)
             => context.World.GetShotOrigins(direction, out bodyOrigin, out muzzleOrigin);
@@ -125,6 +127,7 @@ namespace RPG4.PlayerMovement
             upperStateMachine.Initialize(upperRoot);
             lowerStateMachine.Initialize(lowerRoot);
             intents.RefreshPermissions();
+            intents.SampleMotorPosture();
             intents.Publish(simulationTick);
             intents.CommitPublication();
             RefreshPresenter();
@@ -151,22 +154,17 @@ namespace RPG4.PlayerMovement
         }
         private void Update()
         {
-            Consumables?.BindOffline();
+            LocalLoadout.Refresh(this);
+            Consumables?.UpdateRequestTimeout();
             ProcessLocalInputCommands();
             RefreshPresenter();
-            presenter?.Present(Mathf.Max(0f, Time.deltaTime));
+            presenter?.AdvanceFrame(Time.deltaTime);
         }
         private void ProcessLocalInputCommands()
         {
             if (intents == null || !intents.Inputs.ConsumeQuickUsePressed()) return;
             // Always consume within this render frame, even if ownership or loadout is not ready.
-            if (!isActiveAndEnabled || !IsAlive || !playerInput.UsesLocalInput || Equipment?.Role == null) return;
-            var identity = GetComponent<Mirror.NetworkIdentity>();
-            var loadout = GetComponent<RPG4.LoadoutTemplate.NetworkRoleLoadout>();
-            bool networkOwned = identity != null && Mirror.NetworkClient.active && Mirror.NetworkClient.localPlayer == identity;
-            bool offlineOwned = !Mirror.NetworkClient.active && !Mirror.NetworkServer.active;
-            if (!(networkOwned && loadout != null && loadout.IsReady || offlineOwned)
-                || Mirror.NetworkServer.active && !Mirror.NetworkClient.active) return;
+            if (!IsAlive || !LocalLoadout.Available) return;
             var item = Consumables?.ResolveQuickUse(out _);
             if (item != null) Consumables.RequestUse(item.ItemId);
         }
@@ -200,7 +198,7 @@ namespace RPG4.PlayerMovement
                 if (simulationInterrupted || !isActiveAndEnabled || !IsAlive) return;
                 context.World.BeginNetworkQueryTick(tick);
                 if (resolver != null) Physics.SyncTransforms();
-                ResolveLocomotion();
+                intents.ResolveLocomotion();
                 PlayerMotorState startMotor = context.World.CaptureMotor();
                 LocomotionPlan executedPlan = ReadState.Locomotion.Plan;
                 ExecutedMovementRules = new MovementRuleResult(executedPlan, ReadState.Weapon.WeaponDemand,
@@ -222,16 +220,16 @@ namespace RPG4.PlayerMovement
                     {
                         // State transitions already ran. Restoring after OnEnter preserves accepted turn velocity.
                         context.World.CommitMotor(commit.Motor, executedPlan);
-                        intents.RecordPosture(commit.Motor.Crouched, ReadState.Locomotion.CanStand);
                     }
                 }
                 if (useAuthorityMotor) lowerStateMachine.FixedTick(deltaTime);
+                intents.SampleMotorPosture();
             }
             finally
             {
                 try
                 {
-                    if (!simulationInterrupted && !networkSimulation) Consumables?.CompleteDueUse(now);
+                    if (!simulationInterrupted && !networkSimulation && Combat.Consumables) Consumables?.CompleteDueUse(now);
                 }
                 finally
                 {
@@ -242,370 +240,13 @@ namespace RPG4.PlayerMovement
                 }
             }
         }
-        /// <summary>Network host owns scheduling and device ownership; offline hosts never call this.</summary>
-        public void ConfigureNetworkSimulation(bool authoritative, bool localInput)
-        {
-            if (!networkSimulation || networkAuthority != authoritative || networkLocalInput != localInput)
-            {
-                Consumables?.Cancel();
-                ResetOwnerPresentation();
-                hasConfirmedNetworkState = false;
-            }
-            networkSimulation = true;
-            networkAuthority = authoritative;
-            networkLocalInput = localInput;
-            InputSource = PlayerInputSource.External;
-            if (intents == null) return;
-            context.World.ConfigureNetworkMotor(true);
-            playerInput.SetNetworkLocalInput(localInput);
-            ClearIntent();
-        }
-        /// <summary>Render view uses the current character snapshot and confirmed/anticipated recoil only.</summary>
-        public Vector2 GetLocalRenderViewAngles()
-            => GetLocalRenderViewAngles(PublishedFrame);
-        internal Vector2 GetLocalRenderViewAngles(PlayerPublishedFrame frame)
-        {
-            Vector2 view = frame != null ? new Vector2(frame.ViewYaw, frame.ViewPitch) : Vector2.zero;
-            if (IsAlive && isActiveAndEnabled && playerInput != null && playerInput.CanPreviewLocalWeaponInput
-                && (!networkSimulation || networkLocalInput))
-            {
-                if (CanExecuteCombat && networkSimulation && !networkAuthority)
-                    view += localActions.GetVisualRecoil(frame, Time.unscaledTimeAsDouble);
-            }
-            return new Vector2(Mathf.DeltaAngle(0f, view.x), Mathf.Clamp(view.y, -89f, 89f));
-        }
-        private bool CanAnticipateLocalActions => CanExecuteCombat && networkSimulation && !networkAuthority && networkLocalInput
-            && IsAlive && isActiveAndEnabled && !IsHurt && playerInput != null && playerInput.CanPreviewLocalWeaponInput
-            && PublishedFrame != null && PublishedFrame.CanUseWeapon && !PublishedFrame.Consumable.Active;
-        public void UpdateLocalActionInput(PlayerInputFrame input, double now)
-        {
-            if (!CanAnticipateLocalActions) { localActions.Cancel(); return; }
-            localActions.UpdateInput(input);
-        }
-        public void AnticipateLocalActions(PlayerInputFrame input, ulong requestId, double now)
-        {
-            if (!CanAnticipateLocalActions || Equipment == null
-                || !Equipment.TryGetPresentationWeapon(out ulong weaponId, out WeaponDefinitionFragment definition)) return;
-            float interval = definition.EffectiveShotInterval;
-            float recoilYaw = definition.RecoilYaw;
-            float recoilPitch = definition.RecoilPitch;
-            if (Equipment.TryGetPresentationRuntimeItem(out RuntimeItem item, out ItemManifestCatalog catalog)
-                && item?.WeaponState != null && catalog != null)
-            {
-                BackpackTag ammoType = item.WeaponState.ChamberAmmo;
-                if (ammoType.IsEmpty && item.WeaponState.Magazine?.MagazineState is MagazineItemState magazine
-                    && magazine.RoundCount > 0)
-                    ammoType = magazine.Rounds[0];
-                if (ammoType.IsEmpty) TryGetReferenceAmmoType(catalog, definition.AmmoType, out ammoType);
-                if (!ammoType.IsEmpty && WeaponParameterCalculator.TryCalculateAssembly(item, catalog, ammoType,
-                    out WeaponCombatParameters parameters))
-                {
-                    interval = parameters.Interval;
-                    recoilYaw *= parameters.Recoil;
-                    recoilPitch *= parameters.Recoil;
-                }
-            }
-            localActions.Begin(input, requestId, now, weaponId, definition, PublishedFrame.Reloading,
-                Equipment.CanAnticipateShot, Equipment.PresentationShotSequence, interval, recoilYaw, recoilPitch);
-        }
-
-        private static bool TryGetReferenceAmmoType(ItemManifestCatalog catalog, BackpackTag weaponAmmoType,
-            out BackpackTag ammoItemType)
-        {
-            foreach (ItemManifest manifest in catalog.Manifests)
-            {
-                AmmoDefinitionFragment ammo = manifest?.GetFragment<AmmoDefinitionFragment>();
-                if (ammo != null && ammo.AmmoType.MatchesTagExact(weaponAmmoType))
-                { ammoItemType = manifest.ItemType; return true; }
-            }
-            ammoItemType = default;
-            return false;
-        }
-        public void ApplyLocalActionResult(ulong requestId, bool accepted, ulong weaponId, ulong shotSequence,
-            double serverTime, uint ordinal = 0)
-            => localActions.ApplyResult(requestId, accepted, weaponId, shotSequence, ordinal, Time.unscaledTimeAsDouble);
-        public PlayerLocalWeaponPresentation GetLocalWeaponPresentation()
-        {
-            if (!CanAnticipateLocalActions || Equipment == null
-                || !Equipment.TryGetPresentationWeapon(out ulong weaponId, out _))
-            { localActions.Cancel(); return default; }
-            return localActions.Get(PublishedFrame, stateData, Time.unscaledTimeAsDouble, weaponId,
-                Equipment.CanAnticipateShot);
-        }
-        public bool TryDequeueAnticipatedShot(out PlayerAnticipatedShot shot)
-        {
-            if (!CanAnticipateLocalActions) { localActions.Cancel(); shot = default; return false; }
-            return localActions.TryDequeue(Time.unscaledTimeAsDouble, out shot);
-        }
-        public void MarkAnticipatedShotPresented(PlayerAnticipatedShot shot) => localActions.MarkPresented(shot);
-        public bool ShouldPresentConfirmedShot(ulong weaponId, ulong shotSequence)
-            => localActions.ShouldPresentConfirmed(weaponId, shotSequence);
-        public bool TryGetAnticipatedPresentationSequence(ulong weaponId, ulong serverShotSequence, out ulong cueSequence)
-            => localActions.TryGetPresentationSequence(weaponId, serverShotSequence, out cueSequence);
-        public bool ShouldDeferConfirmedShotPresentation(ulong weaponId, ulong serverShotSequence)
-            => networkSimulation && !networkAuthority && networkLocalInput
-                && localActions.ShouldDeferConfirmedShot(weaponId, serverShotSequence, Time.unscaledTimeAsDouble);
-        private PlayerInputFrame reconcileInput;
-        private bool reconcileInputAllowed;
-        private ulong reconcileInputVersion;
-        public void BeginOwnerReconcile()
-        {
-            PlayerInputSnapshot input = ReadState.Input.Snapshot;
-            reconcileInput = input.Frame;
-            reconcileInputAllowed = input.InputAllowed;
-            reconcileInputVersion = input.Version;
-            presenter?.BeforeOwnerReconcile();
-        }
-        public void EndOwnerReconcile(bool discontinuity = false)
-        {
-            intents.Blackboard.SetInput(reconcileInput, reconcileInputAllowed, reconcileInputVersion);
-            intents.Publish(simulationTick);
-            intents.CommitPublication();
-            presenter?.AfterOwnerReconcile(discontinuity);
-        }
-        public void ResetOwnerPresentation()
-        {
-            localActions.Reset();
-            presenter?.ResetOwnerPresentation();
-        }
-        /// <summary>Server admission only; it does not begin actions or consume inventory.</summary>
-        public bool CanAcceptNetworkAction(byte kind, ulong weaponId)
-        {
-            var weapon = Equipment?.CurrentWeapon;
-            if (!CanExecuteCombat || !networkAuthority || !IsAlive || !isActiveAndEnabled || IsHurt || weapon == null
-                || weapon.ItemId.Value != weaponId || !Equipment.CanExecuteAuthority) return false;
-            return kind == 2 ? !weapon.IsReloading : kind == 1 && !weapon.IsReloading && weapon.HasUsableRound;
-        }
-        public bool WasNetworkActionAccepted(byte kind)
-        {
-            var weapon = Equipment?.CurrentWeapon;
-            if (!CanExecuteCombat || !networkAuthority || !IsAlive || !isActiveAndEnabled || IsHurt || weapon == null) return false;
-            PlayerInputSnapshot input = ReadState.Input.Snapshot;
-            return kind == 2 ? weapon.IsReloading : kind == 1 && (weapon.ShotStartedThisFrame
-                || weapon.Definition.FireMode == WeaponFireMode.Automatic && input.Frame.FireHeld
-                    && !weapon.IsReloading && weapon.HasUsableRound);
-        }
-        public void SimulateNetworkTick(PlayerInputFrame input, long tick, double now, float deltaTime)
-            => SimulateNetworkTick(input, tick, now, deltaTime, null);
-        public void SimulateNetworkTick(PlayerInputFrame input, long tick, double now, float deltaTime,
-            IPlayerNetworkMovementResolver resolver)
-        {
-            if (!networkSimulation || !networkAuthority || !isActiveAndEnabled) return;
-            SimulateTick(tick, now, deltaTime, resolver, FilterCombatInput(input));
-        }
-        public PlayerInputFrame BeginLocalInputCycle()
-        {
-            PlayerInputFrame input = intents.BeginLocalCycle(networkAuthority);
-            if (!CanExecuteCombat && (input.FirePressed || input.ReloadPressed || input.QuickUsePressed))
-                intents.Inputs.ReportInteractionFeedback(NetworkCombatPausedMessage, false);
-            return FilterCombatInput(input);
-        }
-        public void CompleteLocalInputCycle() => intents.CompleteFrame();
-        public PlayerMotorState CaptureMotorState() => context.World.CaptureMotor();
-        public void RestoreMotorState(PlayerMotorState state) => context.World.RestoreMotor(state);
-        /// <summary>Reads the live business board, including changes made before this tick is published.</summary>
-        public PlayerAuthoritySnapshot CaptureNetworkAuthorityState()
-        {
-            PlayerBlackboard board = intents.Blackboard;
-            var weapon = context.Weapon;
-            return new PlayerAuthoritySnapshot
-            {
-                Tick = simulationTick, Time = simulationTime, HurtUntil = hurtUntil,
-                Alive = IsAlive, Health = attributes != null ? attributes.CurrentHealth : 0f,
-                MaxHealth = attributes != null ? attributes.MaxHealth : 0f,
-                WeaponAvailable = board.CanUseWeapon, Reloading = CanExecuteCombat && board.Reloading,
-                ReloadPhase = CanExecuteCombat ? board.ReloadPhase : 0f,
-                WeaponId = weapon != null ? weapon.ItemId.Value : 0,
-                ShotSequence = CanExecuteCombat && weapon != null ? weapon.LastShot.Sequence : 0,
-                ShotTime = CanExecuteCombat && weapon != null ? weapon.LastShot.Time : 0d,
-                ShotDuration = weapon != null ? weapon.Definition.ShotDuration : 0.01f,
-                FadeDuration = weapon != null ? weapon.Definition.FadeOutDuration : 0f,
-                ReloadDuration = weapon != null ? weapon.Definition.ReloadDuration : 1f,
-                Action = CanExecuteCombat ? board.WeaponAction : default,
-                Consumable = CanExecuteCombat && Consumables != null ? Consumables.State : default
-            };
-        }
-        /// <summary>Collision queries use the current world. This replays movement only, never weapon/health/events.</summary>
-        public void PredictNetworkMovement(PlayerInputFrame input, long tick, double now, float deltaTime, bool replay = false)
-        {
-            if (!networkSimulation || networkAuthority || deltaTime <= 0f) return;
-            simulationTick = tick;
-            simulationTime = now;
-            intents.BeginPreparedFrame(input, replay);
-            try
-            {
-                input = ReadState.Input.Snapshot.Frame;
-                Vector2 view = input.ViewAngles ?? new Vector2(ReadState.View.ViewYaw + input.Look.x, ReadState.View.ViewPitch + input.Look.y);
-                intents.RecordView(Mathf.DeltaAngle(0f, view.x), Mathf.Clamp(view.y, -89f, 89f));
-                ResolvePredictedRules(input, now);
-                LocomotionPlan executedPlan = ReadState.Locomotion.Plan;
-                ExecutedMovementRules = new MovementRuleResult(executedPlan, ReadState.Weapon.WeaponDemand,
-                    ReadState.Weapon.IsAiming);
-                if (executedPlan.CanMove) context.World.ApplyPosture(executedPlan.Crouched);
-                intents.RecordPosture(context.World.PhysicallyCrouched,
-                    !context.World.PhysicallyCrouched || context.World.CanStand());
-                context.World.Move(executedPlan, executedPlan.Strafe, deltaTime);
-                intents.Publish(tick);
-            }
-            finally { intents.CompleteSimulationFrame(); }
-        }
-        private MovementRuleResult ResolvePredictedRules(PlayerInputFrame input, double now)
-        {
-            PlayerInputSnapshot currentInput = ReadState.Input.Snapshot;
-            PlayerBlackboard board = intents.Blackboard;
-            MovementRuleContext rules = PlayerMovementDemand.Configuration(stateData);
-            rules.Active = isActiveAndEnabled;
-            rules.Alive = hasConfirmedNetworkState ? confirmedNetworkState.Alive : IsAlive;
-            rules.CanUseWeapon = hasConfirmedNetworkState ? confirmedNetworkState.WeaponAvailable : board.CanUseWeapon;
-            rules.IsHurt = hasConfirmedNetworkState ? now < confirmedNetworkState.HurtUntil : board.IsHurt;
-            rules.PhysicallyCrouched = ReadState.Locomotion.PhysicallyCrouched;
-            rules.CanStand = ReadState.Locomotion.CanStand;
-            rules.ViewYaw = ReadState.View.ViewYaw;
-            // Replays always derive business facts from authority, never from an earlier replay's demand.
-            WeaponActionSnapshot action = CanExecuteCombat
-                ? (hasConfirmedNetworkState ? confirmedNetworkState.Action : board.WeaponAction) : default;
-            rules.UsingConsumable = CanExecuteCombat && (hasConfirmedNetworkState ? confirmedNetworkState.Consumable.Active : board.Consumable.Active);
-            rules.Reloading = CanExecuteCombat && (hasConfirmedNetworkState ? confirmedNetworkState.Reloading : board.Reloading);
-            double elapsed = hasConfirmedNetworkState ? System.Math.Max(0d, now - confirmedNetworkState.ShotTime) : 0d;
-            rules.ShotActive = action.ShotActive && (!hasConfirmedNetworkState || elapsed < confirmedNetworkState.ShotDuration);
-            rules.FadingOut = (action.ShotActive || action.FadingOut) && !rules.ShotActive
-                && (!hasConfirmedNetworkState || elapsed < confirmedNetworkState.ShotDuration + confirmedNetworkState.FadeDuration);
-            rules.WaitingAutomatic = CanExecuteCombat && hasConfirmedNetworkState && confirmedNetworkState.Demand.AttackCamera
-                && !action.ShotActive && !action.FadingOut && input.FireHeld && now - confirmedNetworkState.Time <= 1.5d;
-            MovementRuleResult result = PlayerMovementRules.Evaluate(rules, input);
-            // Match authority's separate upper-body -> movement-plan -> motor stages. The newly
-            // forecast weapon demand cannot feed this cycle's movement planner directly.
-            LocomotionPlan nextPlan = PlayerMovementRules.ResolvePlan(ReadState.Locomotion.CanMove
-                && currentInput.InputAllowed, rules.PhysicallyCrouched, rules.CanStand,
-                input.CrouchHeld, input.Move, rules.ViewYaw, ReadState.Weapon.WeaponDemand,
-                stateData.Crouch.MoveSpeed, stateData.Exploration.MoveInputThreshold, stateData.Aim.MoveInputThreshold);
-            bool canAct = rules.Active && rules.Alive && rules.CanUseWeapon && !rules.IsHurt;
-            board.Plan = nextPlan;
-            board.PhysicallyCrouched = rules.PhysicallyCrouched;
-            board.CanStand = rules.CanStand;
-            board.IsAlive = rules.Alive;
-            board.IsHurt = rules.IsHurt;
-            board.CanMove = result.Plan.CanMove;
-            board.CanLook = rules.Active && rules.Alive;
-            board.CanUseWeapon = canAct;
-            board.CanInteract = rules.Active && rules.Alive;
-            board.WeaponDemand = result.Demand;
-            board.Reloading = result.Demand.Reloading;
-            board.WeaponAction = new WeaponActionSnapshot(false, false, rules.ShotActive && canAct,
-                rules.FadingOut && canAct, action.IsAutomatic && canAct && (rules.ShotActive || rules.FadingOut),
-                rules.ShotActive && hasConfirmedNetworkState && confirmedNetworkState.ShotDuration > 0f
-                    ? Mathf.Clamp01((float)(elapsed / confirmedNetworkState.ShotDuration)) : action.ShotPhase);
-            board.IsAiming = result.Aiming;
-            return result;
-        }
-        /// <summary>Installs business facts and re-evaluates permission without advancing weapons or motor.</summary>
-        public void ApplyNetworkAuthorityState(in PlayerAuthoritySnapshot state)
-        {
-            if (!networkSimulation || networkAuthority || intents == null
-                || hasConfirmedNetworkState && state.Tick < confirmedNetworkState.Tick) return;
-            confirmedNetworkState.Tick = state.Tick;
-            confirmedNetworkState.Time = state.Time;
-            confirmedNetworkState.HurtUntil = state.HurtUntil;
-            confirmedNetworkState.ShotTime = state.ShotTime;
-            confirmedNetworkState.Health = state.Health;
-            confirmedNetworkState.MaxHealth = state.MaxHealth;
-            confirmedNetworkState.ReloadPhase = state.ReloadPhase;
-            confirmedNetworkState.ShotDuration = state.ShotDuration;
-            confirmedNetworkState.FadeDuration = state.FadeDuration;
-            confirmedNetworkState.ReloadDuration = state.ReloadDuration;
-            confirmedNetworkState.Alive = state.Alive;
-            confirmedNetworkState.WeaponAvailable = state.WeaponAvailable;
-            confirmedNetworkState.Reloading = state.Reloading;
-            confirmedNetworkState.WeaponId = state.WeaponId;
-            confirmedNetworkState.ShotSequence = state.ShotSequence;
-            confirmedNetworkState.Action = state.Action;
-            confirmedNetworkState.Consumable = state.Consumable;
-            hasConfirmedNetworkState = true;
-            PlayerBlackboard board = intents.Blackboard;
-            board.Consumable = state.Consumable;
-            board.CurrentHealth = state.Health;
-            board.MaxHealth = state.MaxHealth;
-            board.HurtUntil = state.HurtUntil;
-            board.ReloadPhase = state.ReloadPhase;
-            board.WeaponId = state.WeaponId;
-            board.ShotSequence = state.ShotSequence;
-            board.ShotTime = state.ShotTime;
-            board.ShotDuration = state.ShotDuration;
-            board.FadeDuration = state.FadeDuration;
-            board.ReloadDuration = state.ReloadDuration;
-            PlayerInputFrame held = ReadState.Input.Snapshot.Frame;
-            var input = new PlayerInputFrame(held.Move, crouchHeld: held.CrouchHeld,
-                aimHeld: held.AimHeld, fireHeld: held.FireHeld);
-            MovementRuleResult rules = ResolvePredictedRules(input, System.Math.Max(simulationTime, state.Time));
-            confirmedNetworkState.Demand = rules.Demand;
-            localActions.ObserveConfirmed(confirmedNetworkState, Time.unscaledTimeAsDouble);
-            // Publish at the existing local simulation clock: this update has not simulated another step.
-            board.Publish(simulationTick, simulationTime);
-        }
-        public void ApplyNetworkPresentation(PlayerNetworkState state)
-        {
-            if (!networkSimulation || networkAuthority) return;
-            confirmedNetworkState = state;
-            hasConfirmedNetworkState = true;
-            localActions.ObserveConfirmed(state, Time.unscaledTimeAsDouble);
-            simulationTick = state.Tick;
-            simulationTime = state.Time;
-            PlayerBlackboard board = intents.Blackboard;
-            board.OwnerActive = isActiveAndEnabled;
-            board.IsAlive = state.Alive;
-            board.IsHurt = state.HurtUntil > state.Time;
-            board.Consumable = state.Consumable;
-            board.CurrentHealth = state.Health;
-            board.MaxHealth = state.MaxHealth;
-            board.HurtUntil = state.HurtUntil;
-            board.ViewYaw = state.ViewYaw;
-            board.ViewPitch = state.ViewPitch;
-            board.BodyYaw = state.Motor.Yaw;
-            board.PlanarVelocity = state.Motor.Velocity;
-            board.WorldPosition = state.Motor.Position;
-            board.PhysicallyCrouched = state.Motor.Crouched;
-            board.CanStand = state.CanStand;
-            board.CanMove = state.Alive;
-            board.CanLook = state.Alive;
-            board.CanUseWeapon = state.WeaponAvailable;
-            board.CanInteract = state.Alive;
-            board.IsAiming = state.Aiming;
-            board.Reloading = state.Reloading;
-            board.ReloadPhase = state.ReloadPhase;
-            board.Plan = state.Plan;
-            board.WeaponDemand = state.Demand;
-            board.WeaponAction = state.Action;
-            board.WeaponId = state.WeaponId;
-            board.ShotSequence = state.ShotSequence;
-            board.ShotTime = state.ShotTime;
-            board.ShotDuration = state.ShotDuration;
-            board.FadeDuration = state.FadeDuration;
-            board.ReloadDuration = state.ReloadDuration;
-            board.Publish(state.Tick, state.Time);
-        }
-        public void ApplyNetworkShot(ulong weaponId, ulong sequence, double time, bool automatic,
-            bool damageApplied, bool obstructed)
-        {
-            if (!networkSimulation || networkAuthority) return;
-            PlayerBlackboard board = intents.Blackboard;
-            // Transport already applies the network-clock lifetime. Presentation ages this cue from
-            // receipt on its own current clock, never by subtracting server time from predicted time.
-            board.RecordEvent(PlayerEventKind.Shot, simulationTime, weaponId, sequence,
-                success: damageApplied, obstructed: obstructed);
-            board.Publish(simulationTick, simulationTime);
-        }
         public void RefreshLocalPresentationBindings() => presenter?.RefreshHealthBindings(attributes);
-        public void RefreshNetworkPublication()
-        {
-            intents?.Publish(simulationTick);
-            intents?.CommitPublication();
-        }
         public void CancelConsumableUse()
         {
             Consumables?.Cancel();
             if (!HasSimulationAuthority)
             {
-                confirmedNetworkState.Consumable = default;
+                confirmedAuthority.Consumable = default;
                 if (intents != null) { intents.Blackboard.Consumable = default; intents.Publish(simulationTick); }
             }
         }
@@ -632,7 +273,7 @@ namespace RPG4.PlayerMovement
                 }
             }
             intents.Blackboard.Consumable = Consumables != null ? Consumables.State : default;
-            ResolveLocomotion();
+            intents.ResolveLocomotion();
             intents.Publish(simulationTick);
         }
         private void TickUpperBody(float deltaTime, bool prepareFrame = false)
@@ -661,7 +302,7 @@ namespace RPG4.PlayerMovement
         {
             if (networkSimulation)
             {
-                presenter?.Present(0f);
+                presenter?.RefreshPreparedFrame();
                 presenter?.CommitFrame();
                 intents.CommitPublication();
                 return;
@@ -670,17 +311,15 @@ namespace RPG4.PlayerMovement
             // 固定模拟已处理常规中断；这里只同步动画求值后新增的取消请求，避免重复零时长求值 Rig。
             if (IsAlive && ReadState.Weapon.WeaponCancellationRequested)
                 CancelWeaponAction();
-            else PublishPresentation(0f);
+            else PublishPresentation();
             presenter?.CommitFrame();
             intents.CommitPublication();
         }
-        private void ResolveLocomotion() => intents.ResolveLocomotion(lowerRoot.PhysicallyCrouched,
-            !lowerRoot.PhysicallyCrouched || lowerRoot.CanStand());
-        private void PublishPresentation(float deltaTime, bool reevaluate = false)
+        private void PublishPresentation(bool reevaluate = false)
         {
             if (intents == null) return;
             intents.Publish(simulationTick);
-            presenter?.Present(deltaTime, reevaluate);
+            presenter?.RefreshPreparedFrame(reevaluate);
         }
         internal void CancelWeaponAction()
         {
@@ -698,10 +337,10 @@ namespace RPG4.PlayerMovement
             {
                 upperRoot.PreparePublication();
                 TickUpperBody(0f);
-                ResolveLocomotion();
+                intents.ResolveLocomotion();
                 if (!simulationInterrupted && lowerStateMachine.ActiveLeaf != null) lowerStateMachine.Tick(0f);
             }
-            PublishPresentation(0f, true);
+            PublishPresentation(true);
         }
         internal void Stop()
         {
@@ -724,9 +363,9 @@ namespace RPG4.PlayerMovement
                 intents?.ClearInput();
                 intents?.RefreshPermissions();
                 upperRoot?.RecordInactiveDemand();
-                if (lowerRoot != null) ResolveLocomotion();
+                if (lowerRoot != null) intents.ResolveLocomotion();
                 consumablePublicationPending = false;
-                PublishPresentation(0f, true);
+                PublishPresentation(true);
                 // Disable/death may have no subsequent Update/LateUpdate. The stopped motor and
                 // revoked pending state close here, unless a containing simulation owns the boundary.
                 intents?.CommitPublication();
@@ -745,7 +384,7 @@ namespace RPG4.PlayerMovement
             {
                 // Replicated health may arrive independently of the movement baseline.
                 // Its death/UI events revoke input, but cannot rewind or clear the predicted motor.
-                PublishPresentation(0f, true);
+                PublishPresentation(true);
                 return;
             }
             Stop();
@@ -758,8 +397,8 @@ namespace RPG4.PlayerMovement
             // 持续按住开火/瞄准时，不自动恢复动作。
             intents?.ClearInput();
             intents.RefreshPermissions();
-            ResolveLocomotion();
-            PublishPresentation(0f, true);
+            intents.ResolveLocomotion();
+            PublishPresentation(true);
         }
         private void OnDamaged(DamageInfo damage, float appliedAmount)
         {
@@ -768,11 +407,11 @@ namespace RPG4.PlayerMovement
                 direction = transform.position - damage.Source.transform.position;
             intents.RecordEvent(PlayerEventKind.Hurt, amount: appliedAmount, direction: direction);
             if (damage.Kind == DamageKind.Periodic)
-            { PublishPresentation(0f); return; }
+            { PublishPresentation(); return; }
             Consumables?.Cancel();
             if (!IsAlive || stateData.Hurt.Duration <= 0f)
             {
-                PublishPresentation(0f);
+                PublishPresentation();
                 return;
             }
             hurtUntil = SimulationTime + stateData.Hurt.Duration;
@@ -782,12 +421,13 @@ namespace RPG4.PlayerMovement
         private void OnDestroy()
         {
             Consumables?.Cancel();
-            Consumables?.UnbindOffline();
+            Consumables?.ClearNetworkRequest();
             intents?.Dispose();
             presenter?.Dispose();
         }
         private void OnDisable()
         {
+            LocalLoadout.SetAvailable(false);
             ResetOwnerPresentation();
             if (attributes != null)
             {

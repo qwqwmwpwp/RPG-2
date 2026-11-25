@@ -65,7 +65,7 @@ namespace RPG4.Combat
             if (structureRevision == item.StructureRevision) return;
             Rebuild(item);
         }
-        private static bool SameStructure(RuntimeItem first, RuntimeItem second)
+        public static bool SameStructure(RuntimeItem first, RuntimeItem second)
         {
             if (first == null || second == null || first.ItemId != second.ItemId || !first.ItemType.Equals(second.ItemType)
                 || first.Assembly.InstalledChildren.Count != second.Assembly.InstalledChildren.Count) return false;

@@ -110,14 +110,13 @@ namespace RPG4.Networking
                     return;
                 }
                 player.PredictNetworkMovement(packet.ToFrame(), player.SimulationTick + 1, player.SimulationTime + deltaTime, deltaTime);
-                PlayerNetworkState predicted = PlayerNetworkState.Capture(player);
                 PlayerMovementReport report = new PlayerMovementReport
                 {
                     Epoch = movementHistory.Epoch, CorrectionId = movementHistory.CorrectionId, ConstraintRevision = movementHistory.ConstraintRevision,
-                    Step = movementHistory.LastStep + 1, Input = packet, PredictedMotor = predicted.Motor,
+                    Step = movementHistory.LastStep + 1, Input = packet, PredictedMotor = player.CaptureMotorState(),
                     Aiming = player.ExecutedMovementRules.Aiming, Strafe = player.ExecutedMovementRules.Plan.Strafe
                 };
-                if (!movementHistory.Store(new PlayerMovementRecord { Report = report, PredictedState = predicted }))
+                if (!movementHistory.Store(new PlayerMovementRecord { Report = report, PredictionTime = player.SimulationTime }))
                 { PauseOwnerMovementPrediction(); return; }
                 if (actionId != 0 || report.Step % (ulong)Mathf.Max(1, movementSendEveryTicks) == 0)
                     CmdMovement(report, previousReport, olderReport, oldestReport);
@@ -323,7 +322,8 @@ namespace RPG4.Networking
         }
         private PlayerMovementBaseline CaptureMovementBaseline(ulong step) => new PlayerMovementBaseline
         { Epoch = movementEpoch, CorrectionId = correctionId, ConstraintRevision = constraintRevision,
-            Step = step, ProcessedInputSequence = movementTimeline.ProcessedInputSequence, State = PlayerNetworkState.Capture(player) };
+            Step = step, ProcessedInputSequence = movementTimeline.ProcessedInputSequence, State = PlayerNetworkState.Capture(player),
+            LastMotorMode = player.LastMotorMode };
         private static bool AuthorityChanged(PlayerAuthoritySnapshot a, PlayerAuthoritySnapshot b) => !a.Consumable.Equals(b.Consumable) || a.Health != b.Health
             || a.MaxHealth != b.MaxHealth || a.Alive != b.Alive || a.HurtUntil != b.HurtUntil || a.WeaponId != b.WeaponId
             || a.WeaponAvailable != b.WeaponAvailable || a.Reloading != b.Reloading || a.ShotSequence != b.ShotSequence
@@ -348,7 +348,8 @@ namespace RPG4.Networking
             player.BeginOwnerReconcile();
             try
             {
-                player.ApplyNetworkPresentation(baseline.State); player.RestoreMotorState(baseline.State.Motor);
+                player.ApplyNetworkPresentation(baseline.State);
+                player.RestoreMotorState(baseline.State.Motor, baseline.LastMotorMode);
                 previousReport = olderReport = oldestReport = default;
                 for (int i = 0; i < replay.Length; i++)
                 {
@@ -357,7 +358,7 @@ namespace RPG4.Networking
                     PlayerMovementRecord record = movementHistory.Records[i];
                     record.Report.CorrectionId = baseline.CorrectionId; record.Report.ConstraintRevision = movementHistory.ConstraintRevision;
                     record.Report.PredictedMotor = player.CaptureMotorState();
-                    record.PredictedState = PlayerNetworkState.Capture(player);
+                    record.PredictionTime = player.SimulationTime;
                     record.Report.Aiming = player.ExecutedMovementRules.Aiming;
                     record.Report.Strafe = player.ExecutedMovementRules.Plan.Strafe;
                     movementHistory.ReplaceReplay(i, record);

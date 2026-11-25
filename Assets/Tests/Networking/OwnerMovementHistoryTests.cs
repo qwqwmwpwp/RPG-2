@@ -19,7 +19,7 @@ namespace RPG4.Networking.Tests
             var history = History();
             history.Store(MovementTestData.Record(1));
             var pending = MovementTestData.Record(2);
-            pending.PredictedState.Motor.Position = new Vector3(7, 0, 9);
+            pending.Report.PredictedMotor.Position = new Vector3(7, 0, 9);
             history.Store(pending);
             Assert.That(history.Acknowledge(MovementTestData.Ack(1)), Is.True);
             Assert.That(history.Count, Is.EqualTo(1));
@@ -107,11 +107,11 @@ namespace RPG4.Networking.Tests
         {
             var history = History();
             var expired = MovementTestData.Record(1);
-            expired.Report.Input.Sequence = 101; expired.PredictedState.Time = 10d;
+            expired.Report.Input.Sequence = 101; expired.PredictionTime = 10d;
             var boundary = MovementTestData.Record(2);
-            boundary.Report.Input.Sequence = 102; boundary.PredictedState.Time = 20d;
+            boundary.Report.Input.Sequence = 102; boundary.PredictionTime = 20d;
             var fresh = MovementTestData.Record(3);
-            fresh.Report.Input.Sequence = 103; fresh.PredictedState.Time = 30d;
+            fresh.Report.Input.Sequence = 103; fresh.PredictionTime = 30d;
             Assert.That(history.Store(expired), Is.True);
             Assert.That(history.Store(boundary), Is.True);
             Assert.That(history.Store(fresh), Is.True);

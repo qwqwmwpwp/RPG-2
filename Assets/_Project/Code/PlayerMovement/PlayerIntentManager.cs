@@ -160,8 +160,8 @@ namespace RPG4.PlayerMovement
         }
         private void ReportInteractionFeedback(string message, bool success)
             => blackboard.RecordEvent(PlayerEventKind.InteractionFeedback, owner.SimulationTime, message: message, success: success);
-        internal void ResolveLocomotion(bool crouched, bool canStand) => locomotion.Resolve(crouched, canStand);
-        internal void RecordPosture(bool crouched, bool canStand) => locomotion.RecordPosture(crouched, canStand);
+        internal void ResolveLocomotion() => locomotion.Resolve();
+        internal void SampleMotorPosture() => locomotion.SampleMotorPosture();
         internal void RecordView(float yaw, float pitch) => decisions.RecordView(yaw, pitch);
         internal void ProcessLook(Vector2 pitchRange) => decisions.ProcessLook(pitchRange);
         internal void ApplyRecoil(float pitch, float yaw, Vector2 pitchRange)
@@ -174,27 +174,27 @@ namespace RPG4.PlayerMovement
             Vector3 direction = default, bool success = false, bool obstructed = false)
             => blackboard.RecordEvent(kind, owner.SimulationTime, weaponId, shotSequence, amount,
                 success: success, direction: direction, obstructed: obstructed);
-        internal void Publish(long tick)
+        internal void Publish(long tick, bool reuseUnchanged = false)
         {
             blackboard.OwnerActive = owner != null && (owner.IsNetworkSimulation ? owner.isActiveAndEnabled : owner.SimulationActive);
             if (owner.HasSimulationAuthority)
             {
-            blackboard.Consumable = owner.Consumables != null ? owner.Consumables.State : default;
-            blackboard.HurtUntil = owner != null ? owner.HurtUntil : 0d;
-            blackboard.CurrentHealth = owner != null && owner.Attributes != null ? owner.Attributes.CurrentHealth : 0f;
-            blackboard.MaxHealth = owner != null && owner.Attributes != null ? owner.Attributes.MaxHealth : 0f;
-            var weapon = context.Equipment != null ? context.Equipment.CurrentWeapon : null;
-            blackboard.WeaponId = weapon != null ? weapon.ItemId.Value : 0;
-            blackboard.ShotSequence = weapon != null ? weapon.LastShot.Sequence : 0;
-            blackboard.ShotTime = weapon != null ? weapon.LastShot.Time : 0d;
-            blackboard.ShotDuration = weapon != null ? weapon.Definition.ShotDuration : 0.01f;
-            blackboard.FadeDuration = weapon != null ? weapon.Definition.FadeOutDuration : 0f;
-            blackboard.ReloadDuration = weapon != null ? weapon.Definition.ReloadDuration : 1f;
+                blackboard.Consumable = owner.Consumables != null ? owner.Consumables.State : default;
+                blackboard.HurtUntil = owner != null ? owner.HurtUntil : 0d;
+                blackboard.CurrentHealth = owner != null && owner.Attributes != null ? owner.Attributes.CurrentHealth : 0f;
+                blackboard.MaxHealth = owner != null && owner.Attributes != null ? owner.Attributes.MaxHealth : 0f;
+                var weapon = context.Equipment != null ? context.Equipment.CurrentWeapon : null;
+                blackboard.WeaponId = weapon != null ? weapon.ItemId.Value : 0;
+                blackboard.ShotSequence = weapon != null ? weapon.LastShot.Sequence : 0;
+                blackboard.ShotTime = weapon != null ? weapon.LastShot.Time : 0d;
+                blackboard.ShotDuration = weapon != null ? weapon.Definition.ShotDuration : 0.01f;
+                blackboard.FadeDuration = weapon != null ? weapon.Definition.FadeOutDuration : 0f;
+                blackboard.ReloadDuration = weapon != null ? weapon.Definition.ReloadDuration : 1f;
             }
             blackboard.PlanarVelocity = context.World.PlanarVelocity;
             blackboard.WorldPosition = context.World.CaptureMotor().Position;
             blackboard.BodyYaw = context.World.BodyYaw;
-            blackboard.Publish(tick, owner.SimulationTime);
+            blackboard.Publish(tick, owner.SimulationTime, reuseUnchanged);
         }
         internal void CommitPublication() => blackboard.CommitPending();
     }

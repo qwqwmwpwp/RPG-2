@@ -17,7 +17,12 @@ namespace RPG4.PlayerMovement
             = new Dictionary<int, (WeaponOperation operation, WeaponOperationResult result)>();
         public event System.Action<WeaponOperationResult> WeaponOperationCompleted;
         private readonly List<RuntimeItem> weaponUiItems = new List<RuntimeItem>();
-        private bool weaponUiDirty;
+        private bool weaponUiDirty, weaponHudRequested, hudReloading;
+        private ulong hudReloadWeapon;
+        private float hudReloadDuration, hudReloadPhase;
+        private RuntimeItem hudItem;
+        private int hudItemRevision;
+        private WeaponHudSnapshot cachedHud, publishedHud;
         private Weapon weaponUiObservedAction;
         private bool weaponUiWasReloading;
         private WeaponUiActionStage weaponUiActionStage;
@@ -29,7 +34,11 @@ namespace RPG4.PlayerMovement
             if (weaponUiSource != null || role == null) return;
             weaponUiSource = this;
             weaponUiRequest = EventBus.Global.Subscribe<WeaponSnapshotRequest>(CmdChannels.WeaponSnapshot,
-                weaponUiSource, this, _ => PublishWeaponHud());
+                weaponUiSource, this, _ =>
+                {
+                    weaponHudRequested = true;
+                    PublishWeaponHud(CaptureWeaponHud());
+                });
             weaponOperationRequest = EventBus.Global.Subscribe<WeaponOperation>(CmdChannels.WeaponOperation,
                 weaponUiSource, this, operation => RequestWeaponOperation(operation));
             weaponOperationNetwork = role.GetComponentInParent<NetworkRoleLoadout>(true);
@@ -88,7 +97,25 @@ namespace RPG4.PlayerMovement
         }
         public WeaponHudSnapshot CaptureWeaponHud()
         {
-            RuntimeItem item = PresentationItem;
+            var frame = player?.PublishedFrame;
+            bool reloading = current == null && frame != null && frame.Reloading;
+            ulong weapon = reloading ? frame.WeaponId : 0;
+            float duration = reloading ? frame.ReloadDuration : 0f;
+            float phase = reloading ? frame.ReloadPhase : 0f;
+            bool actionChanged = reloading != hudReloading || weapon != hudReloadWeapon
+                || duration != hudReloadDuration || phase < hudReloadPhase;
+            hudReloadPhase = phase;
+            if (cachedHud != null && !weaponUiDirty && !actionChanged) return cachedHud;
+            hudReloading = reloading;
+            hudReloadWeapon = weapon;
+            hudReloadDuration = duration;
+            weaponUiDirty = false;
+            cachedHud = BuildWeaponHud(PresentationItem, reloading, reloading ? frame.Time - phase * duration : 0d);
+            return cachedHud;
+        }
+
+        private WeaponHudSnapshot BuildWeaponHud(RuntimeItem item, bool replicatedReload, double replicatedStart)
+        {
             ItemManifestCatalog catalog = role?.ManifestCatalog;
             WeaponItemState state = item?.WeaponState;
             MagazineItemState magazine = state?.Magazine?.MagazineState;
@@ -106,10 +133,8 @@ namespace RPG4.PlayerMovement
                 }
             }
             bool hasAction = current != null && item != null && current.ItemId == item.ItemId;
-            bool replicatedReload = !hasAction && player?.PublishedFrame != null && player.PublishedFrame.Reloading;
-            double start = hasAction ? current.ReloadStartTime : replicatedReload
-                ? player.SimulationTime - player.PublishedFrame.ReloadPhase * player.PublishedFrame.ReloadDuration : 0d;
-            float duration = hasAction ? current.Definition.ReloadDuration : replicatedReload ? player.PublishedFrame.ReloadDuration : 0f;
+            double start = hasAction ? current.ReloadStartTime : replicatedStart;
+            float duration = hasAction ? current.Definition.ReloadDuration : replicatedReload ? hudReloadDuration : 0f;
             return new WeaponHudSnapshot(WeaponUiSnapshots.Describe(item, catalog),
                 state == null || state.ChamberAmmo.IsEmpty ? 0 : 1, magazine?.RoundCount ?? 0, magazine?.Capacity ?? 0,
                 state?.Durability ?? 0f, state?.Definition.MaxDurability ?? 0f,
@@ -118,9 +143,9 @@ namespace RPG4.PlayerMovement
                 state == null ? null : state.Definition.FireMode == WeaponFireMode.Automatic ? "全自动" : "半自动",
                 WeaponHudStatus(state, catalog));
         }
-        private void PublishWeaponHud()
+        private void PublishWeaponHud(WeaponHudSnapshot snapshot)
         {
-            WeaponHudSnapshot snapshot = CaptureWeaponHud();
+            publishedHud = snapshot;
             if (weaponUiSource != null) EventBus.Global.Publish(InvChannels.WeaponHudChanged, weaponUiSource, snapshot);
             WeaponHudChanged?.Invoke(snapshot);
         }
@@ -132,6 +157,13 @@ namespace RPG4.PlayerMovement
             if (state.ChamberAmmo.IsEmpty)
                 return state.Magazine?.MagazineState.RoundCount > 0 ? "未上膛" : state.Magazine == null ? "未安装弹匣" : "弹药耗尽";
             return state.CanConsumeShot(catalog) ? null : "当前弹药不可用";
+        }
+        private void ObserveHudItem(RuntimeItem item)
+        {
+            int revision = item?.Revision ?? 0;
+            if (ReferenceEquals(hudItem, item) && hudItemRevision == revision) return;
+            hudItem = item; hudItemRevision = revision;
+            MarkWeaponUiDirty();
         }
         private void MarkWeaponUiDirty() => weaponUiDirty = true;
         private void BindWeaponUiAction()
@@ -155,9 +187,9 @@ namespace RPG4.PlayerMovement
         }
         private void FlushWeaponUi()
         {
-            // 远端动作事实由角色帧同步，更新HUD时仍只读取投影。
-            if (!weaponUiDirty && CanExecuteAuthority) return;
-            weaponUiDirty = false; PublishWeaponHud();
+            if (WeaponHudChanged == null && !weaponHudRequested && player?.LocalLoadout.Available != true) return;
+            WeaponHudSnapshot next = CaptureWeaponHud();
+            if (!ReferenceEquals(publishedHud, next)) PublishWeaponHud(next);
         }
         private void UnbindWeaponUiEvents()
         {
@@ -169,6 +201,7 @@ namespace RPG4.PlayerMovement
             }
             weaponOperationNetwork = null; localWeaponReceipts.Clear(); highestLocalWeaponRequest = 0;
             weaponUiSource = null; weaponUiObservedAction = null; weaponUiDirty = false;
+            hudItem = null; cachedHud = publishedHud = null; weaponHudRequested = false;
             WeaponHudChanged?.Invoke(new WeaponHudSnapshot(null, 0, 0, 0, 0f, 0f, WeaponUiActionStage.None, 0d, 0f));
         }
     }

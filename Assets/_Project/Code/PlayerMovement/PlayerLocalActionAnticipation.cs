@@ -55,11 +55,11 @@ namespace RPG4.PlayerMovement
         private bool held, aiming;
         private ulong nextCue, cadenceWeapon;
         private double nextShotAt;
-        private PlayerNetworkState latestConfirmed;
+        private PlayerAuthoritySnapshot latestConfirmed;
         private double confirmedReceivedAt;
         private bool hasConfirmed;
 
-        internal void ObserveConfirmed(PlayerNetworkState state, double now)
+        internal void ObserveConfirmed(PlayerAuthoritySnapshot state, double now)
         { latestConfirmed = state; confirmedReceivedAt = now; hasConfirmed = true; }
 
         internal void UpdateInput(PlayerInputFrame input)

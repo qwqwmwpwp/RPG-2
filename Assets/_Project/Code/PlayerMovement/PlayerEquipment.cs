@@ -21,8 +21,6 @@ namespace RPG4.PlayerMovement
         private readonly List<RuntimeItem> items = new List<RuntimeItem>();
         private readonly WeaponShotExecutor shotExecutor = new WeaponShotExecutor();
         private readonly Queue<AcceptedShot> pendingShots = new Queue<AcceptedShot>(32);
-        private static readonly LoadoutSlotId[] weaponSlots = { LoadoutSlotId.PrimaryWeapon1,
-            LoadoutSlotId.PrimaryWeapon2, LoadoutSlotId.SecondaryWeapon, LoadoutSlotId.MeleeWeapon };
         private readonly struct AcceptedShot
         {
             internal AcceptedShot(WeaponShotRequest request, Vector3 position) { Request = request; Position = position; }
@@ -101,18 +99,8 @@ namespace RPG4.PlayerMovement
         private void OnLoadoutCommitted(LoadoutCommitRecord commit)
         {
             MarkWeaponUiDirty();
-            if (commit.RuntimeItemsChanged || commit.SelectedWeaponChanged || TouchesWeaponSlot(commit))
+            if (commit.RuntimeItemsChanged || role.AffectsEquippedWeapon(commit))
                 SynchronizeEquipment();
-        }
-        private bool TouchesWeaponSlot(LoadoutCommitRecord commit)
-        {
-            foreach (LoadoutSlotId slot in weaponSlots)
-            {
-                string endpointId = role.GetSlot(slot)?.Snapshot.Id;
-                foreach (LoadoutEndpointChange change in commit.Changes)
-                    if (change.EndpointId == endpointId) return true;
-            }
-            return false;
         }
         private void SynchronizeEquipment()
         {
@@ -175,6 +163,7 @@ namespace RPG4.PlayerMovement
         }
         private void RefreshItemView(RuntimeItem item)
         {
+            ObserveHudItem(item);
             if (player?.Presenter == null) return;
             try { player.Presenter.RefreshEquipment(item); }
             catch (System.Exception exception) { Debug.LogException(exception, this); }
@@ -233,7 +222,7 @@ namespace RPG4.PlayerMovement
         internal bool TryFire(bool pressed, bool held)
         {
             Weapon weapon = CurrentWeapon;
-            if (!CanExecuteAuthority || pendingShots.Count >= 32 || player == null || !player.CanExecuteCombat || !player.IsAlive || player.ReadState == null
+            if (!CanExecuteAuthority || pendingShots.Count >= 32 || player == null || !player.Combat.WeaponActions || !player.IsAlive || player.ReadState == null
                 || !player.ReadState.Weapon.CanUseWeapon || weapon == null) return false;
             Ray aim = player.GetAimRay();
             player.GetShotOrigins(aim.direction, out Vector3 bodyOrigin, out Vector3 muzzleOrigin);
@@ -251,7 +240,7 @@ namespace RPG4.PlayerMovement
             double rewindTime = double.NaN)
         {
             if (!CanExecuteAuthority) return;
-            if (player == null || !player.CanExecuteCombat) { DiscardPendingShots(); return; }
+            if (player == null || !player.Combat.WeaponActions) { DiscardPendingShots(); return; }
             executor = executor ?? shotExecutor;
             while (pendingShots.Count != 0)
             {

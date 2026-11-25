@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using Mirror;
 using NUnit.Framework;
+using RPG4.PlayerIntent;
+using RPG4.PlayerMovement;
 using UnityEngine;
 
 namespace RPG4.Networking.Tests
@@ -97,6 +99,38 @@ namespace RPG4.Networking.Tests
             Assert.That(reader.ReadPlayerMovementAck(), Is.EqualTo(ack));
             Assert.That(reader.ReadPlayerMovementCorrection(), Is.EqualTo(correction));
             Assert.That(reader.Remaining, Is.Zero);
+        }
+
+        [TestCase(false, false)]
+        [TestCase(true, false)]
+        [TestCase(false, true)]
+        [TestCase(true, true)]
+        public void CorrectionPreservesTurnUnlessExecutedModeChanges(bool crouched, bool strafe)
+        {
+            var plan = new LocomotionPlan(true, crouched, strafe, Vector2.right, 60f, 4f, 1f);
+            var previousMode = PlayerMotorKinematics.ModeFor(plan);
+            var baseline = MovementTestData.Baseline();
+            baseline.LastMotorMode = previousMode;
+            baseline.State.Motor = new PlayerMotorState { Yaw = 18f, TurnVelocity = 90f, Crouched = crouched };
+            // The published plan can already describe the following step.
+            baseline.State.Plan = new LocomotionPlan(true, !crouched, !strafe, Vector2.up, 60f, 2f, 1f);
+            var writer = new NetworkWriter();
+            writer.WritePlayerMovementCorrection(new PlayerMovementCorrection { Baseline = baseline });
+            var reader = new NetworkReader(writer.ToArraySegment());
+            var restored = reader.ReadPlayerMovementCorrection().Baseline;
+            Assert.That(reader.Remaining, Is.Zero);
+            Assert.That(restored.LastMotorMode, Is.EqualTo(previousMode));
+            bool reset = PlayerMotorKinematics.NeedsTurnReset(restored.LastMotorMode, plan);
+            Assert.That(reset, Is.False);
+            Assert.That(PlayerMotorKinematics.NeedsTurnReset(restored.LastMotorMode, restored.State.Plan), Is.True);
+            var settings = MovementTestData.Settings();
+            settings.FreeTurnSmoothTime = settings.StrafeTurnSmoothTime = 0.15f;
+            var authority = PlayerMotorKinematics.Step(baseline.State.Motor, plan, settings, false, 0.02f);
+            var replay = PlayerMotorKinematics.Step(restored.State.Motor, plan, settings, reset, 0.02f);
+            Assert.That(replay.Yaw, Is.EqualTo(authority.Yaw));
+            Assert.That(replay.TurnVelocity, Is.EqualTo(authority.TurnVelocity));
+            Assert.That(PlayerMotorKinematics.Step(restored.State.Motor, plan, settings, true, 0.02f).Yaw,
+                Is.Not.EqualTo(authority.Yaw));
         }
 
         [Test]

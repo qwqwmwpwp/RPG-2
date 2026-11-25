@@ -9,7 +9,7 @@ namespace RPG4.PlayerMovement
         private readonly PlayerContext context;
         internal WeaponState Weapon { get; }
         internal ConsumableUseState Consumable { get; }
-        internal bool UsingConsumable => context.Owner.CanExecuteCombat && context.Blackboard.ReadConsumable.Active;
+        internal bool UsingConsumable => context.Owner.Combat.Consumables && context.Blackboard.ReadConsumable.Active;
         internal bool ConsumableStateActive => ActiveChild == Consumable;
         internal double Now { get; private set; }
         internal float FrameDeltaTime { get; private set; }

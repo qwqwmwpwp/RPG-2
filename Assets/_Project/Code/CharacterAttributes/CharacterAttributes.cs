@@ -12,12 +12,18 @@ namespace RPG4.CharacterAttributes
         [Tooltip("受伤后的无敌秒数。靶子设为 0，确保连射与多弹丸逐次结算。")]
         [SerializeField, Min(0f)] private float invulnerabilityDuration;
 
+        private CombatCapabilities combat = CombatCapabilities.Offline;
         private HealthState health;
         private double invulnerableUntil;
         private bool canExecuteAuthority = true;
         public bool CanExecuteAuthority => canExecuteAuthority;
         /// <summary>联网角色由服务器持有伤害/治疗写权限；离线默认启用。</summary>
         public void ConfigureAuthority(bool canExecute) => canExecuteAuthority = canExecute;
+        public void ConfigureAuthority(bool canExecute, CombatCapabilities capabilities)
+        {
+            ConfigureAuthority(canExecute);
+            combat = capabilities;
+        }
         public bool ApplyReplicatedHealth(float maxHealth, float currentHealth)
             => !canExecuteAuthority && Health.ApplySnapshot(maxHealth, currentHealth);
         private HealthState Health => health ?? (health = new HealthState(initialMaxHealth));
@@ -64,8 +70,16 @@ namespace RPG4.CharacterAttributes
             if (!HealthState.IsPositiveFinite(invulnerabilityDuration)) invulnerabilityDuration = 0f;
         }
 
-        // Combat is intentionally unavailable while the role loadout is migrated.
-        public bool ApplyDamage(DamageInfo damage) => false;
+        public bool ApplyDamage(DamageInfo damage)
+        {
+            if (!combat.Damage || !canExecuteAuthority || !IsAlive || IsInvulnerable || !HealthState.IsPositiveFinite(damage.Amount))
+                return false;
+            double previousDeadline = invulnerableUntil;
+            invulnerableUntil = Time.timeAsDouble + invulnerabilityDuration; // 生命事件可能同步触发下一次伤害。
+            if (Health.ApplyDamage(damage)) return true;
+            invulnerableUntil = previousDeadline;
+            return false;
+        }
 
         public bool Heal(float amount) => canExecuteAuthority && Health.Heal(amount);
         public bool TryPrepareHeal(float amount, out HealthState.HealTransaction transaction)

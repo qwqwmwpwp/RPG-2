@@ -17,6 +17,15 @@ namespace RPG4.PlayerMovement
         public UpperBodyDemand Demand;
         public WeaponActionSnapshot Action;
         public ConsumableActionSnapshot Consumable;
+        internal PlayerAuthoritySnapshot Authority => new PlayerAuthoritySnapshot
+        {
+            Tick = Tick, Time = Time, HurtUntil = HurtUntil, ShotTime = ShotTime,
+            Health = Health, MaxHealth = MaxHealth, Alive = Alive, WeaponAvailable = WeaponAvailable,
+            Reloading = Reloading, ReloadPhase = ReloadPhase, ShotDuration = ShotDuration,
+            FadeDuration = FadeDuration, ReloadDuration = ReloadDuration, WeaponId = WeaponId,
+            ShotSequence = ShotSequence, Action = Action, Consumable = Consumable
+        };
+
         public static PlayerNetworkState Capture(Player player)
         {
             PlayerPublishedFrame frame = player.PublishedFrame;
@@ -26,13 +35,13 @@ namespace RPG4.PlayerMovement
                 ViewYaw = frame.ViewYaw, ViewPitch = frame.ViewPitch, Health = frame.CurrentHealth,
                 MaxHealth = frame.MaxHealth, Alive = frame.Alive, HurtUntil = frame.HurtUntil,
                 WeaponAvailable = frame.CanUseWeapon, Aiming = frame.IsAiming,
-                Reloading = player.CanExecuteCombat && frame.Reloading, CanStand = frame.CanStand,
-                ReloadPhase = player.CanExecuteCombat ? frame.ReloadPhase : 0f, Plan = frame.Plan, Demand = frame.WeaponDemand,
-                Action = player.CanExecuteCombat ? frame.WeaponAction : default, WeaponId = frame.WeaponId,
-                ShotSequence = player.CanExecuteCombat ? frame.ShotSequence : 0,
-                ShotTime = player.CanExecuteCombat ? frame.ShotTime : 0d, ShotDuration = frame.ShotDuration,
+                Reloading = player.Combat.WeaponActions && frame.Reloading, CanStand = frame.CanStand,
+                ReloadPhase = player.Combat.WeaponActions ? frame.ReloadPhase : 0f, Plan = frame.Plan, Demand = frame.WeaponDemand,
+                Action = player.Combat.WeaponActions ? frame.WeaponAction : default, WeaponId = frame.WeaponId,
+                ShotSequence = player.Combat.WeaponActions ? frame.ShotSequence : 0,
+                ShotTime = player.Combat.WeaponActions ? frame.ShotTime : 0d, ShotDuration = frame.ShotDuration,
                 FadeDuration = frame.FadeDuration, ReloadDuration = frame.ReloadDuration,
-                Consumable = player.CanExecuteCombat ? frame.Consumable : default
+                Consumable = player.Combat.Consumables ? frame.Consumable : default
             };
         }
     }

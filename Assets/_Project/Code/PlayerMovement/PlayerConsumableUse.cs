@@ -32,18 +32,17 @@ namespace RPG4.PlayerMovement
         public ConsumableActionSnapshot State => state;
         public bool Active => state.Active;
         internal PlayerConsumableUse(Player owner) { this.owner = owner; }
-        // 兼容 Player 的绑定生命周期；新库存由角色控制器直接持有。
-        internal void BindOffline()
+        internal void UpdateRequestTimeout()
         {
             if (pendingRequest != 0 && UnityEngine.Time.unscaledTimeAsDouble >= requestDeadline)
             { pendingRequest = 0; ShowFeedback("等待用药确认超时，请以实际状态为准。"); }
         }
-        internal void UnbindOffline() { networkRequest = null; pendingRequest = 0; }
+        internal void ClearNetworkRequest() { networkRequest = null; pendingRequest = 0; }
         public void ConfigureNetworkRequest(Func<ConsumableUseOperation, bool> request)
         { networkRequest = request; pendingRequest = 0; }
         public bool RequestUse(ItemId itemId)
         {
-            if (!owner.CanExecuteCombat) { ShowFeedback(Player.NetworkCombatPausedMessage); return false; }
+            if (!owner.Combat.Consumables) { ShowFeedback(Player.NetworkCombatPausedMessage); return false; }
             if (!itemId.IsValid || pendingRequest != 0 || nextRequest == int.MaxValue) return false;
             var operation = new ConsumableUseOperation(++nextRequest, itemId);
             if (!owner.IsNetworkSimulation)
@@ -63,13 +62,15 @@ namespace RPG4.PlayerMovement
         }
         private void ShowFeedback(string value)
         { feedback = value; feedbackDeadline = UnityEngine.Time.unscaledTimeAsDouble + 3d; }
+        public static string SelectedQuickUseType => PlayerPrefs.GetString("RPG4.UI.QuickConsumable", "GameItems.Consumables.Potions.Red.Small");
+
         public RuntimeItem ResolveQuickUse(out long total)
         {
             total = 0;
             RoleLoadoutController role = Role;
             if (role == null) return null;
             role.CopyOwnedRuntimeItems(quickItems);
-            string selected = PlayerPrefs.GetString("RPG4.UI.QuickConsumable", "GameItems.Consumables.Potions.Red.Small");
+            string selected = SelectedQuickUseType;
             RuntimeItem first = null;
             foreach (RuntimeItem item in quickItems)
             {
@@ -90,7 +91,7 @@ namespace RPG4.PlayerMovement
         public ConsumableUseResult TryStart(RoleLoadoutController core, ConsumableUseOperation operation, double now)
         {
             ConsumableUseResult Fail(string error) => new ConsumableUseResult(operation.RequestId, false, operation.ItemId, state.ActionId, error);
-            if (!owner.CanExecuteCombat) return Fail(Player.NetworkCombatPausedMessage);
+            if (!owner.Combat.Consumables) return Fail(Player.NetworkCombatPausedMessage);
             if (committing || Active) return Fail("已有消耗品正在使用。");
             if (!owner.HasSimulationAuthority || !owner.isActiveAndEnabled || !owner.IsAlive || owner.IsHurt || core == null || !core.IsAuthority)
                 return Fail("角色当前不能使用消耗品。");
@@ -122,7 +123,7 @@ namespace RPG4.PlayerMovement
         }
         public void CompleteDueUse(double now)
         {
-            if (!owner.CanExecuteCombat) { Cancel(); return; }
+            if (!owner.Combat.Consumables) { Cancel(); return; }
             if (!Active || committing || now < state.EndTime) return;
             if (!owner.HasSimulationAuthority || !owner.isActiveAndEnabled || !owner.IsAlive
                 || !owner.Attributes.TryPrepareHeal(heal, out HealthState.HealTransaction transaction))

@@ -32,9 +32,10 @@ namespace RPG4.Networking
         public static PlayerMovementAck ReadPlayerMovementAck(this NetworkReader r) => new PlayerMovementAck
         { Epoch = r.ReadUInt(), CorrectionId = r.ReadUInt(), ConstraintRevision = r.ReadUInt(), AcceptedStep = r.ReadULong(), ProcessedInputSequence = r.ReadULong(), ServerTick = r.ReadLong() };
         public static void WritePlayerMovementBaseline(this NetworkWriter w, PlayerMovementBaseline v)
-        { w.WriteUInt(v.Epoch); w.WriteUInt(v.CorrectionId); w.WriteUInt(v.ConstraintRevision); w.WriteULong(v.Step); w.WriteULong(v.ProcessedInputSequence); w.WritePlayerNetworkState(v.State); }
+        { w.WriteUInt(v.Epoch); w.WriteUInt(v.CorrectionId); w.WriteUInt(v.ConstraintRevision); w.WriteULong(v.Step); w.WriteULong(v.ProcessedInputSequence); w.WritePlayerNetworkState(v.State); w.WriteByte((byte)v.LastMotorMode); }
         public static PlayerMovementBaseline ReadPlayerMovementBaseline(this NetworkReader r) => new PlayerMovementBaseline
-        { Epoch = r.ReadUInt(), CorrectionId = r.ReadUInt(), ConstraintRevision = r.ReadUInt(), Step = r.ReadULong(), ProcessedInputSequence = r.ReadULong(), State = r.ReadPlayerNetworkState() };
+        { Epoch = r.ReadUInt(), CorrectionId = r.ReadUInt(), ConstraintRevision = r.ReadUInt(), Step = r.ReadULong(), ProcessedInputSequence = r.ReadULong(), State = r.ReadPlayerNetworkState(),
+            LastMotorMode = (PlayerLocomotionMode)r.ReadByte() };
         public static void WritePlayerMovementCorrection(this NetworkWriter w, PlayerMovementCorrection v)
         { w.WritePlayerMovementBaseline(v.Baseline); w.WriteByte((byte)v.Reason); }
         public static PlayerMovementCorrection ReadPlayerMovementCorrection(this NetworkReader r) => new PlayerMovementCorrection

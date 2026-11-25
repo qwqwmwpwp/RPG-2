@@ -14,10 +14,8 @@ namespace RPG4.PlayerMovement
             this.blackboard = blackboard;
         }
 
-        internal void Resolve(bool physicallyCrouched, bool canStand)
+        internal void Resolve()
         {
-            blackboard.PhysicallyCrouched = physicallyCrouched;
-            blackboard.CanStand = canStand;
             IPlayerReadState read = context.ReadState;
             PlayerInputSnapshot input = read.Input.Snapshot;
             bool canMove = read.Locomotion.CanMove && input.InputAllowed;
@@ -36,10 +34,11 @@ namespace RPG4.PlayerMovement
             blackboard.Plan = new LocomotionPlan(false, blackboard.PhysicallyCrouched,
                 false, Vector2.zero, blackboard.ViewYaw, plan.MoveSpeed, plan.AnimationSpeed);
         }
-        internal void RecordPosture(bool physicallyCrouched, bool canStand)
+        internal void SampleMotorPosture()
         {
-            blackboard.PhysicallyCrouched = physicallyCrouched;
-            blackboard.CanStand = canStand;
+            bool crouched = context.World.PhysicallyCrouched;
+            blackboard.PhysicallyCrouched = crouched;
+            blackboard.CanStand = !crouched || context.World.CanStand();
             // Physical results are next-cycle facts. Rewriting the pending desired plan here would
             // repeatedly replace a requested stand with the crouch executed from the old plan.
         }

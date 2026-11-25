@@ -28,13 +28,15 @@ namespace RPG4.Networking
         public uint Epoch, CorrectionId, ConstraintRevision;
         public ulong Step, ProcessedInputSequence;
         public PlayerNetworkState State;
-        public bool IsValid => Epoch != 0 && State.Tick >= 0 && MovementValues.Finite(State.Time)
+        public PlayerLocomotionMode LastMotorMode;
+        public bool IsValid => (byte)LastMotorMode <= (byte)PlayerLocomotionMode.CrouchedStrafe
+            && Epoch != 0 && State.Tick >= 0 && MovementValues.Finite(State.Time)
             && MovementValues.Finite(State.Motor) && MovementValues.Finite(State.ViewYaw) && MovementValues.Finite(State.ViewPitch)
             && MovementValues.Valid(State.Consumable);
     }
     public struct PlayerMovementCorrection { public PlayerMovementBaseline Baseline; public MovementRejectReason Reason; }
     public struct PlayerAuthorityState { public uint Revision, ConstraintRevision; public PlayerAuthoritySnapshot Snapshot; }
-    public struct PlayerMovementRecord { public PlayerMovementReport Report; public PlayerNetworkState PredictedState; }
+    public struct PlayerMovementRecord { public PlayerMovementReport Report; public double PredictionTime; }
     internal static class MovementValues
     {
         internal static bool Finite(float f) => !float.IsNaN(f) && !float.IsInfinity(f);

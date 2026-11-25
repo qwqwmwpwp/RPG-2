@@ -1,6 +1,7 @@
 {
     "name": "RPG4.Networking.Tests",
-    "references": ["RPG4.Networking", "RPG4.PlayerMovement", "RPG4.PlayerIntent", "Mirror"],
+    "references": ["RPG4.Networking", "RPG4.PlayerMovement", "RPG4.PlayerIntent", "RPG4.Input", "RPG4.CharacterAttributes", "RPG4.Backpack.Items",
+        "RPG4.Backpack.Core", "RPG4.Combat", "RPG4.LoadoutContracts", "Mirror"],
     "includePlatforms": ["Editor"],
     "optionalUnityReferences": ["TestAssemblies"],
     "autoReferenced": false

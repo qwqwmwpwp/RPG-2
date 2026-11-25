@@ -17,7 +17,7 @@ namespace RPG4.PlayerMovement
         private readonly RaycastHit[] moveHits = new RaycastHit[32];
         private float verticalVelocity;
         private bool networkMotor;
-        private bool hasNetworkPlan, lastNetworkStrafe, lastNetworkCrouched;
+        internal PlayerLocomotionMode LastMotorMode { get; private set; }
         private long networkQueryTick;
         private readonly Dictionary<Collider, SupportObservation> supportObservations = new Dictionary<Collider, SupportObservation>();
         private struct SupportObservation
@@ -192,16 +192,16 @@ namespace RPG4.PlayerMovement
                 body.interpolation = originalInterpolation;
             }
             networkMotor = enabled;
-            hasNetworkPlan = false;
+            LastMotorMode = PlayerLocomotionMode.Uninitialized;
         }
         internal PlayerMotorState CaptureMotor() => new PlayerMotorState
         {
             Position = content.Body.position, Yaw = BodyYaw, Velocity = PlanarVelocity,
             VerticalVelocity = verticalVelocity, TurnVelocity = turnVelocity, Crouched = PhysicallyCrouched
         };
-        internal void RestoreMotor(PlayerMotorState state)
+        internal void RestoreMotor(PlayerMotorState state, PlayerLocomotionMode lastMode = PlayerLocomotionMode.Uninitialized)
         {
-            hasNetworkPlan = false;
+            LastMotorMode = lastMode;
             movement = new Vector2(state.Velocity.x, state.Velocity.z);
             verticalVelocity = state.VerticalVelocity;
             turnVelocity = state.TurnVelocity;
@@ -212,20 +212,10 @@ namespace RPG4.PlayerMovement
             PhysicallyCrouched = state.Crouched;
             SetPose(state.Position, state.Yaw);
         }
-        internal bool NeedsTurnReset(LocomotionPlan plan) => !hasNetworkPlan
-            || lastNetworkStrafe != plan.Strafe || lastNetworkCrouched != plan.Crouched;
+        internal bool NeedsTurnReset(LocomotionPlan plan) => PlayerMotorKinematics.NeedsTurnReset(LastMotorMode, plan);
         internal void BeginNetworkQueryTick(long tick) => networkQueryTick = tick;
-        private void RecordNetworkPlan(LocomotionPlan plan)
-        {
-            hasNetworkPlan = true;
-            lastNetworkStrafe = plan.Strafe;
-            lastNetworkCrouched = plan.Crouched;
-        }
         internal void CommitMotor(PlayerMotorState state, LocomotionPlan plan)
-        {
-            RestoreMotor(state);
-            RecordNetworkPlan(plan);
-        }
+            => RestoreMotor(state, PlayerMotorKinematics.ModeFor(plan));
         private void SetPose(Vector3 position, float yaw)
         {
             Quaternion rotation = Quaternion.Euler(0f, yaw, 0f);
@@ -384,7 +374,7 @@ namespace RPG4.PlayerMovement
             Physics.SyncTransforms();
             PlayerMotorState candidate = PlayerMotorKinematics.Step(CaptureMotor(), plan,
                 KinematicsSettings, NeedsTurnReset(plan), deltaTime);
-            RecordNetworkPlan(plan);
+            LastMotorMode = PlayerMotorKinematics.ModeFor(plan);
             movement = new Vector2(candidate.Velocity.x, candidate.Velocity.z);
             turnVelocity = candidate.TurnVelocity;
             verticalVelocity = candidate.VerticalVelocity;

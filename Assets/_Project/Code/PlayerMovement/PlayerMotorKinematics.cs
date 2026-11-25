@@ -3,9 +3,24 @@ using UnityEngine;
 
 namespace RPG4.PlayerMovement
 {
+    public enum PlayerLocomotionMode : byte
+    {
+        Uninitialized, StandingFree, StandingStrafe, CrouchedFree, CrouchedStrafe
+    }
+
     /// <summary>Numerical candidate only. Ground projection and collisions belong to the world.</summary>
     public static class PlayerMotorKinematics
     {
+        public static PlayerLocomotionMode ModeFor(in LocomotionPlan plan)
+        {
+            if (plan.Crouched)
+                return plan.Strafe ? PlayerLocomotionMode.CrouchedStrafe : PlayerLocomotionMode.CrouchedFree;
+            return plan.Strafe ? PlayerLocomotionMode.StandingStrafe : PlayerLocomotionMode.StandingFree;
+        }
+
+        public static bool NeedsTurnReset(PlayerLocomotionMode lastMode, in LocomotionPlan plan)
+            => lastMode != ModeFor(plan);
+
         public static PlayerMotorState Step(in PlayerMotorState from, in LocomotionPlan plan,
             in MovementKinematicsSettings settings, bool resetTurn, float dt)
         {
