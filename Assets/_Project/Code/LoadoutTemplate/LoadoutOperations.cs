@@ -24,28 +24,6 @@ namespace RPG4.LoadoutTemplate
             LoadoutDropIntent intent, out LoadoutFailure failure) =>
             TryBuildDetailed(source, target, intent, out _, out _, out failure);
 
-        public static bool TryApply(ILoadoutEndpoint source, ILoadoutEndpoint target,
-            LoadoutDropIntent intent, out string error, bool publishChanges = true)
-        {
-            bool success = TryApplyDetailed(source, target, intent, out LoadoutFailure failure, publishChanges);
-            error = success ? null : failure.Reason;
-            return success;
-        }
-
-        public static bool TryApplyDetailed(ILoadoutEndpoint source, ILoadoutEndpoint target,
-            LoadoutDropIntent intent, out LoadoutFailure failure, bool publishChanges = true)
-        {
-            string session = Guid.NewGuid().ToString("N");
-            var operation = new LocalLoadoutOperation(source, target, intent, intent.RequestId, session, session);
-            if (!operation.TryExecute(out failure)) return false;
-            if (publishChanges)
-            {
-                operation.StageChanges();
-                operation.PublishChanges();
-            }
-            return true;
-        }
-
         internal static bool TryBuildDetailed(LoadoutRuleSnapshot source, LoadoutRuleSnapshot target, LoadoutDropIntent intent,
             out List<LoadoutRuleItem> sourceItems, out List<LoadoutRuleItem> targetItems, out LoadoutFailure failure)
         {

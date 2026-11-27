@@ -44,7 +44,6 @@ namespace RPG4.LoadoutTemplate
             item = candidate;
             return true;
         }
-        public bool GetCurrentWeapon(out RuntimeItem item, out ItemManifestCatalog catalog) => TryGetCurrentWeapon(out item, out catalog);
         public void CopyOwnedRuntimeItems(List<RuntimeItem> destination)
         {
             if (destination == null) throw new ArgumentNullException(nameof(destination));

@@ -19,8 +19,6 @@ namespace RPG4.LoadoutTemplate
             ? serverLootData.GroundSession.CanAccess(transform) : serverLoot != null && serverLoot.CanAccess(transform);
         private string serverLootToken, clientLootToken, clientLootSourceId;
         private int clientLootRevision = -1, lootOpenSequence, serverLootOpenId;
-        private readonly Dictionary<string, ProjectionEndpoint> lootProjection = new Dictionary<string, ProjectionEndpoint>(StringComparer.Ordinal);
-        private readonly List<EventSubscription> lootSubscriptions = new List<EventSubscription>();
         private bool receivingLoot, closingLoot;
 
         public bool TryPrepareCorpseLoot(out LootSource source, out string error)
@@ -63,6 +61,7 @@ namespace RPG4.LoadoutTemplate
             CmdOpenLoot(source.netId, clientSession, clientEpoch, lootOpenSequence);
             return true;
         }
+        /// <summary>释放本次搜刮地址并关闭展示，通知服务器结束对应会话。</summary>
         public void CloseLoot()
         {
             if (closingLoot) return;
@@ -75,8 +74,7 @@ namespace RPG4.LoadoutTemplate
                 lootOpenSequence++;
                 bool hadSession = clientLoot != null || !string.IsNullOrEmpty(clientLootToken);
                 clientLoot = null; clientLootToken = null; clientLootSourceId = null; clientLootRevision = -1; clientGroundLoot = false;
-                foreach (EventSubscription subscription in lootSubscriptions) subscription.Dispose(); lootSubscriptions.Clear();
-                lootProjection.Clear();
+                projection.CloseLoot();
                 Presentation?.CloseLoot();
                 if (hadSession && localStarted && isLocalPlayer && isOwned)
                     CmdCloseLoot(closedSession, closedEpoch, closedOpenId);
@@ -135,34 +133,19 @@ namespace RPG4.LoadoutTemplate
                 || !receivingLoot && !string.IsNullOrEmpty(clientLootToken) && (Presentation == null || !Presentation.IsLootOpen)) CloseLoot();
         }
 
-        private bool TryRouteLootOperation(LoadoutOperationRequest request)
+        /// <summary>校验当前搜刮窗口、令牌和两个投影端点，再提交搜刮请求。</summary>
+        private void SubmitLootOperation(LoadoutOperationRequest request, bool endpointsReady)
         {
-            ProjectionEndpoint lootSource = FindLootProjection(request.Source), lootTarget = FindLootProjection(request.Target);
-            if (lootSource == null && lootTarget == null) return false;
             var session = request.Session as LoadoutWindowSession;
-            ProjectionEndpoint source = lootSource ?? FindProjection(request.Source), target = lootTarget ?? FindProjection(request.Target);
             if (!localStarted || !isLocalPlayer || !projectionReady || !clientOperationsAllowed || !localInputAllowed || clientLoot == null && !clientGroundLoot
                 || string.IsNullOrEmpty(clientLootToken) || session == null || !session.IsActive || session.OwnerKey != ownerKey
-                || Presentation == null || !Presentation.OwnsSession(session) || !Presentation.IsLootOpen || source?.snapshot == null || target?.snapshot == null || pendingRequest != 0 || pendingRuntimeRequest != 0 || nextRequest == int.MaxValue || awaitingSync)
+                || Presentation == null || !Presentation.OwnsSession(session) || !Presentation.IsLootOpen || !endpointsReady || pendingRequest != 0 || pendingRuntimeRequest != 0 || nextRequest == int.MaxValue || awaitingSync)
             {
-                EventBus.Global.Publish(LoadoutChannels.OperationCompleted, request.Session, new LoadoutOperationResult(request, LocalOutcome(LoadoutResultCode.SessionExpired, "战利品会话或玩家目标无效。", LoadoutOperationChannel.Loot))); return true;
+                EventBus.Global.Publish(LoadoutChannels.OperationCompleted, request.Session, new LoadoutOperationResult(request, LocalOutcome(LoadoutResultCode.SessionExpired, "战利品会话或玩家目标无效。", LoadoutOperationChannel.Loot))); return;
             }
-            pendingOperation = request; pendingRequest = ++nextRequest;
-            pendingOperationKey = ClientOperationKey(LoadoutOperationChannel.Loot, pendingRequest);
-            LoadoutDiagnostics.BeginRequest(pendingOperationKey);
-            requestDeadline = Time.unscaledTime + requestTimeout;
-            LoadoutDropIntent intent = request.Intent;
-            var wire = new OperationWire { requestId = pendingRequest, configuration = configuration, epoch = clientEpoch, session = clientSession, roleRevision = clientRevision, openId = lootOpenSequence,
-                source = intent.SourceContainerId, target = intent.TargetContainerId, item = intent.ItemId, targetItem = intent.TargetItemId,
-                sourceOrigin = intent.SourceOrigin, origin = intent.Origin, targetOrigin = intent.TargetItemOrigin,
-                sourceRevision = intent.SourceVersion, targetRevision = intent.TargetVersion, kind = (int)intent.Kind, rotated = intent.Rotated ?? false };
-            CmdLootOperate(clientLootToken, JsonUtility.ToJson(wire)); return true;
+            SendClientOperation(request, LoadoutOperationChannel.Loot);
         }
-        private ProjectionEndpoint FindLootProjection(object address)
-        {
-            foreach (ProjectionEndpoint endpoint in lootProjection.Values) if (ReferenceEquals(endpoint.source, address)) return endpoint;
-            return null;
-        }
+
         [Command] private void CmdLootOperate(string token, string json, NetworkConnectionToClient sender = null)
         { ExecuteInventoryRequest(json, token, true, sender); }
 
@@ -184,6 +167,7 @@ namespace RPG4.LoadoutTemplate
         private bool TryDecodeLoot(string json, out DecodedLootState result, out string error) =>
             lootCodec.TryDecodeLoot(json, out result, out error);
 
+        /// <summary>校验搜刮会话与版本，写完整批投影并在展示绑定成功后通知端点。</summary>
         [TargetRpc] private void TargetReceiveLoot(NetworkConnectionToClient target, uint sourceId, string token, string clientSession, string epoch, int openId, string json)
         {
             if (!localStarted || !isLocalPlayer || this.clientSession != clientSession || epoch != clientEpoch || openId != lootOpenSequence || sourceId != clientLootAnchorId || !ValidToken(token)) return;
@@ -195,9 +179,7 @@ namespace RPG4.LoadoutTemplate
             receivingLoot = true;
             try
             {
-                var projected = new List<LootSectionSnapshot>();
-                foreach (DecodedLootSection section in decoded.Sections)
-                    projected.Add(new LootSectionSnapshot(section.Kind, ApplyLootProjection(section.Grid), section.Body == null ? null : ApplyLootProjection(section.Body)));
+                List<LootSectionSnapshot> projected = projection.ApplyLoot(decoded);
                 if (Presentation == null) { CloseLoot(); return; }
                 if (!Presentation.ShowLoot(projected, out string bindingError))
                 {
@@ -205,23 +187,9 @@ namespace RPG4.LoadoutTemplate
                     CloseLoot();
                     return;
                 }
-                foreach (ProjectionEndpoint endpoint in lootProjection.Values) EventBus.Global.Publish(LoadoutChannels.Changed, endpoint.source);
+                projection.NotifyLootChanged();
             }
             finally { receivingLoot = false; }
-        }
-        private ContainerSnapshot ApplyLootProjection(ContainerSnapshot value)
-        {
-            if (!lootProjection.TryGetValue(value.Id, out ProjectionEndpoint endpoint))
-            {
-                endpoint = new ProjectionEndpoint(); lootProjection.Add(value.Id, endpoint);
-                ProjectionEndpoint captured = endpoint;
-                lootSubscriptions.Add(EventBus.Global.Subscribe<LoadoutSnapshotRequest>(LoadoutChannels.SnapshotRequested, endpoint.source, this,
-                    request => EventBus.Global.Publish(LoadoutChannels.SnapshotReceived, request.ReplySource, new LoadoutSnapshotReply(request.RequestId, captured.snapshot))));
-                lootSubscriptions.Add(EventBus.Global.Subscribe<LoadoutOperationRequest>(LoadoutChannels.OperationRequested, endpoint.source, this, OnLocalOperation));
-            }
-            endpoint.snapshot = new ContainerSnapshot(value.Id, value.Kind, value.Icon, value.Items, value.ValidCells, endpoint.source,
-                value.Revision, value.IsSlot, rejectContainers: value.RejectContainers, isReady: value.IsReady, withdrawalOnly: value.WithdrawalOnly);
-            return endpoint.snapshot;
         }
     }
 }

@@ -168,6 +168,7 @@ namespace RPG4.LoadoutTemplate
             catch (Exception) { return null; }
         }
 
+        /// <summary>在共享编号域内受理库存或搜刮请求，先记录权威结果再发布变更。</summary>
         private void ExecuteInventoryRequest(string json, string token, bool loot, NetworkConnectionToClient sender)
         {
             if (!Owns(sender)) return;
@@ -188,22 +189,13 @@ namespace RPG4.LoadoutTemplate
             if (request.configuration != configuration)
             { SendOperationOutcome(sender, new LoadoutOperationOutcome(key, LoadoutResultCode.ConfigurationMismatch,
                 "角色配置已改变。", null, CurrentStateVersion(changedSource))); return; }
-            string content = ((int)channel).ToString() + "/" + token + "/" + json;
-            if (receipts.TryGetValue(request.requestId, out Receipt receipt))
+            if (!receipts.TryBegin(key, token, json, CurrentStateVersion(changedSource), out outcome, out bool replayed))
             {
-                bool identical = receipt.request == content;
-                outcome = identical
-                    ? new LoadoutOperationOutcome(key, receipt.outcome.Code, receipt.outcome.Message, receipt.outcome.Commit, CurrentStateVersion(changedSource))
-                    : new LoadoutOperationOutcome(key, LoadoutResultCode.DuplicateRequestConflict,
-                        "重复请求编号对应不同操作。", null, CurrentStateVersion(changedSource));
-                SendOperationOutcome(sender, outcome, identical);
-                if (loot && serverLootData != null) OnServerLootChanged();
+                SendOperationOutcome(sender, outcome, replayed);
+                if (loot && (replayed || outcome.Code == LoadoutResultCode.DuplicateRequestConflict) && serverLootData != null)
+                    OnServerLootChanged();
                 return;
             }
-            if (request.requestId <= highestRequest)
-            { SendOperationOutcome(sender, new LoadoutOperationOutcome(key, LoadoutResultCode.RequestExpired,
-                "请求回执已过期，请重新同步。", null, CurrentStateVersion(changedSource))); return; }
-            highestRequest = request.requestId;
             PreparedLoadoutOperation prepared = null;
             LoadoutCommitRecord commit = null;
             LoadoutFailure failure = new LoadoutFailure(LoadoutResultCode.Success, string.Empty);
@@ -246,8 +238,7 @@ namespace RPG4.LoadoutTemplate
                     commit != null ? string.Empty : failure.Reason, commit, CurrentStateVersion(changedSource));
                 try
                 {
-                    if (receipts.Count >= 128) receipts.Clear();
-                    receipts[request.requestId] = new Receipt { request = content, outcome = outcome };
+                    receipts.Record(token, json, outcome);
                     SendOperationOutcome(sender, outcome);
                 }
                 finally

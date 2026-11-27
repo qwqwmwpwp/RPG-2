@@ -10,7 +10,7 @@ namespace RPG4.LoadoutTemplate
 {
     public sealed partial class NetworkRoleLoadout
     {
-        private const int RuntimeOperationSchema = 2, RuntimeReceiptLimit = 128;
+        private const int RuntimeOperationSchema = 2, MaxDeferredRuntimePublications = 128;
         [Serializable] private sealed class RuntimeOperationWire
         {
             public int schema = RuntimeOperationSchema, requestId, callerRequestId, kind, count, slot;
@@ -18,9 +18,9 @@ namespace RPG4.LoadoutTemplate
             public ulong target, candidate;
             public string configuration, epoch, session, assemblySlot;
         }
-        private readonly Dictionary<int, Receipt> runtimeReceipts = new Dictionary<int, Receipt>();
+        private readonly NetworkLoadoutReceipts runtimeReceipts = new NetworkLoadoutReceipts();
         private string runtimeReceiptSession, runtimeReceiptEpoch;
-        private int highestRuntimeRequest, nextRuntimeRequest, pendingRuntimeRequest;
+        private int nextRuntimeRequest, pendingRuntimeRequest;
         private bool runtimeOperationExecuting, runtimeApplyingOperation;
         private int deferredRuntimePublications;
         public event Action<WeaponOperation, LoadoutOperationOutcome> RuntimeOperationCompleted;
@@ -59,6 +59,7 @@ namespace RPG4.LoadoutTemplate
             CmdRuntimeOperate(JsonUtility.ToJson(pendingRuntimeWire));
             return true;
         }
+        /// <summary>在独立武器编号域中处理重放、准入和提交，再发布已登记的回执。</summary>
         [Command] private void CmdRuntimeOperate(string json, NetworkConnectionToClient sender = null)
         {
             if (!Owns(sender)) return;
@@ -78,28 +79,18 @@ namespace RPG4.LoadoutTemplate
                 "角色配置已改变。", null, CurrentStateVersion())); return; }
             if (runtimeReceiptSession != request.session || runtimeReceiptEpoch != request.epoch)
             { ClearRuntimeServerOperations(); runtimeReceiptSession = request.session; runtimeReceiptEpoch = request.epoch; }
-            if (runtimeReceipts.TryGetValue(request.requestId, out Receipt receipt))
+            if (!runtimeReceipts.TryBegin(key, null, json, CurrentStateVersion(), out LoadoutOperationOutcome previous, out bool replayed))
             {
-                bool identical = receipt.request == json;
-                var replay = identical
-                    ? new LoadoutOperationOutcome(key, receipt.outcome.Code, receipt.outcome.Message, receipt.outcome.Commit, CurrentStateVersion())
-                    : new LoadoutOperationOutcome(key, LoadoutResultCode.DuplicateRequestConflict,
-                        "重复请求编号对应不同操作。", null, CurrentStateVersion());
-                SendRuntimeResult(sender, request, replay, identical); return;
+                SendRuntimeResult(sender, request, previous, replayed);
+                return;
             }
-            if (request.requestId <= highestRuntimeRequest)
-            { SendRuntimeResult(sender, request, new LoadoutOperationOutcome(key, LoadoutResultCode.RequestExpired,
-                "旧武器请求回执已过期，请重新同步。", null, CurrentStateVersion())); return; }
             if (runtimeOperationExecuting)
             {
-                highestRuntimeRequest = request.requestId;
                 var busy = new LoadoutOperationOutcome(key, LoadoutResultCode.NotReady,
                     "上一笔武器操作正在完成。", null, CurrentStateVersion());
-                if (runtimeReceipts.Count >= RuntimeReceiptLimit) runtimeReceipts.Clear();
-                runtimeReceipts[request.requestId] = new Receipt { request = json, outcome = busy };
+                runtimeReceipts.Record(null, json, busy);
                 SendRuntimeResult(sender, request, busy); return;
             }
-            highestRuntimeRequest = request.requestId;
             var operation = new WeaponOperation(request.callerRequestId, (WeaponOperationKind)request.kind,
                 new ItemId(request.target), new ItemId(request.candidate), request.count,
                 (WeaponAttachmentSlot)request.slot, request.assemblySlot);
@@ -155,8 +146,7 @@ namespace RPG4.LoadoutTemplate
                 var outcome = new LoadoutOperationOutcome(key, code, error, commit, CurrentStateVersion());
                 try
                 {
-                    if (runtimeReceipts.Count >= RuntimeReceiptLimit) runtimeReceipts.Clear();
-                    runtimeReceipts[request.requestId] = new Receipt { request = json, outcome = outcome };
+                    runtimeReceipts.Record(null, json, outcome);
                     SendRuntimeResult(sender, request, outcome);
                 }
                 finally
@@ -196,6 +186,7 @@ namespace RPG4.LoadoutTemplate
                 if (!applied || NeedsResync(outcome.Code)) RequestResync();
             }
         }
+        /// <summary>仅应用当前世代且未过时的武器结果快照。</summary>
         private bool TryApplyRuntimeSnapshot(string json, out string error)
         {
             if (!TryReadState(json, out StateWire wire, out Candidate candidate, out error)) return false;
@@ -203,8 +194,7 @@ namespace RPG4.LoadoutTemplate
             // 更晚的完整角色快照已包含这次提交，不回退到迟到的结果快照。
             if (wire.revision < clientRevision) return projectionReady;
             clientRevision = wire.revision; clientOperationsAllowed = wire.accepting;
-            projectionReady = true; ApplyProjection(candidate); RefreshInput(); NotifyState();
-            EventBus.Global.Publish(LoadoutChannels.RoleAvailable, providerSource, ownerKey);
+            PublishRoleProjection(candidate);
             return true;
         }
         private void CompletePendingRuntime(bool success, string error, LoadoutResultCode code = LoadoutResultCode.SessionExpired)
@@ -247,27 +237,28 @@ namespace RPG4.LoadoutTemplate
         }
         private void ClearRuntimeClientOperations(string error)
         { CompletePendingRuntime(false, error); nextRuntimeRequest = 0; }
+        /// <summary>重置服务器武器回执的会话及编号域。</summary>
         private void ClearRuntimeServerOperations()
         {
-            runtimeReceipts.Clear(); highestRuntimeRequest = 0;
+            runtimeReceipts.Reset();
             runtimeReceiptSession = runtimeReceiptEpoch = null;
         }
 
-        private LoadoutSlotId projectedWeaponSlot = LoadoutSlotId.PrimaryWeapon1;
-        internal LoadoutSlotId ProjectedWeaponSlot => projectedWeaponSlot;
-        internal ContainerSnapshot GetProjectedSlot(LoadoutSlotId slot) => projectionReady
-            && (int)slot >= 0 && (int)slot < 10 ? projection[(int)slot]?.snapshot : null;
-        internal bool TryGetRuntimeDefinition(BackpackTag type, out LoadoutItemDefinition definition)
-        {
-            foreach (LoadoutItemDefinition candidate in catalog.Values)
-                if (candidate.Manifest != null && candidate.Manifest.ItemType.MatchesTagExact(type)) { definition = candidate; return true; }
-            definition = null; return false;
-        }
+        internal LoadoutSlotId ProjectedWeaponSlot => projection.SelectedWeapon;
+
+        /// <summary>供非权威角色的武器查询读取已就绪的槽位投影。</summary>
+        internal ContainerSnapshot GetProjectedSlot(LoadoutSlotId slot) => projectionReady ? projection.GetSlot(slot) : null;
+
+        /// <summary>为运行物品查找网络目录授权的显示定义。</summary>
+        internal bool TryGetRuntimeDefinition(BackpackTag type, out LoadoutItemDefinition definition) =>
+            catalog.TryGetRuntimeDefinition(type, out definition);
+
+        /// <summary>检查权威状态和延迟通知额度，并验证下一版本的武器候选快照。</summary>
         internal bool TryPrepareRuntimeChanges(Dictionary<ILoadoutEndpoint, List<ItemDisplayData>> candidates,
             LoadoutSlotId selected, out string error)
         {
             if (!Mirror.NetworkServer.active || !serverInitialized || !operationsAllowed || serverRevision == long.MaxValue
-                || runtimeOperationExecuting && deferredRuntimePublications >= RuntimeReceiptLimit)
+                || runtimeOperationExecuting && deferredRuntimePublications >= MaxDeferredRuntimePublications)
                 return Fail("服务器库存未就绪、暂停或版本耗尽。", out error);
             return TryCapture(out _, out error, candidates, serverRevision + 1, selected);
         }

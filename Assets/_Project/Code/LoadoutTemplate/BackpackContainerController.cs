@@ -208,12 +208,6 @@ namespace RPG4.LoadoutTemplate
             prepared = contents; return true;
         }
         public void Commit(object prepared) { container.Commit((BackpackContainerData.PreparedContents)prepared); revision++; }
-        public bool TryApplyRequest(LoadoutDropIntent request, BackpackContainerController target,
-            out string error, bool publishChanges = true)
-        {
-            if (NetworkManaged) return Fail("网络角色需要通过拥有者操作请求提交。", out error);
-            return LoadoutOperations.TryApply(this, target, request, out error, publishChanges);
-        }
         public void PublishChanged()
         {
             EventBus.Global.Publish(LoadoutChannels.Changed, EventSource);

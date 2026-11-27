@@ -1,10 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Security.Cryptography;
 using System.Text;
 using Mirror;
 using RPG4.Backpack.Core;
-using RPG4.Backpack.Items;
 using UnityEngine;
 
 namespace RPG4.LoadoutTemplate
@@ -13,31 +11,28 @@ namespace RPG4.LoadoutTemplate
     [DisallowMultipleComponent, RequireComponent(typeof(NetworkIdentity))]
     public sealed partial class NetworkRoleLoadout : NetworkBehaviour, ILoadoutCandidateCodec
     {
-        // 状态读取保留上一版持久数据，内容配置签名不随请求/结果线格式升级。
-        private const int ConfigurationSchema = 4;
-        private const int Schema = LoadoutStateCodec.Schema, MaxWireBytes = LoadoutStateCodec.MaxWireBytes, MaxCells = LoadoutStateCodec.MaxCells;
-        private const int MaxCatalog = 256;
+        private const int Schema = LoadoutStateCodec.Schema, MaxWireBytes = LoadoutStateCodec.MaxWireBytes;
         [SerializeField] private RoleLoadoutController role;
         [SerializeField] private MonoBehaviour presentation;
         private IRoleLoadoutPresentation Presentation => presentation != null ? presentation as IRoleLoadoutPresentation : null;
         [SerializeField] private LoadoutItemDefinition[] itemCatalog = Array.Empty<LoadoutItemDefinition>();
         [SerializeField, Min(1f)] private float requestTimeout = 6f;
-        private readonly Dictionary<string, LoadoutItemDefinition> catalog = new Dictionary<string, LoadoutItemDefinition>(StringComparer.Ordinal);
+        private readonly NetworkLoadoutCatalog catalog = new NetworkLoadoutCatalog();
         private readonly Dictionary<string, ILoadoutEndpoint> serverEndpoints = new Dictionary<string, ILoadoutEndpoint>(StringComparer.Ordinal);
-        private readonly ProjectionEndpoint[] projection = new ProjectionEndpoint[14];
-        private readonly List<EventSubscription> clientSubscriptions = new List<EventSubscription>();
+        private readonly ClientLoadoutProjection projection = new ClientLoadoutProjection();
         private readonly object providerSource = new object();
         private ServerLoadoutOperations serverOperations;
         private LoadoutStateCodec stateCodec;
         private LootStateCodec lootCodec;
         private readonly HashSet<string> retiredClientSessions = new HashSet<string>(StringComparer.Ordinal);
-        private readonly Dictionary<int, Receipt> receipts = new Dictionary<int, Receipt>();
-        private string configuration, clientEpoch, clientSession, serverClientSession, ownerKey;
+        private readonly NetworkLoadoutReceipts receipts = new NetworkLoadoutReceipts();
+        private string configuration => catalog.Signature;
+        private string clientEpoch, clientSession, serverClientSession, ownerKey;
         private string serverEpoch => role != null ? role.CommitCoordinator.Epoch : null;
         private long serverRevision => role != null ? role.CommitCoordinator.Revision : 0;
         private long clientRevision = -1;
         private bool serverInitialized, operationsAllowed, clientOperationsAllowed, projectionReady, localInputAllowed, localStarted;
-        private int nextRequest, pendingRequest, highestRequest, syncSequence, pendingSync;
+        private int nextRequest, pendingRequest, syncSequence, pendingSync;
         private bool lastReady, lastWindow;
         public event Action Changed;
         private LoadoutOperationRequest pendingOperation;
@@ -58,12 +53,6 @@ namespace RPG4.LoadoutTemplate
             public Vector2Int sourceOrigin, origin, targetOrigin;
             public bool rotated;
         }
-        private sealed class Receipt { internal string request; internal LoadoutOperationOutcome outcome; }
-        private sealed class ProjectionEndpoint
-        {
-            internal readonly object source = new object();
-            internal ContainerSnapshot snapshot;
-        }
 
         private void Awake()
         {
@@ -83,6 +72,7 @@ namespace RPG4.LoadoutTemplate
             BeginLocalSession();
         }
 
+        /// <summary>建立本地拥有者会话，注册投影并请求首次全量同步。</summary>
         private void BeginLocalSession()
         {
             if (localStarted || Time.unscaledTime < initializationRetryAt) return;
@@ -98,7 +88,7 @@ namespace RPG4.LoadoutTemplate
                 {
                     Presentation.WindowChanged += NotifyState;
                     Presentation.LootClosed += CloseLoot;
-                    CreateClientSubscriptions();
+                    projection.BeginRoleSession(this, OnLocalOperation, OnRoleConnect);
                     RefreshInput();
                     RequestResync();
                     initializationRetryAt = 0f;
@@ -126,12 +116,13 @@ namespace RPG4.LoadoutTemplate
         public override void OnStopLocalPlayer() => ClearClient();
         public override void OnStopAuthority() => ClearClient();
         public override void OnStopClient() => ClearClient();
+        /// <summary>关闭服务器搜刮、清除角色预留和请求处理状态。</summary>
         public override void OnStopServer()
         {
             CloseServerLoot();
             role?.ClearRuntimeReservations();
             serverInitialized = false; operationsAllowed = false;
-            serverClientSession = null; retiredClientSessions.Clear(); receipts.Clear(); serverEndpoints.Clear();
+            serverClientSession = null; retiredClientSessions.Clear(); receipts.DiscardReceipts(); serverEndpoints.Clear();
             serverOperations = null;
             ClearRuntimeServerOperations();
         }
@@ -168,12 +159,13 @@ namespace RPG4.LoadoutTemplate
             return true;
         }
 
+        /// <summary>在权威提交中暂停库存操作并向拥有者发布状态。</summary>
         public void SuspendServerOperations()
         {
             if (!NetworkServer.active || !serverInitialized) return;
             if (!operationsAllowed) return;
             role.CommitCoordinator.CommitSystemState(CreateOperationKey(LoadoutOperationChannel.System),
-                () => { operationsAllowed = false; receipts.Clear(); },
+                () => { operationsAllowed = false; receipts.DiscardReceipts(); },
                 () => SendSnapshot(connectionToClient, 0, false, "角色库存操作已暂停。"));
         }
 
@@ -183,6 +175,7 @@ namespace RPG4.LoadoutTemplate
             return state;
         }
 
+        /// <summary>在独占恢复事务中解码存档、提交角色状态，并在事务结束后发布变更。</summary>
         public bool RestoreServerState(string state, out string error)
         {
             error = null;
@@ -194,50 +187,9 @@ namespace RPG4.LoadoutTemplate
                 return Fail(failure.Reason, out error);
             using (transaction)
             {
-                if (!TryReadState(state, out StateWire wire, out Candidate candidate, out error)) return false;
-                ulong highWater = 0;
-                foreach (ItemDisplayData item in candidate.items)
-                {
-                    if (item == null) continue;
-                    foreach (RuntimeItem node in RuntimeNodes(item)) highWater = Math.Max(highWater, node.ItemId.Value);
-                }
-                try { LoadoutRuntimeItems.SharedItemIds.Observe(new ItemId(highWater)); }
-                catch (ArgumentOutOfRangeException exception) { return Fail(exception.Message, out error); }
-                LoadoutStateVersion before = role.CaptureStateVersion();
-                var dependencies = new Dictionary<ILoadoutEndpoint, LoadoutRuleSnapshot>();
-                foreach (RoleSlotConfiguration config in role.Configuration)
-                {
-                    ILoadoutEndpoint slot = role.GetSlot(config.slotId);
-                    dependencies.Add(slot, LoadoutRuleSnapshot.CaptureEndpoint(slot, slot.Snapshot));
-                    if ((int)config.slotId < 4)
-                    {
-                        ILoadoutEndpoint grid = config.containerController;
-                        dependencies.Add(grid, LoadoutRuleSnapshot.CaptureEndpoint(grid, grid.Snapshot));
-                    }
-                }
-                var prepared = new PreparedLoadoutOperation(new Dictionary<ILoadoutEndpoint, List<ItemDisplayData>>(),
-                    new Dictionary<ILoadoutEndpoint, object>(), dependencies,
-                    selectedWeaponChanged: role.SelectedWeaponSlot != candidate.selectedWeapon, applyState: () =>
-                    {
-                        role.ClearRuntimeReservations();
-                        role.ApplySelectedWeapon(candidate.selectedWeapon);
-                        // 已完成完整解码与规则检查，按持久状态恢复槽位和网格版本。
-                        foreach (RoleSlotConfiguration config in role.Configuration)
-                        {
-                            int index = (int)config.slotId;
-                            var endpoint = (LoadoutSlotEndpoint)role.GetSlot(config.slotId);
-                            endpoint.ApplyNetworkState(candidate.slots[index].id, candidate.items[index], candidate.slots[index].revision);
-                        }
-                        foreach (RoleSlotConfiguration config in role.Configuration)
-                            if ((int)config.slotId < 4)
-                                config.containerController.ApplyNetworkStorage(candidate.items[(int)config.slotId]?.Storage,
-                                    candidate.slots[(int)config.slotId].storageRevision);
-                        CloseServerLoot();
-                        highestRequest = 0;
-                        receipts.Clear();
-                        ClearRuntimeServerOperations();
-                        operationsAllowed = true;
-                    });
+                if (!TryReadState(state, out _, out Candidate candidate, out error)) return false;
+                if (!NetworkLoadoutRestore.TryPrepare(role, candidate, ResetRestoredSession, out LoadoutStateVersion before,
+                    out PreparedLoadoutOperation prepared, out error)) return false;
                 if (!role.CommitCoordinator.TryCommit(prepared, CreateOperationKey(LoadoutOperationChannel.System), before,
                     null, out LoadoutCommitRecord commit, out failure, restoredEpoch: Guid.NewGuid().ToString("N")))
                     return Fail(failure.Reason, out error);
@@ -246,6 +198,15 @@ namespace RPG4.LoadoutTemplate
             }
             role.FlushCommitted();
             return true;
+        }
+
+        /// <summary>恢复权威角色状态后关闭旧搜刮并重置本世代的请求编号域。</summary>
+        private void ResetRestoredSession()
+        {
+            CloseServerLoot();
+            receipts.Reset();
+            ClearRuntimeServerOperations();
+            operationsAllowed = true;
         }
 
         private void NotifyState()
@@ -267,105 +228,23 @@ namespace RPG4.LoadoutTemplate
             }
         }
 
+        /// <summary>从当前组件配置建立服务端与客户端共用的角色及搜刮编解码器。</summary>
         private bool BuildCatalog(out string error)
         {
-            try { return BuildCatalogCore(out error); }
+            try
+            {
+                if (!catalog.TryBuild(this, role, itemCatalog, out LoadoutCodecConfiguration settings, out error)) return false;
+                stateCodec = new LoadoutStateCodec(settings);
+                lootCodec = new LootStateCodec(settings, stateCodec);
+                return true;
+            }
             catch (Exception exception)
             {
                 return Fail("物品目录构建失败，" + exception.Message, out error);
             }
         }
 
-        private bool BuildCatalogCore(out string error)
-        {
-            error = null; catalog.Clear();
-            if (role == null || role.GetComponentInParent<NetworkRoleLoadout>(true) != this
-                || role.Configuration == null || role.Configuration.Count != 10)
-                return Fail("需要四容器及六装备槽配置。", out error);
-            var text = new StringBuilder("loadout-schema-").Append(ConfigurationSchema);
-            var sorted = new List<RoleSlotConfiguration>(role.Configuration);
-            sorted.Sort((a, b) => (a == null ? -1 : (int)a.slotId).CompareTo(b == null ? -1 : (int)b.slotId));
-            int mask = 0;
-            foreach (RoleSlotConfiguration config in sorted)
-            {
-                if (config == null || (int)config.slotId < 0 || (int)config.slotId > 9 || config.rule == null
-                    || (mask & (1 << (int)config.slotId)) != 0) return Fail("槽位配置无效或重复。", out error);
-                mask |= 1 << (int)config.slotId;
-                text.Append('|').Append((int)config.slotId).Append(':').Append(config.rule.ConfigurationSignature);
-                if ((int)config.slotId < 4)
-                {
-                    var container = config.containerController;
-                    if (container == null || container.GetComponentInParent<NetworkRoleLoadout>(true) != this
-                        || !container.isActiveAndEnabled || (int)container.ConfiguredKind != (int)config.slotId + 1)
-                        return Fail("四个容器的类别与槽位不匹配。", out error);
-                    if (container.ConfiguredCellCount > MaxCells
-                        || !container.TryGetConfiguredShape(out List<Vector2Int> cells, out error) || cells.Count > MaxCells)
-                        return Fail(error ?? "容器有效格超过协议上限。", out error);
-                    text.Append(':').Append(container.ConfigurationSignature).Append(':').Append(container.Definition != null ? container.Definition.DefinitionId : "$container/" + (int)container.ConfiguredKind);
-                    if (container.Definition != null && !AddDefinition(container.Definition, out error)) return false;
-                    foreach (ContainerInitialContent content in container.InitialContents ?? Array.Empty<ContainerInitialContent>())
-                        if (content == null || content.definition == null || content.count < 1 || !AddDefinition(content.definition, out error))
-                            return Fail(error ?? "容器初始内容缺少有效物品定义或数量。", out error);
-                }
-            }
-            foreach (RoleSlotConfiguration config in sorted)
-                if (config.initialItem != null && !AddDefinition(config.initialItem, out error)) return false;
-            foreach (LoadoutItemDefinition definition in role.RuntimeDefinitions ?? Array.Empty<LoadoutItemDefinition>())
-                if (definition == null || !AddDefinition(definition, out error)) return Fail(error ?? "运行物品显示定义含空项。", out error);
-            if (role.ManifestCatalog != null)
-            {
-                var manifests = new List<ItemManifest>(role.ManifestCatalog.Manifests);
-                manifests.Sort((a, b) => string.CompareOrdinal(a != null ? a.ItemType.Name : null, b != null ? b.ItemType.Name : null));
-                var types = new HashSet<string>(StringComparer.Ordinal);
-                foreach (ItemManifest manifest in manifests)
-                {
-                    if (manifest == null || !types.Add(manifest.ItemType.Name)) return Fail("运行物品目录存在空项或重复类型。", out error);
-                    try { manifest.ValidateConfiguration(); } catch (Exception exception) { return Fail(exception.Message, out error); }
-                    text.Append('|').Append(LoadoutRuntimeItems.ManifestSignature(manifest));
-                }
-            }
-            foreach (LoadoutItemDefinition definition in itemCatalog ?? Array.Empty<LoadoutItemDefinition>())
-                if (definition == null || !AddDefinition(definition, out error)) return Fail(error ?? "物品目录含空定义。", out error);
-            var ids = new List<string>(catalog.Keys); ids.Sort(StringComparer.Ordinal);
-            foreach (string id in ids) text.Append('|').Append(id).Append(':').Append(catalog[id].ConfigurationSignature);
-            using (SHA256 hash = SHA256.Create()) configuration = BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(text.ToString()))).Replace("-", "");
-            var rules = new LoadoutSlotRule[10];
-            var containers = new LoadoutCodecContainer[4];
-            foreach (RoleSlotConfiguration config in sorted)
-            {
-                int i = (int)config.slotId; rules[i] = config.rule;
-                if (i >= 4) continue;
-                var container = config.containerController;
-                if (!container.TryGetConfiguredShape(out List<Vector2Int> shape, out error)) return false;
-                containers[i] = new LoadoutCodecContainer(container.Definition, shape,
-                    container.Definition == null ? container.CreateConfiguredBody("preview", null) : null);
-            }
-            var codecConfiguration = new LoadoutCodecConfiguration(configuration, catalog, role.ManifestCatalog, rules, containers);
-            stateCodec = new LoadoutStateCodec(codecConfiguration);
-            lootCodec = new LootStateCodec(codecConfiguration, stateCodec);
-            return true;
-        }
-
-        private bool AddDefinition(LoadoutItemDefinition definition, out string error)
-        {
-            error = null;
-            string id = definition.DefinitionId;
-            if (!ValidId(id) || id.StartsWith("$", StringComparison.Ordinal)) return Fail("物品定义编号无效。", out error);
-            if (catalog.TryGetValue(id, out LoadoutItemDefinition existing))
-                return existing == definition || Fail("物品目录含重复定义编号。", out error);
-            if (catalog.Count >= MaxCatalog) return Fail("物品目录超过协议上限。", out error);
-            if (definition.Manifest != null)
-            {
-                if (role.ManifestCatalog == null || !role.ManifestCatalog.TryGet(definition.Manifest.ItemType, out ItemManifest manifest)
-                    || manifest != definition.Manifest) return Fail("运行定义的清单未登记在角色授权目录。", out error);
-                try { manifest.ValidateConfiguration(); } catch (Exception exception) { return Fail(exception.Message, out error); }
-                foreach (LoadoutItemDefinition existingDefinition in catalog.Values)
-                    if (existingDefinition.Manifest != null && existingDefinition.Manifest.ItemType.MatchesTagExact(manifest.ItemType))
-                        return Fail("一个运行物品类型只能登记一个显示定义。", out error);
-            }
-            catalog.Add(id, definition); return true;
-        }
-
+        /// <summary>校验拥有者与同步编号，按客户端会话切换回执表并返回完整快照。</summary>
         [Command]
         private void CmdRequestSnapshot(string session, int syncId, NetworkConnectionToClient sender = null)
         {
@@ -377,8 +256,7 @@ namespace RPG4.LoadoutTemplate
                 CloseServerLoot();
                 serverLootOpenId = 0;
                 serverClientSession = session;
-                highestRequest = 0;
-                receipts.Clear();
+                receipts.Reset();
                 ClearRuntimeServerOperations();
             }
             SendSnapshot(sender, 0, true, null, syncId);
@@ -406,6 +284,7 @@ namespace RPG4.LoadoutTemplate
             TargetReceive(owner, serverClientSession, requestId, syncId, success, BoundResultMessage(error), json, string.Empty);
         }
 
+        /// <summary>核对操作结果和完整快照，仅以当前显式同步响应切换客户端世代。</summary>
         [TargetRpc]
         private void TargetReceive(NetworkConnectionToClient target, string session, int requestId, int syncId, bool success, string error, string json, string outcomeJson)
         {
@@ -448,71 +327,59 @@ namespace RPG4.LoadoutTemplate
                 CompletePending(outcome);
             else if (newEpoch) FailPending("角色会话已改变。");
             if (!wire.accepting) FailPending(error);
-            projectionReady = true;
-            ApplyProjection(candidate);
-            RefreshInput(); NotifyState();
-            EventBus.Global.Publish(LoadoutChannels.RoleAvailable, providerSource, ownerKey);
+            PublishRoleProjection(candidate);
             if (outcome != null && NeedsResync(outcome.Code)) RequestResync();
         }
 
-        private void CreateClientSubscriptions()
-        {
-            for (int i = 0; i < projection.Length; i++)
-            {
-                var endpoint = new ProjectionEndpoint(); projection[i] = endpoint;
-                clientSubscriptions.Add(EventBus.Global.Subscribe<LoadoutSnapshotRequest>(LoadoutChannels.SnapshotRequested,
-                    endpoint.source, this, request => EventBus.Global.Publish(LoadoutChannels.SnapshotReceived, request.ReplySource,
-                        new LoadoutSnapshotReply(request.RequestId, endpoint.snapshot, endpoint.snapshot == null ? "库存尚未同步。" : null))));
-                clientSubscriptions.Add(EventBus.Global.Subscribe<LoadoutOperationRequest>(LoadoutChannels.OperationRequested,
-                    endpoint.source, this, OnLocalOperation));
-            }
-            clientSubscriptions.Add(EventBus.Global.Subscribe<LoadoutRoleConnectRequest>(LoadoutChannels.RoleConnectRequested,
-                EventBus.AnySource, this, OnRoleConnect));
-        }
-
+        /// <summary>仅向当前拥有者的展示会话返回角色槽位与容器绑定。</summary>
         private void OnRoleConnect(LoadoutRoleConnectRequest request)
         {
             if (request.Session == null || !request.Session.IsActive || request.ReplySource == null
                 || !string.Equals(request.Session.OwnerKey, ownerKey, StringComparison.Ordinal)
                 || Presentation == null || !Presentation.OwnsSession(request.Session)) return;
-            var result = new List<LoadoutRoleBinding>();
-            if (projectionReady)
-                for (int i = 0; i < 10; i++) result.Add(new LoadoutRoleBinding((LoadoutSlotId)i,
-                    projection[i].source, i < 4 ? projection[10 + i].source : null,
-                    projection[i].snapshot, i < 4 ? projection[10 + i].snapshot : null));
+            var result = projectionReady ? projection.GetRoleBindings() : null;
             EventBus.Global.Publish(LoadoutChannels.RoleConnected, request.ReplySource,
                 new LoadoutRoleConnectReply(request, providerSource, result, projectionReady ? null : "库存尚未同步。"));
         }
 
+        /// <summary>根据投影地址分流搜刮请求，并校验角色窗口的库存操作准入。</summary>
         private void OnLocalOperation(LoadoutOperationRequest request)
         {
-            if (TryRouteLootOperation(request)) return;
+            ContainerSnapshot source = projection.FindSnapshot(request.Source, out bool fromLoot);
+            ContainerSnapshot target = projection.FindSnapshot(request.Target, out bool toLoot);
+            if (fromLoot || toLoot)
+            {
+                SubmitLootOperation(request, source != null && target != null);
+                return;
+            }
             var session = request.Session as LoadoutWindowSession;
-            ProjectionEndpoint source = FindProjection(request.Source), target = FindProjection(request.Target);
             if (!localStarted || !isLocalPlayer || !projectionReady || !clientOperationsAllowed || !localInputAllowed
                 || session == null || session.OwnerKey != ownerKey || Presentation == null || !Presentation.OwnsSession(session) || !Presentation.IsWindowOpen
-                || source?.snapshot == null || target?.snapshot == null || pendingRequest != 0 || pendingRuntimeRequest != 0 || nextRequest == int.MaxValue || awaitingSync)
+                || source == null || target == null || pendingRequest != 0 || pendingRuntimeRequest != 0 || nextRequest == int.MaxValue || awaitingSync)
             {
                 EventBus.Global.Publish(LoadoutChannels.OperationCompleted, request.Session,
                     new LoadoutOperationResult(request, LocalOutcome(LoadoutResultCode.NotReady, "当前会话或库存端点不可用。"))); return;
             }
-            pendingOperation = request; pendingRequest = ++nextRequest;
-            pendingOperationKey = ClientOperationKey(LoadoutOperationChannel.Inventory, pendingRequest);
-            LoadoutDiagnostics.BeginRequest(pendingOperationKey);
-            requestDeadline = Time.unscaledTime + requestTimeout;
-            var intent = request.Intent;
-            var wire = new OperationWire { requestId = pendingRequest, configuration = configuration,
-                epoch = clientEpoch, session = clientSession, roleRevision = clientRevision, source = intent.SourceContainerId, target = intent.TargetContainerId,
-                item = intent.ItemId, targetItem = intent.TargetItemId, sourceOrigin = intent.SourceOrigin, origin = intent.Origin,
-                targetOrigin = intent.TargetItemOrigin, sourceRevision = intent.SourceVersion, targetRevision = intent.TargetVersion,
-                kind = (int)intent.Kind, rotated = intent.Rotated ?? false };
-            CmdOperate(JsonUtility.ToJson(wire));
+            SendClientOperation(request, LoadoutOperationChannel.Inventory);
         }
 
-        private ProjectionEndpoint FindProjection(object source)
+        /// <summary>为库存和搜刮共用的请求序列登记待办，按通道发送线协议。</summary>
+        private void SendClientOperation(LoadoutOperationRequest request, LoadoutOperationChannel channel)
         {
-            foreach (ProjectionEndpoint endpoint in projection) if (endpoint != null && ReferenceEquals(endpoint.source, source)) return endpoint;
-            return null;
+            pendingOperation = request; pendingRequest = ++nextRequest;
+            pendingOperationKey = ClientOperationKey(channel, pendingRequest);
+            LoadoutDiagnostics.BeginRequest(pendingOperationKey);
+            requestDeadline = Time.unscaledTime + requestTimeout;
+            LoadoutDropIntent intent = request.Intent;
+            bool loot = channel == LoadoutOperationChannel.Loot;
+            var wire = new OperationWire { requestId = pendingRequest, configuration = configuration,
+                epoch = clientEpoch, session = clientSession, roleRevision = clientRevision, openId = loot ? lootOpenSequence : 0,
+                source = intent.SourceContainerId, target = intent.TargetContainerId, item = intent.ItemId, targetItem = intent.TargetItemId,
+                sourceOrigin = intent.SourceOrigin, origin = intent.Origin, targetOrigin = intent.TargetItemOrigin,
+                sourceRevision = intent.SourceVersion, targetRevision = intent.TargetVersion, kind = (int)intent.Kind, rotated = intent.Rotated ?? false };
+            string json = JsonUtility.ToJson(wire);
+            if (loot) CmdLootOperate(clientLootToken, json);
+            else CmdOperate(json);
         }
 
         private void Update()
@@ -545,6 +412,7 @@ namespace RPG4.LoadoutTemplate
             CompletePending(new LoadoutOperationOutcome(pendingOperationKey, code, error, null, ClientStateVersion()));
         }
 
+        /// <summary>结束本地拥有者会话并释放投影、待办和展示绑定。</summary>
         private void ClearClient(bool resetInitializationFailure = true)
         {
             if (resetInitializationFailure)
@@ -557,9 +425,7 @@ namespace RPG4.LoadoutTemplate
             localStarted = false; projectionReady = false; awaitingSync = false; clientOperationsAllowed = false;
             ClearRuntimeClientOperations("角色已断开连接。");
             FailPending("角色已断开连接。");
-            foreach (EventSubscription subscription in clientSubscriptions) subscription.Dispose();
-            clientSubscriptions.Clear();
-            Array.Clear(projection, 0, projection.Length);
+            projection.EndRoleSession();
             EventBus.Global.Publish(LoadoutChannels.RoleDisconnected, providerSource);
             if (Presentation != null)
             {
@@ -571,26 +437,14 @@ namespace RPG4.LoadoutTemplate
             role?.PublishRuntimeChanged();
         }
 
-        private void ApplyProjection(Candidate candidate)
+        /// <summary>发布已通过各自版本检查的角色快照，在写完所有端点后刷新武器、输入和窗口。</summary>
+        private void PublishRoleProjection(Candidate candidate)
         {
-            projectedWeaponSlot = candidate.selectedWeapon;
-            foreach (RoleSlotConfiguration config in role.Configuration)
-            {
-                int i = (int)config.slotId; ItemDisplayData item = candidate.items[i]; SlotWire slot = candidate.slots[i];
-                projection[i].snapshot = new ContainerSnapshot(slot.id, item?.ContainerType ?? ContainerKind.None, item?.Icon,
-                    item == null ? Array.Empty<ItemDisplayData>() : new[] { item }, eventSource: projection[i].source,
-                    revision: slot.revision, isSlot: true, rule: config.rule, rejectContainers: false);
-                if (i < 4)
-                {
-                    BackpackContainerData storage = item?.Storage;
-                    projection[10 + i].snapshot = new ContainerSnapshot(storage?.Id ?? slot.id + "/empty",
-                        storage?.Kind ?? config.containerController.ConfiguredKind, storage?.Icon, storage?.Items, storage?.ValidCells,
-                        projection[10 + i].source, slot.storageRevision, isReady: storage != null);
-                }
-            }
-            // 完整批次写入后才通知视图，监听者不会观察到两个端点各一半的交换。
-            foreach (ProjectionEndpoint endpoint in projection) EventBus.Global.Publish(LoadoutChannels.Changed, endpoint.source);
+            projectionReady = true;
+            projection.ApplyRole(candidate, role.Configuration);
             role.PublishRuntimeChanged();
+            RefreshInput(); NotifyState();
+            EventBus.Global.Publish(LoadoutChannels.RoleAvailable, providerSource, ownerKey);
         }
 
         private bool TryCapture(out string json, out string error,
@@ -625,12 +479,6 @@ namespace RPG4.LoadoutTemplate
             stateCodec.TryReadState(json, out state, out candidate, out error);
 
         private static bool ValidId(string id) => LoadoutStateCodec.ValidId(id);
-        private static IEnumerable<RuntimeItem> RuntimeNodes(ItemDisplayData item)
-        {
-            if (item.RuntimeItem != null) foreach (RuntimeItem node in ItemAssemblyTraversal.Enumerate(item.RuntimeItem)) yield return node;
-            if (item.Storage != null) foreach (ItemDisplayData child in item.Storage.Items)
-                foreach (RuntimeItem node in RuntimeNodes(child)) yield return node;
-        }
         private static bool ValidToken(string token) => LoadoutStateCodec.ValidToken(token);
         private static bool Bounded(string value, int max) => LoadoutStateCodec.Bounded(value, max);
         private static bool Fail(string message, out string error) { error = message; return false; }

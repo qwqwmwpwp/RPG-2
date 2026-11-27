@@ -10,7 +10,7 @@ namespace RPG4.LoadoutTemplate
     {
         [SerializeField] private LoadoutTemplateUI bindings;
         [SerializeField] private GameObject windowRoot;
-        [Tooltip("手动拖入战利品 UI 根节点。普通打开背包时隐藏，仅通过 OpenLoot 打开；暂不绑定交互对象或读取内容。")]
+        [Tooltip("接线战利品 UI 根节点。打开战利品来源时显示，普通打开背包时隐藏。")]
         [SerializeField] private GameObject lootRoot;
         [SerializeField] private LootWindowUI lootBindings;
         internal LootWindowUI LootBindings => lootBindings;
@@ -63,13 +63,7 @@ namespace RPG4.LoadoutTemplate
 
         public void OpenBackpack() => RequestOpen(true);
 
-        /// <summary>预留给交互调用的显隐入口；交互对象和内容读取尚未接入。</summary>
-        public void OpenLoot()
-        {
-            if (networkManaged || !isActiveAndEnabled || windowSource == null || lootRoot == null) return;
-            ApplyWindowState(true, true);
-        }
-
+        /// <summary>显示背包和战利品面板，供本地或联机战利品会话绑定内容。</summary>
         internal void ShowLootWindow()
         {
             if (isActiveAndEnabled && windowSource != null && lootRoot != null) ApplyWindowState(true, true);
